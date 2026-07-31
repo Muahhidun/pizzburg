@@ -48,6 +48,10 @@ export class OrdersService {
     const venue = tenant.venues[0];
     if (!venue) throw new BadRequestException('Нет активной точки');
 
+    if (dto.paymentMethod === 'KASPI_ONLINE') {
+      throw new BadRequestException('Kaspi онлайн ещё не подключён');
+    }
+
     if (dto.type === 'DELIVERY' && !dto.address) {
       throw new BadRequestException('Для доставки нужен адрес');
     }
@@ -166,7 +170,12 @@ export class OrdersService {
                   name: p.displayName ?? p.name,
                   price: p.priceOverride ?? p.price,
                   qty: i.qty,
-                  modifiers: i.modifiers ?? [],
+                  modifiers: (i.modifiers ?? []).map((m) => ({
+                    ...(m.posterId ? { posterId: m.posterId } : {}),
+                    name: m.name,
+                    price: m.price,
+                    ...(m.qty ? { qty: m.qty } : {}),
+                  })),
                 };
               }),
               ...promo.gifts.map((g) => ({

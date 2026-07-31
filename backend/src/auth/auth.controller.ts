@@ -7,21 +7,26 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { IsString } from 'class-validator';
+import { IsString, Matches, MaxLength } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from './auth.service';
 import { CustomerAuthGuard } from './customer-auth.guard';
 
 class RequestOtpDto {
   @IsString()
+  @MaxLength(24)
+  @Matches(/^\+?[\d\s()-]{10,24}$/, { message: 'Неверный формат номера' })
   phone: string;
 }
 
 class VerifyOtpDto {
   @IsString()
+  @MaxLength(24)
+  @Matches(/^\+?[\d\s()-]{10,24}$/, { message: 'Неверный формат номера' })
   phone: string;
 
   @IsString()
+  @Matches(/^\d{4}$/, { message: 'Код должен состоять из 4 цифр' })
   code: string;
 }
 

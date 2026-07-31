@@ -131,8 +131,22 @@ function PromoForm({
         .slice(0, 8)
     : [];
   const gift = allProducts.find((p) => p.id === giftProductId);
+  const quantitiesValid =
+    /^\d+$/.test(conditionQty) &&
+    Number(conditionQty) >= 1 &&
+    Number(conditionQty) <= 100 &&
+    /^\d+$/.test(giftQty) &&
+    Number(giftQty) >= 1 &&
+    Number(giftQty) <= 100;
+  const formValid =
+    name.trim().length > 0 &&
+    name.trim().length <= 120 &&
+    conditionCategoryId.length > 0 &&
+    giftProductId.length > 0 &&
+    quantitiesValid;
 
   async function save() {
+    if (!formValid) return;
     setBusy(true);
     try {
       await api.post('/admin/promotions', {
@@ -166,6 +180,7 @@ function PromoForm({
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
+            maxLength={120}
             placeholder="2+1 Пицца"
             className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
           />
@@ -191,6 +206,8 @@ function PromoForm({
             <input
               type="number"
               min={1}
+              max={100}
+              step={1}
               value={conditionQty}
               onChange={(e) => setConditionQty(e.target.value)}
               className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
@@ -220,6 +237,7 @@ function PromoForm({
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                maxLength={120}
                 placeholder="Начните вводить название товара"
                 className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
               />
@@ -250,6 +268,8 @@ function PromoForm({
             <input
               type="number"
               min={1}
+              max={100}
+              step={1}
               value={giftQty}
               onChange={(e) => setGiftQty(e.target.value)}
               className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
@@ -259,7 +279,15 @@ function PromoForm({
             <span className="mb-1 block text-sm font-medium">Промокод</span>
             <input
               value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              onChange={(e) =>
+                setCode(
+                  e.target.value
+                    .toUpperCase()
+                    .replace(/[^A-Z0-9_-]/g, '')
+                    .slice(0, 40),
+                )
+              }
+              maxLength={40}
               placeholder="пусто = авто"
               className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
             />
@@ -278,7 +306,7 @@ function PromoForm({
         <div className="flex gap-2">
           <button
             onClick={save}
-            disabled={busy || !name || !giftProductId}
+            disabled={busy || !formValid}
             className="flex-1 rounded-xl bg-black py-2.5 font-medium text-white disabled:opacity-40 dark:bg-white dark:text-black"
           >
             {busy ? 'Создаём…' : 'Создать'}

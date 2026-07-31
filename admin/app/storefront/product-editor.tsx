@@ -25,8 +25,12 @@ export function ProductEditor({
     categories.find((c) => c.products.some((p) => p.id === product.id))?.id ?? '',
   );
   const [busy, setBusy] = useState(false);
+  const priceValid =
+    priceOverride === '' ||
+    (/^\d+$/.test(priceOverride) && Number(priceOverride) <= 10_000_000);
 
   async function save() {
+    if (!priceValid) return;
     setBusy(true);
     try {
       await api.patch(`/admin/products/${product.id}`, {
@@ -68,6 +72,7 @@ export function ProductEditor({
           <input
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
+            maxLength={120}
             placeholder={product.name}
             className="input"
           />
@@ -77,6 +82,7 @@ export function ProductEditor({
           <textarea
             value={displayDescription}
             onChange={(e) => setDisplayDescription(e.target.value)}
+            maxLength={1000}
             placeholder={product.description || 'Например: тесто, пицца-соус, моцарелла…'}
             rows={3}
             className="input resize-y"
@@ -89,6 +95,9 @@ export function ProductEditor({
         >
           <input
             type="number"
+            min={0}
+            max={10000000}
+            step={1}
             value={priceOverride}
             onChange={(e) => setPriceOverride(e.target.value)}
             placeholder={String(product.price)}
@@ -113,7 +122,7 @@ export function ProductEditor({
         <div className="mt-5 flex gap-2">
           <button
             onClick={save}
-            disabled={busy}
+            disabled={busy || !priceValid}
             className="flex-1 rounded-xl bg-black py-2.5 font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
           >
             {busy ? 'Сохраняем…' : 'Сохранить'}

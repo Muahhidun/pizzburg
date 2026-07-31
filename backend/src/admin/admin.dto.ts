@@ -4,12 +4,16 @@ import {
   IsISO8601,
   IsOptional,
   IsString,
+  Length,
+  Matches,
+  Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 
 export class UpdateCategoryDto {
-  @IsOptional() @IsString() name?: string;
-  @IsOptional() @IsInt() sortOrder?: number;
+  @IsOptional() @IsString() @Length(1, 80) name?: string;
+  @IsOptional() @IsInt() @Min(0) @Max(10_000) sortOrder?: number;
   @IsOptional() @IsBoolean() isVisible?: boolean;
 }
 
@@ -20,21 +24,25 @@ export class ReorderDto {
 }
 
 export class UpdateProductDto {
-  @IsOptional() @IsString() displayName?: string | null;
-  @IsOptional() @IsString() displayDescription?: string | null;
-  @IsOptional() @IsInt() @Min(0) priceOverride?: number | null;
+  @IsOptional() @IsString() @MaxLength(120) displayName?: string | null;
+  @IsOptional() @IsString() @MaxLength(1_000) displayDescription?: string | null;
+  @IsOptional() @IsInt() @Min(0) @Max(10_000_000) priceOverride?: number | null;
   @IsOptional() @IsString() appCategoryId?: string;
-  @IsOptional() @IsInt() sortOverride?: number | null;
+  @IsOptional() @IsInt() @Min(0) @Max(10_000) sortOverride?: number | null;
   @IsOptional() @IsBoolean() isVisible?: boolean;
 }
 
 export class PromotionDto {
-  @IsString() name: string;
-  @IsOptional() @IsString() code?: string | null;
+  @IsString() @Length(1, 120) name: string;
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  @Matches(/^[a-zA-Z0-9_-]+$/)
+  code?: string | null;
   @IsString() conditionCategoryId: string;
-  @IsInt() @Min(1) conditionQty: number;
+  @IsInt() @Min(1) @Max(100) conditionQty: number;
   @IsString() giftProductId: string;
-  @IsOptional() @IsInt() @Min(1) giftQty?: number;
+  @IsOptional() @IsInt() @Min(1) @Max(100) giftQty?: number;
   @IsOptional() @IsBoolean() repeatPerCart?: boolean;
   @IsOptional() @IsBoolean() isActive?: boolean;
   @IsOptional() @IsISO8601() activeFrom?: string | null;
@@ -42,13 +50,13 @@ export class PromotionDto {
 }
 
 export class UpdateSettingsDto {
-  @IsOptional() @IsInt() @Min(0) minOrder?: number;
-  @IsOptional() @IsInt() @Min(0) fee?: number;
-  @IsOptional() @IsInt() @Min(0) freeFrom?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(100_000_000) minOrder?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(100_000_000) fee?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(100_000_000) freeFrom?: number;
 }
 
 export class PosterAccountDto {
-  @IsString() name: string;
-  @IsString() token: string;
-  @IsOptional() @IsInt() sortOrder?: number;
+  @IsString() @Length(1, 80) name: string;
+  @IsString() @Length(10, 500) token: string;
+  @IsOptional() @IsInt() @Min(0) @Max(1_000) sortOrder?: number;
 }

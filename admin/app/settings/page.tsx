@@ -23,7 +23,16 @@ export default function SettingsPage() {
     load();
   }, [load]);
 
+  const deliveryValid =
+    [minOrder, fee, freeFrom].every(
+      (value) => /^\d+$/.test(value) && Number(value) <= 100_000_000,
+    ) &&
+    (Number(freeFrom) === 0 ||
+      Number(minOrder) === 0 ||
+      Number(freeFrom) >= Number(minOrder));
+
   async function saveDelivery() {
+    if (!deliveryValid) return;
     await api.patch('/admin/settings', {
       minOrder: Number(minOrder),
       fee: Number(fee),
@@ -49,6 +58,9 @@ export default function SettingsPage() {
             <span className="mb-1 block text-sm font-medium">Минимальный заказ, ₸</span>
             <input
               type="number"
+              min={0}
+              max={100000000}
+              step={1}
               value={minOrder}
               onChange={(e) => setMinOrder(e.target.value)}
               className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
@@ -58,6 +70,9 @@ export default function SettingsPage() {
             <span className="mb-1 block text-sm font-medium">Стоимость доставки, ₸</span>
             <input
               type="number"
+              min={0}
+              max={100000000}
+              step={1}
               value={fee}
               onChange={(e) => setFee(e.target.value)}
               className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
@@ -67,6 +82,9 @@ export default function SettingsPage() {
             <span className="mb-1 block text-sm font-medium">Бесплатно от, ₸</span>
             <input
               type="number"
+              min={0}
+              max={100000000}
+              step={1}
               value={freeFrom}
               onChange={(e) => setFreeFrom(e.target.value)}
               className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
@@ -76,12 +94,19 @@ export default function SettingsPage() {
         <div className="mt-4 flex items-center gap-3">
           <button
             onClick={saveDelivery}
-            className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-black"
+            disabled={!deliveryValid}
+            className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-40 dark:bg-white dark:text-black"
           >
             Сохранить
           </button>
           {saved && <span className="text-sm text-emerald-600">Сохранено</span>}
         </div>
+        {!deliveryValid && (
+          <p className="mt-2 text-sm text-red-600">
+            Все суммы должны быть целыми и неотрицательными; бесплатная доставка
+            не может начинаться ниже минимального заказа.
+          </p>
+        )}
         <p className="mt-3 text-xs text-neutral-400">
           Сейчас: заказ от {formatTenge(Number(minOrder))}, доставка{' '}
           {formatTenge(Number(fee))}, бесплатно от {formatTenge(Number(freeFrom))}
@@ -155,9 +180,19 @@ function AddAccount({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
   const [token, setToken] = useState('');
   const [sortOrder, setSortOrder] = useState('1');
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const valid =
+    name.trim().length > 0 &&
+    name.trim().length <= 80 &&
+    token.trim().length >= 10 &&
+    token.trim().length <= 500 &&
+    /^\d+$/.test(sortOrder) &&
+    Number(sortOrder) <= 1000;
 
   async function save() {
+    if (!valid) return;
     setBusy(true);
+    setError(null);
     try {
       await api.post('/admin/poster-accounts', {
         name,
@@ -165,6 +200,8 @@ function AddAccount({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
         sortOrder: Number(sortOrder),
       });
       onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось проверить токен');
     } finally {
       setBusy(false);
     }
@@ -189,6 +226,7 @@ function AddAccount({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
+            maxLength={80}
             placeholder="Например: Sunday"
             className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
           />
@@ -199,6 +237,8 @@ function AddAccount({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
             type="password"
             value={token}
             onChange={(e) => setToken(e.target.value)}
+            minLength={10}
+            maxLength={500}
             className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 font-mono dark:border-white/15"
           />
         </label>
@@ -206,6 +246,9 @@ function AddAccount({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
           <span className="mb-1 block text-sm font-medium">Порядок</span>
           <input
             type="number"
+            min={0}
+            max={1000}
+            step={1}
             value={sortOrder}
             onChange={(e) => setSortOrder(e.target.value)}
             className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
@@ -214,7 +257,7 @@ function AddAccount({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
         <div className="flex gap-2">
           <button
             onClick={save}
-            disabled={busy || !name || !token}
+            disabled={busy || !valid}
             className="flex-1 rounded-xl bg-black py-2.5 font-medium text-white disabled:opacity-40 dark:bg-white dark:text-black"
           >
             {busy ? 'Сохраняем…' : 'Добавить'}
@@ -226,6 +269,7 @@ function AddAccount({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
             Отмена
           </button>
         </div>
+        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
       </div>
     </div>
   );

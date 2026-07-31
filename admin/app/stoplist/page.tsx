@@ -64,6 +64,7 @@ export default function StopListPage() {
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          maxLength={120}
           placeholder="Название товара"
           className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
         />

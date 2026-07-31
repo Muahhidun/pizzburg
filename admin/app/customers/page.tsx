@@ -31,6 +31,7 @@ export default function CustomersPage() {
         </div>
         <input
           value={search}
+          maxLength={120}
           onChange={(e) => {
             setSearch(e.target.value);
             setPage(1);

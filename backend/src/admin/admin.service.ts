@@ -1,5 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PosterClient } from '../poster/poster.client';
 import {
   PosterAccountDto,
   PromotionDto,
@@ -14,7 +19,10 @@ import {
  */
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly poster: PosterClient,
+  ) {}
 
   private async tenant(slug = 'pizzburg') {
     const t = await this.prisma.tenant.findUnique({ where: { slug } });
@@ -74,7 +82,10 @@ export class AdminService {
   }
 
   async updateCategory(id: string, dto: UpdateCategoryDto) {
-    return this.prisma.appCategory.update({ where: { id }, data: dto });
+    return this.prisma.appCategory.update({
+      where: { id },
+      data: { ...dto, name: dto.name?.trim() },
+    });
   }
 
   async reorderCategories(ids: string[]) {
@@ -93,9 +104,12 @@ export class AdminService {
     // пустая строка от формы = сброс оверрайда
     const data = {
       ...dto,
-      displayName: dto.displayName === '' ? null : dto.displayName,
+      displayName:
+        dto.displayName === '' ? null : dto.displayName?.trim(),
       displayDescription:
-        dto.displayDescription === '' ? null : dto.displayDescription,
+        dto.displayDescription === ''
+          ? null
+          : dto.displayDescription?.trim(),
     };
     return this.prisma.product.update({ where: { id }, data });
   }
@@ -362,11 +376,30 @@ export class AdminService {
 
   async createPromotion(dto: PromotionDto) {
     const tenant = await this.tenant();
+    const [category, gift] = await Promise.all([
+      this.prisma.appCategory.findFirst({
+        where: { id: dto.conditionCategoryId, tenantId: tenant.id },
+        select: { id: true },
+      }),
+      this.prisma.product.findFirst({
+        where: { id: dto.giftProductId, tenantId: tenant.id },
+        select: { id: true },
+      }),
+    ]);
+    if (!category) throw new BadRequestException('Категория акции не найдена');
+    if (!gift) throw new BadRequestException('Подарочный товар не найден');
+    if (
+      dto.activeFrom &&
+      dto.activeTo &&
+      new Date(dto.activeFrom) >= new Date(dto.activeTo)
+    ) {
+      throw new BadRequestException('Дата окончания должна быть позже начала');
+    }
     return this.prisma.promotion.create({
       data: {
         tenantId: tenant.id,
-        name: dto.name,
-        code: dto.code || null,
+        name: dto.name.trim(),
+        code: dto.code?.trim().toUpperCase() || null,
         conditionCategoryId: dto.conditionCategoryId,
         conditionQty: dto.conditionQty,
         giftProductId: dto.giftProductId,
@@ -413,6 +446,15 @@ export class AdminService {
     const tenant = await this.tenant();
     const current = (tenant.settings as any) ?? {};
     const delivery = { ...(current.delivery ?? {}), ...dto };
+    if (
+      delivery.freeFrom > 0 &&
+      delivery.minOrder > 0 &&
+      delivery.freeFrom < delivery.minOrder
+    ) {
+      throw new BadRequestException(
+        'Порог бесплатной доставки не может быть ниже минимального заказа',
+      );
+    }
     return this.prisma.tenant.update({
       where: { id: tenant.id },
       data: { settings: { ...current, delivery } },
@@ -422,15 +464,26 @@ export class AdminService {
 
   async addPosterAccount(dto: PosterAccountDto) {
     const tenant = await this.tenant();
+    try {
+      await this.poster.getCategories(dto.token.trim());
+    } catch {
+      throw new BadRequestException('Токен Poster недействителен');
+    }
     const acc = await this.prisma.posterAccount.upsert({
-      where: { tenantId_name: { tenantId: tenant.id, name: dto.name } },
+      where: {
+        tenantId_name: { tenantId: tenant.id, name: dto.name.trim() },
+      },
       create: {
         tenantId: tenant.id,
-        name: dto.name,
-        token: dto.token,
+        name: dto.name.trim(),
+        token: dto.token.trim(),
         sortOrder: dto.sortOrder ?? 0,
       },
-      update: { token: dto.token, sortOrder: dto.sortOrder ?? 0, isActive: true },
+      update: {
+        token: dto.token.trim(),
+        sortOrder: dto.sortOrder ?? 0,
+        isActive: true,
+      },
       select: { id: true, name: true, sortOrder: true, isActive: true },
     });
     return acc;

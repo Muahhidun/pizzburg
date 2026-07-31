@@ -40,6 +40,7 @@ export default function LoginPage() {
           type="password"
           value={value}
           onChange={(e) => setValue(e.target.value)}
+          maxLength={500}
           placeholder="Токен доступа"
           autoFocus
           className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2.5 outline-none focus:border-black dark:border-white/15 dark:focus:border-white"

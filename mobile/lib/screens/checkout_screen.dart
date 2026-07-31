@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
 import '../state/cart.dart';
+import '../utils/input_validation.dart';
 import 'order_screen.dart';
 
 /// Оформление заказа: тип, контакты, адрес, способ оплаты.
@@ -20,7 +20,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   String _type = 'DELIVERY';
   String _payment = 'CASH';
   final _name = TextEditingController();
-  final _phone = TextEditingController();
+  final _phone = TextEditingController(text: '+7 ');
   final _street = TextEditingController();
   final _house = TextEditingController();
   final _flat = TextEditingController();
@@ -87,12 +87,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Оформление',
-            style: TextStyle(fontWeight: FontWeight.w800)),
+        title: const Text(
+          'Оформление',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
         backgroundColor: Colors.white,
       ),
       body: Form(
         key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -126,26 +129,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   TextFormField(
                     controller: _phone,
                     keyboardType: TextInputType.phone,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(
-                        RegExp(r'[0-9+ ()-]'),
-                      ),
-                      LengthLimitingTextInputFormatter(18),
-                    ],
+                    inputFormatters: [KzPhoneInputFormatter()],
                     decoration: _input('Телефон', hint: '+7 707 000 00 00'),
-                    validator: (v) {
-                      final digits = (v ?? '').replaceAll(RegExp(r'\D'), '');
-                      final valid = digits.length == 10 ||
-                          (digits.length == 11 &&
-                              (digits.startsWith('7') ||
-                                  digits.startsWith('8')));
-                      return valid ? null : 'Укажите корректный телефон';
-                    },
+                    validator: validateKzPhone,
                   ),
                   const SizedBox(height: 10),
                   TextFormField(
                     controller: _name,
+                    textCapitalization: TextCapitalization.words,
+                    inputFormatters: nameInputFormatters,
                     decoration: _input('Имя'),
+                    validator: validateName,
                   ),
                 ],
               ),
@@ -157,10 +151,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   children: [
                     TextFormField(
                       controller: _street,
+                      textCapitalization: TextCapitalization.words,
+                      inputFormatters: streetInputFormatters,
                       decoration: _input('Улица'),
-                      validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'Укажите улицу'
-                          : null,
+                      validator: validateStreet,
                     ),
                     const SizedBox(height: 10),
                     Row(
@@ -168,16 +162,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         Expanded(
                           child: TextFormField(
                             controller: _house,
+                            inputFormatters: houseInputFormatters,
                             decoration: _input('Дом'),
-                            validator: (v) => (v == null || v.trim().isEmpty)
-                                ? 'Дом'
-                                : null,
+                            validator: validateHouse,
                           ),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: TextFormField(
-                              controller: _flat, decoration: _input('Квартира')),
+                            controller: _flat,
+                            inputFormatters: flatInputFormatters,
+                            decoration: _input('Квартира'),
+                            validator: validateFlat,
+                          ),
                         ),
                       ],
                     ),
@@ -186,13 +183,24 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       children: [
                         Expanded(
                           child: TextFormField(
-                              controller: _entrance,
-                              decoration: _input('Подъезд')),
+                            controller: _entrance,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: entranceInputFormatters,
+                            decoration: _input('Подъезд'),
+                            validator: validateEntrance,
+                          ),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: TextFormField(
-                              controller: _floor, decoration: _input('Этаж')),
+                            controller: _floor,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              signed: true,
+                            ),
+                            inputFormatters: floorInputFormatters,
+                            decoration: _input('Этаж'),
+                            validator: validateFloor,
+                          ),
                         ),
                       ],
                     ),
@@ -231,14 +239,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               child: TextFormField(
                 controller: _comment,
                 maxLines: 2,
+                inputFormatters: commentInputFormatters,
                 decoration: _input('Например: домофон не работает'),
+                validator: validateComment,
               ),
             ),
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: Text(_error!,
-                    style: const TextStyle(color: Colors.red)),
+                child: Text(_error!, style: const TextStyle(color: Colors.red)),
               ),
           ],
         ),
@@ -252,7 +261,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               style: FilledButton.styleFrom(
                 backgroundColor: Colors.black,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
+                  borderRadius: BorderRadius.circular(16),
+                ),
               ),
               onPressed: _sending ? null : _submit,
               child: _sending
@@ -260,10 +270,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       height: 22,
                       width: 22,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
-                  : Text('Заказать · ${formatTenge(_total)}',
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Text(
+                      'Заказать · ${formatTenge(_total)}',
                       style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w700)),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
             ),
           ),
         ),
@@ -272,15 +289,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   InputDecoration _input(String label, {String? hint}) => InputDecoration(
-        labelText: label,
-        hintText: hint,
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide.none,
-        ),
-      );
+    labelText: label,
+    hintText: hint,
+    filled: true,
+    fillColor: Colors.white,
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: BorderSide.none,
+    ),
+  );
 }
 
 class _Section extends StatelessWidget {
@@ -295,8 +312,10 @@ class _Section extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title,
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          Text(
+            title,
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 10),
           child,
         ],
@@ -336,8 +355,8 @@ class _Choice extends StatelessWidget {
             color: !enabled
                 ? Colors.black26
                 : selected
-                    ? Colors.white
-                    : Colors.black,
+                ? Colors.white
+                : Colors.black,
           ),
         ),
       ),
@@ -389,22 +408,29 @@ class _PaymentOption extends StatelessWidget {
               color: !enabled
                   ? Colors.black12
                   : selected
-                      ? Colors.black
-                      : Colors.black26,
+                  ? Colors.black
+                  : Colors.black26,
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label,
-                      style: TextStyle(
-                          fontSize: 15,
-                          color: enabled ? Colors.black : Colors.black38)),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: enabled ? Colors.black : Colors.black38,
+                    ),
+                  ),
                   if (subtitle != null)
-                    Text(subtitle!,
-                        style: const TextStyle(
-                            fontSize: 12, color: Colors.black38)),
+                    Text(
+                      subtitle!,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.black38,
+                      ),
+                    ),
                 ],
               ),
             ),

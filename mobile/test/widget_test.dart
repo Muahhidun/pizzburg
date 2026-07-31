@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pizzburg/api/models.dart';
 import 'package:pizzburg/state/cart.dart';
+import 'package:pizzburg/utils/input_validation.dart';
 
 void main() {
   test('formatTenge разделяет разряды', () {
@@ -59,5 +60,29 @@ void main() {
     cart.add(set, modifiers: [bigCola]);
 
     expect(cart.subtotal, 5750);
+  });
+
+  test('телефон форматируется и лишние символы не проходят', () {
+    final formatter = KzPhoneInputFormatter();
+    final formatted = formatter.formatEditUpdate(
+      TextEditingValue.empty,
+      const TextEditingValue(text: '+7 707 127 27 89*#999'),
+    );
+
+    expect(formatted.text, '+7 (707) 127-27-89');
+    expect(validateKzPhone(formatted.text), isNull);
+    expect(validateKzPhone('+770712727894646*#'), isNotNull);
+  });
+
+  test('поля оформления отклоняют некорректные значения', () {
+    expect(validateName('Жандос'), isNull);
+    expect(validateName('Жандос123'), isNotNull);
+    expect(validateHouse('47Б'), isNull);
+    expect(validateHouse('бар'), isNotNull);
+    expect(validateFlat('6А'), isNull);
+    expect(validateFlat('бар'), isNotNull);
+    expect(validateEntrance('Пер'), isNotNull);
+    expect(validateFloor('9'), isNull);
+    expect(validateFloor('Первый'), isNotNull);
   });
 }
