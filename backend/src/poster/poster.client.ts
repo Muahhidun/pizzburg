@@ -49,7 +49,11 @@ export class PosterClient {
       body: body ? JSON.stringify(body) : undefined,
     });
     if (!res.ok) {
-      throw new Error(`Poster ${method} HTTP ${res.status}`);
+      const details = (await res.text()).slice(0, 2000);
+      throw new Error(
+        `Poster ${method} HTTP ${res.status}` +
+          (details ? `: ${details}` : ''),
+      );
     }
     const json = (await res.json()) as { response?: T; error?: unknown };
     if (json.error) {

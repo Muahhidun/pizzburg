@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PosterClient } from '../poster/poster.client';
 import { PromotionsService } from '../promotions/promotions.service';
 import { CreateOrderDto } from './orders.dto';
+import { normalizeKzPhone } from '../common/phone';
 
 interface DeliverySettings {
   minOrder: number;
@@ -116,10 +117,19 @@ export class OrdersService {
         : [];
     const giftById = new Map(giftProducts.map((p) => [p.id, p]));
 
-    // Клиент по телефону (профиль сохраняется между заказами)
+    // Клиент по телефону (профиль сохраняется между заказами).
+    // Формат единый с OTP, иначе один человек создаёт несколько профилей,
+    // а Poster может отклонить заказ из-за невалидного номера.
+    const normalizedPhone = normalizeKzPhone(dto.phone);
     const customer = await this.prisma.customer.upsert({
-      where: { tenantId_phone: { tenantId: tenant.id, phone: dto.phone } },
-      create: { tenantId: tenant.id, phone: dto.phone, name: dto.name },
+      where: {
+        tenantId_phone: { tenantId: tenant.id, phone: normalizedPhone },
+      },
+      create: {
+        tenantId: tenant.id,
+        phone: normalizedPhone,
+        name: dto.name,
+      },
       update: dto.name ? { name: dto.name } : {},
     });
 

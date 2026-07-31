@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
+import { normalizeKzPhone } from '../common/phone';
 
 const OTP_TTL_MS = 5 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
@@ -25,16 +26,8 @@ export class AuthService {
     private readonly jwt: JwtService,
   ) {}
 
-  private normalizePhone(raw: string): string {
-    const digits = raw.replace(/\D/g, '');
-    if (digits.length === 11 && digits.startsWith('8')) return `+7${digits.slice(1)}`;
-    if (digits.length === 11 && digits.startsWith('7')) return `+${digits}`;
-    if (digits.length === 10) return `+7${digits}`;
-    throw new BadRequestException('Неверный формат номера');
-  }
-
   async requestOtp(phone: string) {
-    const normalized = this.normalizePhone(phone);
+    const normalized = normalizeKzPhone(phone);
 
     const recent = await this.prisma.otpCode.findFirst({
       where: {
@@ -66,7 +59,7 @@ export class AuthService {
   }
 
   async verifyOtp(tenantSlug: string, phone: string, code: string) {
-    const normalized = this.normalizePhone(phone);
+    const normalized = normalizeKzPhone(phone);
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: tenantSlug },
     });

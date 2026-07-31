@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
@@ -125,10 +126,21 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   TextFormField(
                     controller: _phone,
                     keyboardType: TextInputType.phone,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                        RegExp(r'[0-9+ ()-]'),
+                      ),
+                      LengthLimitingTextInputFormatter(18),
+                    ],
                     decoration: _input('Телефон', hint: '+7 707 000 00 00'),
-                    validator: (v) => (v == null || v.trim().length < 10)
-                        ? 'Укажите телефон'
-                        : null,
+                    validator: (v) {
+                      final digits = (v ?? '').replaceAll(RegExp(r'\D'), '');
+                      final valid = digits.length == 10 ||
+                          (digits.length == 11 &&
+                              (digits.startsWith('7') ||
+                                  digits.startsWith('8')));
+                      return valid ? null : 'Укажите корректный телефон';
+                    },
                   ),
                   const SizedBox(height: 10),
                   TextFormField(
