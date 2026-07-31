@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1101.0",
     "@nestjs/common": "^11.1.0",
     "@nestjs/config": "^4.0.0",
     "@nestjs/core": "^11.1.0",
@@ -20,10 +21,13 @@
     "@prisma/client": "^6.10.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "multer": "^2.2.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "sharp": "^0.35.3"
   },
   "devDependencies": {
+    "@types/multer": "^2.2.0",
     "@types/node": "^22.10.0",
     "prisma": "^6.10.0",
     "ts-node": "^10.9.2",

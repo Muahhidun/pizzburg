@@ -1,13 +1,17 @@
 import {
   Body,
+  BadRequestException,
   Controller,
   Get,
   Param,
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { AdminGuard } from './admin.guard';
 import { AdminService } from './admin.service';
 import {
@@ -42,6 +46,20 @@ export class AdminController {
   @Patch('products/:id')
   updateProduct(@Param('id') id: string, @Body() dto: UpdateProductDto) {
     return this.admin.updateProduct(id, dto);
+  }
+
+  @Post('products/:id/photo')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+    }),
+  )
+  uploadProductPhoto(
+    @Param('id') id: string,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('Выберите файл изображения');
+    return this.admin.uploadProductPhoto(id, file);
   }
 
   @Post('products/reorder')

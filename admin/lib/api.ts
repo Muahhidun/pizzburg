@@ -17,10 +17,12 @@ export function clearToken() {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const isFormData =
+    typeof FormData !== 'undefined' && init?.body instanceof FormData;
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: {
-      'Content-Type': 'application/json',
+      ...(!isFormData ? { 'Content-Type': 'application/json' } : {}),
       'X-Admin-Token': getToken() ?? '',
       ...(init?.headers ?? {}),
     },
@@ -43,6 +45,11 @@ export const api = {
     request<T>(p, { method: 'PATCH', body: JSON.stringify(body) }),
   post: <T>(p: string, body?: unknown) =>
     request<T>(p, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
+  upload: <T>(p: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return request<T>(p, { method: 'POST', body: form });
+  },
   raw: BASE,
 };
 

@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PosterClient } from '../poster/poster.client';
+import { ObjectStorageService } from '../storage/object-storage.service';
 import {
   PosterAccountDto,
   PromotionDto,
@@ -22,6 +23,7 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly poster: PosterClient,
+    private readonly storage: ObjectStorageService,
   ) {}
 
   private async tenant(slug = 'pizzburg') {
@@ -106,6 +108,13 @@ export class AdminService {
   }
 
   async updateProduct(id: string, dto: UpdateProductDto) {
+    const previous =
+      dto.displayPhotoUrl !== undefined
+        ? await this.prisma.product.findUnique({
+            where: { id },
+            select: { displayPhotoUrl: true },
+          })
+        : null;
     // пустая строка от формы = сброс оверрайда
     const data = {
       ...dto,
@@ -119,7 +128,36 @@ export class AdminService {
         dto.displayPhotoUrl === '' ? null : dto.displayPhotoUrl?.trim(),
       weightLabel: dto.weightLabel === '' ? null : dto.weightLabel?.trim(),
     };
-    return this.prisma.product.update({ where: { id }, data });
+    const updated = await this.prisma.product.update({ where: { id }, data });
+    if (
+      previous?.displayPhotoUrl &&
+      previous.displayPhotoUrl !== updated.displayPhotoUrl
+    ) {
+      await this.storage.deleteIfManaged(previous.displayPhotoUrl);
+    }
+    return updated;
+  }
+
+  async uploadProductPhoto(id: string, file: Express.Multer.File) {
+    const product = await this.prisma.product.findUnique({
+      where: { id },
+      select: { id: true, displayPhotoUrl: true },
+    });
+    if (!product) throw new NotFoundException('Товар не найден');
+
+    const displayPhotoUrl = await this.storage.uploadProductImage(id, file);
+    try {
+      await this.prisma.product.update({
+        where: { id },
+        data: { displayPhotoUrl },
+      });
+    } catch (error) {
+      await this.storage.deleteIfManaged(displayPhotoUrl);
+      throw error;
+    }
+
+    await this.storage.deleteIfManaged(product.displayPhotoUrl);
+    return { displayPhotoUrl };
   }
 
   async reorderProducts(ids: string[]) {
