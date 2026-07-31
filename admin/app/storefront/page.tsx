@@ -214,10 +214,10 @@ export default function StorefrontPage() {
                   <ul className="space-y-1">
                     {current.products.map((p) => (
                       <SortableRow key={p.id} id={p.id}>
-                        {p.photoUrl ? (
+                        {p.displayPhotoUrl ?? p.photoUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
-                            src={p.photoUrl}
+                            src={p.displayPhotoUrl ?? p.photoUrl ?? ''}
                             alt=""
                             className="h-10 w-10 shrink-0 rounded-lg object-cover"
                           />
@@ -236,6 +236,21 @@ export default function StorefrontPage() {
                             {p.hasModifiers && (
                               <span className="shrink-0 rounded bg-blue-50 px-1 text-[10px] font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300">
                                 выбор
+                              </span>
+                            )}
+                            {p.isHit && (
+                              <span className="shrink-0 rounded bg-amber-50 px-1 text-[10px] font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                                хит
+                              </span>
+                            )}
+                            {p.isSpicy && (
+                              <span className="shrink-0 rounded bg-red-50 px-1 text-[10px] font-medium text-red-700 dark:bg-red-950 dark:text-red-300">
+                                острое
+                              </span>
+                            )}
+                            {p.isNew && (
+                              <span className="shrink-0 rounded bg-emerald-50 px-1 text-[10px] font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                                новинка
                               </span>
                             )}
                             {p.inStopList && (

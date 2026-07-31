@@ -10,6 +10,26 @@ void main() {
     expect(formatTenge(12500), '12 500 ₸');
   });
 
+  test('карточка товара читает витринные поля', () {
+    final product = Product.fromJson({
+      'id': 'pizza-1',
+      'name': 'Пепперони',
+      'description': 'Состав',
+      'photoUrl': 'https://example.com/pizza.jpg',
+      'weightLabel': '30 см',
+      'isHit': true,
+      'isSpicy': true,
+      'isNew': false,
+      'price': 3150,
+      'modifierGroups': <dynamic>[],
+    });
+
+    expect(product.weightLabel, '30 см');
+    expect(product.isHit, isTrue);
+    expect(product.isSpicy, isTrue);
+    expect(product.isNew, isFalse);
+  });
+
   test('корзина схлопывает одинаковые позиции и считает сумму', () {
     final pizza = Product(
       id: 'p1',

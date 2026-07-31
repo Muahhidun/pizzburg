@@ -57,8 +57,9 @@ class _ProductScreenState extends State<ProductScreen> {
                 ),
               ),
             ),
-            flexibleSpace:
-                FlexibleSpaceBar(background: ProductImage(url: p.photoUrl)),
+            flexibleSpace: FlexibleSpaceBar(
+              background: ProductImage(url: p.photoUrl),
+            ),
           ),
           SliverToBoxAdapter(
             child: Padding(
@@ -66,24 +67,53 @@ class _ProductScreenState extends State<ProductScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(p.name,
+                  if (p.isHit || p.isSpicy || p.isNew) ...[
+                    ProductBadges(product: p),
+                    const SizedBox(height: 10),
+                  ],
+                  Text(
+                    p.name,
+                    style: const TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  if (p.weightLabel.isNotEmpty) ...[
+                    const SizedBox(height: 5),
+                    Text(
+                      p.weightLabel,
                       style: const TextStyle(
-                          fontSize: 26, fontWeight: FontWeight.w800)),
+                        fontSize: 14,
+                        color: Colors.black45,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                   if (p.description.isNotEmpty) ...[
                     const SizedBox(height: 8),
-                    Text(p.description,
-                        style: const TextStyle(
-                            fontSize: 15, color: Colors.black54, height: 1.4)),
+                    Text(
+                      p.description,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        color: Colors.black54,
+                        height: 1.4,
+                      ),
+                    ),
                   ],
                   const SizedBox(height: 20),
                   for (final group in p.modifierGroups) ...[
-                    Text(group.name,
-                        style: const TextStyle(
-                            fontSize: 17, fontWeight: FontWeight.w700)),
+                    Text(
+                      group.name,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                     if (group.min > 0)
-                      const Text('Обязательный выбор',
-                          style:
-                              TextStyle(fontSize: 13, color: Colors.black45)),
+                      const Text(
+                        'Обязательный выбор',
+                        style: TextStyle(fontSize: 13, color: Colors.black45),
+                      ),
                     const SizedBox(height: 8),
                     ...group.options.map((option) {
                       final selected = _selected[group.id]?.id == option.id;
@@ -113,18 +143,24 @@ class _ProductScreenState extends State<ProductScreen> {
                                       ? Icons.radio_button_checked
                                       : Icons.radio_button_unchecked,
                                   size: 20,
-                                  color:
-                                      selected ? Colors.black : Colors.black26,
+                                  color: selected
+                                      ? Colors.black
+                                      : Colors.black26,
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
-                                  child: Text(option.name,
-                                      style: const TextStyle(fontSize: 15)),
+                                  child: Text(
+                                    option.name,
+                                    style: const TextStyle(fontSize: 15),
+                                  ),
                                 ),
                                 if (option.price > 0)
-                                  Text('+${formatTenge(option.price)}',
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w600)),
+                                  Text(
+                                    '+${formatTenge(option.price)}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
@@ -148,19 +184,24 @@ class _ProductScreenState extends State<ProductScreen> {
               style: FilledButton.styleFrom(
                 backgroundColor: Colors.black,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
+                  borderRadius: BorderRadius.circular(16),
+                ),
               ),
               onPressed: _isComplete
                   ? () {
-                      context.read<Cart>().add(p,
-                          modifiers: _selected.values.toList());
+                      context.read<Cart>().add(
+                        p,
+                        modifiers: _selected.values.toList(),
+                      );
                       Navigator.pop(context);
                     }
                   : null,
               child: Text(
                 'В корзину · ${formatTenge(_total)}',
                 style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.w700),
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ),

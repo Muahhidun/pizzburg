@@ -68,6 +68,11 @@ export class AdminService {
           description: p.description,
           displayDescription: p.displayDescription,
           photoUrl: p.photoUrl,
+          displayPhotoUrl: p.displayPhotoUrl,
+          weightLabel: p.weightLabel,
+          isHit: p.isHit,
+          isSpicy: p.isSpicy,
+          isNew: p.isNew,
           price: p.price, // из кассы
           priceOverride: p.priceOverride,
           isVisible: p.isVisible,
@@ -110,6 +115,9 @@ export class AdminService {
         dto.displayDescription === ''
           ? null
           : dto.displayDescription?.trim(),
+      displayPhotoUrl:
+        dto.displayPhotoUrl === '' ? null : dto.displayPhotoUrl?.trim(),
+      weightLabel: dto.weightLabel === '' ? null : dto.weightLabel?.trim(),
     };
     return this.prisma.product.update({ where: { id }, data });
   }

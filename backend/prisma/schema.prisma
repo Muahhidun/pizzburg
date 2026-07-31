@@ -144,6 +144,11 @@ model Product {
   appCategory        AppCategory? @relation(fields: [appCategoryId], references: [id])
   displayName        String? // имя в приложении, если отличается от кассового
   displayDescription String? // описание для приложения (в кассе описаний обычно нет)
+  displayPhotoUrl    String? // собственное фото витрины; приоритетнее фото Poster
+  weightLabel        String? // готовая подпись: «30 см», «450 г», «8 шт.»
+  isHit              Boolean      @default(false)
+  isSpicy            Boolean      @default(false)
+  isNew              Boolean      @default(false)
   priceOverride      Int? // ручная цена витрины; приоритет: priceOverride > цена источника «Приложение» в Poster > базовая
   sortOverride       Int? // ручной порядок внутри витринной категории
   isVisible          Boolean      @default(true)
@@ -159,13 +164,13 @@ model Product {
 /// У SmartPicasso это были служебные категории с нулевыми позициями —
 /// у нас это своя механика поверх обычного товара Poster.
 model ComboGroup {
-  id        String @id @default(cuid())
+  id        String  @id @default(cuid())
   productId String
   product   Product @relation(fields: [productId], references: [id])
   name      String
-  minSelect Int    @default(1)
-  maxSelect Int    @default(1)
-  sortOrder Int    @default(0)
+  minSelect Int     @default(1)
+  maxSelect Int     @default(1)
+  sortOrder Int     @default(0)
 
   options ComboOption[]
 
@@ -173,16 +178,16 @@ model ComboGroup {
 }
 
 model ComboOption {
-  id              String  @id @default(cuid())
+  id              String     @id @default(cuid())
   groupId         String
   group           ComboGroup @relation(fields: [groupId], references: [id])
   name            String
-  priceDelta      Int     @default(0) // 0 = входит в цену, >0 = доплата (апгрейд)
+  priceDelta      Int        @default(0) // 0 = входит в цену, >0 = доплата (апгрейд)
   photoUrl        String?
   posterProductId String? // соответствующая позиция Poster для чека (если есть)
-  isDefault       Boolean @default(false)
-  sortOrder       Int     @default(0)
-  isActive        Boolean @default(true)
+  isDefault       Boolean    @default(false)
+  sortOrder       Int        @default(0)
+  isActive        Boolean    @default(true)
 
   @@index([groupId])
 }

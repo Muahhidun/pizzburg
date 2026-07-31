@@ -28,22 +28,33 @@ class ProductCard extends StatelessWidget {
               child: Stack(
                 children: [
                   Positioned.fill(child: ProductImage(url: product.photoUrl)),
+                  if (product.isHit || product.isSpicy || product.isNew)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: ProductBadges(product: product, compact: true),
+                    ),
                   if (inCart > 0)
                     Positioned(
                       top: 8,
                       left: 8,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.black,
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Text('$inCart в корзине',
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600)),
+                        child: Text(
+                          '$inCart в корзине',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ),
                 ],
@@ -59,8 +70,23 @@ class ProductCard extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w600, height: 1.2),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      height: 1.2,
+                    ),
                   ),
+                  if (product.weightLabel.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      product.weightLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.black45,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 6),
                   Row(
                     children: [
@@ -68,7 +94,9 @@ class ProductCard extends StatelessWidget {
                         child: Text(
                           formatTenge(product.price),
                           style: const TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.w700),
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                       _AddButton(product: product, onTap: onTap),
@@ -80,6 +108,50 @@ class ProductCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class ProductBadges extends StatelessWidget {
+  final Product product;
+  final bool compact;
+
+  const ProductBadges({super.key, required this.product, this.compact = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final badges = <({String text, Color color})>[
+      if (product.isHit) (text: 'Хит', color: const Color(0xFFFFA000)),
+      if (product.isSpicy) (text: 'Острое', color: const Color(0xFFE53935)),
+      if (product.isNew) (text: 'Новинка', color: const Color(0xFF2E7D32)),
+    ];
+
+    return Wrap(
+      spacing: 5,
+      runSpacing: 5,
+      alignment: WrapAlignment.end,
+      children: badges
+          .map(
+            (badge) => Container(
+              padding: EdgeInsets.symmetric(
+                horizontal: compact ? 7 : 9,
+                vertical: compact ? 3 : 5,
+              ),
+              decoration: BoxDecoration(
+                color: badge.color,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                badge.text,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: compact ? 10 : 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          )
+          .toList(),
     );
   }
 }
@@ -99,8 +171,9 @@ class _AddButton extends StatelessWidget {
           backgroundColor: const Color(0xFFF1F1F1),
           foregroundColor: Colors.black,
           padding: const EdgeInsets.symmetric(horizontal: 14),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
         onPressed: () {
           // с выбором модификаторов — открываем карточку
@@ -110,8 +183,10 @@ class _AddButton extends StatelessWidget {
             context.read<Cart>().add(product);
           }
         },
-        child: Text(product.hasChoices ? 'Выбрать' : '+',
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+        child: Text(
+          product.hasChoices ? 'Выбрать' : '+',
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+        ),
       ),
     );
   }

@@ -55,6 +55,11 @@ export interface AdminProduct {
   description: string;
   displayDescription: string | null;
   photoUrl: string | null;
+  displayPhotoUrl: string | null;
+  weightLabel: string | null;
+  isHit: boolean;
+  isSpicy: boolean;
+  isNew: boolean;
   price: number;
   priceOverride: number | null;
   isVisible: boolean;

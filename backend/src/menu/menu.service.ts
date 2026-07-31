@@ -66,6 +66,11 @@ export class MenuService {
             description: true,
             displayDescription: true,
             photoUrl: true,
+            displayPhotoUrl: true,
+            weightLabel: true,
+            isHit: true,
+            isSpicy: true,
+            isNew: true,
             price: true,
             priceOverride: true,
             modifiers: true,
@@ -107,6 +112,8 @@ export class MenuService {
               name,
               description,
               displayDescription,
+              photoUrl,
+              displayPhotoUrl,
               price,
               priceOverride,
               modifiers,
@@ -115,6 +122,7 @@ export class MenuService {
             }) => ({
               name: displayName ?? name,
               description: displayDescription ?? description,
+              photoUrl: displayPhotoUrl ?? photoUrl,
               price: priceOverride ?? price,
               // наборы модификаторов Poster («Донер Комбо», «Напиток к сету»)
               modifierGroups: normalizeModifierGroups(modifiers),

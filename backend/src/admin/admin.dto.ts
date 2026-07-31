@@ -4,6 +4,7 @@ import {
   IsISO8601,
   IsOptional,
   IsString,
+  IsUrl,
   Length,
   Matches,
   Max,
@@ -26,6 +27,15 @@ export class ReorderDto {
 export class UpdateProductDto {
   @IsOptional() @IsString() @MaxLength(120) displayName?: string | null;
   @IsOptional() @IsString() @MaxLength(1_000) displayDescription?: string | null;
+  @IsOptional()
+  @IsString()
+  @MaxLength(2_048)
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
+  displayPhotoUrl?: string | null;
+  @IsOptional() @IsString() @MaxLength(40) weightLabel?: string | null;
+  @IsOptional() @IsBoolean() isHit?: boolean;
+  @IsOptional() @IsBoolean() isSpicy?: boolean;
+  @IsOptional() @IsBoolean() isNew?: boolean;
   @IsOptional() @IsInt() @Min(0) @Max(10_000_000) priceOverride?: number | null;
   @IsOptional() @IsString() appCategoryId?: string;
   @IsOptional() @IsInt() @Min(0) @Max(10_000) sortOverride?: number | null;

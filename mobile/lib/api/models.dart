@@ -7,11 +7,11 @@ class MenuResponse {
   MenuResponse({required this.tenantName, required this.categories});
 
   factory MenuResponse.fromJson(Map<String, dynamic> json) => MenuResponse(
-        tenantName: json['tenant']?['name'] ?? '',
-        categories: (json['categories'] as List)
-            .map((c) => MenuCategory.fromJson(c))
-            .toList(),
-      );
+    tenantName: json['tenant']?['name'] ?? '',
+    categories: (json['categories'] as List)
+        .map((c) => MenuCategory.fromJson(c))
+        .toList(),
+  );
 }
 
 class MenuCategory {
@@ -22,11 +22,12 @@ class MenuCategory {
   MenuCategory({required this.id, required this.name, required this.products});
 
   factory MenuCategory.fromJson(Map<String, dynamic> json) => MenuCategory(
-        id: json['id'],
-        name: json['name'],
-        products:
-            (json['products'] as List).map((p) => Product.fromJson(p)).toList(),
-      );
+    id: json['id'],
+    name: json['name'],
+    products: (json['products'] as List)
+        .map((p) => Product.fromJson(p))
+        .toList(),
+  );
 }
 
 class Product {
@@ -34,6 +35,10 @@ class Product {
   final String name;
   final String description;
   final String? photoUrl;
+  final String weightLabel;
+  final bool isHit;
+  final bool isSpicy;
+  final bool isNew;
   final int price;
   final List<ModifierGroup> modifierGroups;
 
@@ -42,20 +47,28 @@ class Product {
     required this.name,
     required this.description,
     this.photoUrl,
+    this.weightLabel = '',
+    this.isHit = false,
+    this.isSpicy = false,
+    this.isNew = false,
     required this.price,
     required this.modifierGroups,
   });
 
   factory Product.fromJson(Map<String, dynamic> json) => Product(
-        id: json['id'],
-        name: json['name'],
-        description: json['description'] ?? '',
-        photoUrl: json['photoUrl'],
-        price: json['price'],
-        modifierGroups: ((json['modifierGroups'] ?? []) as List)
-            .map((g) => ModifierGroup.fromJson(g))
-            .toList(),
-      );
+    id: json['id'],
+    name: json['name'],
+    description: json['description'] ?? '',
+    photoUrl: json['photoUrl'],
+    weightLabel: json['weightLabel'] ?? '',
+    isHit: json['isHit'] ?? false,
+    isSpicy: json['isSpicy'] ?? false,
+    isNew: json['isNew'] ?? false,
+    price: json['price'],
+    modifierGroups: ((json['modifierGroups'] ?? []) as List)
+        .map((g) => ModifierGroup.fromJson(g))
+        .toList(),
+  );
 
   bool get hasChoices => modifierGroups.isNotEmpty;
 }
@@ -77,14 +90,14 @@ class ModifierGroup {
   });
 
   factory ModifierGroup.fromJson(Map<String, dynamic> json) => ModifierGroup(
-        id: json['id'],
-        name: json['name'],
-        min: json['min'] ?? 0,
-        max: json['max'] ?? 1,
-        options: (json['options'] as List)
-            .map((o) => ModifierOption.fromJson(o))
-            .toList(),
-      );
+    id: json['id'],
+    name: json['name'],
+    min: json['min'] ?? 0,
+    max: json['max'] ?? 1,
+    options: (json['options'] as List)
+        .map((o) => ModifierOption.fromJson(o))
+        .toList(),
+  );
 }
 
 class ModifierOption {
@@ -95,10 +108,10 @@ class ModifierOption {
   ModifierOption({required this.id, required this.name, required this.price});
 
   factory ModifierOption.fromJson(Map<String, dynamic> json) => ModifierOption(
-        id: json['id'],
-        name: json['name'],
-        price: json['price'] ?? 0,
-      );
+    id: json['id'],
+    name: json['name'],
+    price: json['price'] ?? 0,
+  );
 }
 
 /// Ответ /cart/preview — суммы и подарки по акциям
@@ -128,10 +141,11 @@ class CartPreview {
     return CartPreview(
       subtotal: json['subtotal'] ?? 0,
       promoDiscount: json['promoDiscount'] ?? 0,
-      gifts:
-          ((json['gifts'] ?? []) as List).map((g) => CartGift.fromJson(g)).toList(),
-      appliedPromotions:
-          ((json['appliedPromotions'] ?? []) as List).cast<String>(),
+      gifts: ((json['gifts'] ?? []) as List)
+          .map((g) => CartGift.fromJson(g))
+          .toList(),
+      appliedPromotions: ((json['appliedPromotions'] ?? []) as List)
+          .cast<String>(),
       deliveryFee: d['fee'] ?? 0,
       minOrder: d['minOrder'] ?? 0,
       freeFrom: d['freeFrom'],
@@ -154,11 +168,11 @@ class CartGift {
   });
 
   factory CartGift.fromJson(Map<String, dynamic> json) => CartGift(
-        name: json['name'],
-        qty: json['qty'],
-        fullPrice: json['fullPrice'] ?? 0,
-        promotion: json['promotion'] ?? '',
-      );
+    name: json['name'],
+    qty: json['qty'],
+    fullPrice: json['fullPrice'] ?? 0,
+    promotion: json['promotion'] ?? '',
+  );
 }
 
 class CreatedOrder {
@@ -169,10 +183,10 @@ class CreatedOrder {
   CreatedOrder({required this.id, required this.number, required this.total});
 
   factory CreatedOrder.fromJson(Map<String, dynamic> json) => CreatedOrder(
-        id: json['id'],
-        number: json['number'],
-        total: json['total'],
-      );
+    id: json['id'],
+    number: json['number'],
+    total: json['total'],
+  );
 }
 
 String formatTenge(int value) {

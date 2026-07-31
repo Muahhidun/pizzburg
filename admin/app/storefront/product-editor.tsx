@@ -18,6 +18,11 @@ export function ProductEditor({
   const [displayDescription, setDisplayDescription] = useState(
     product.displayDescription ?? '',
   );
+  const [displayPhotoUrl, setDisplayPhotoUrl] = useState(product.displayPhotoUrl ?? '');
+  const [weightLabel, setWeightLabel] = useState(product.weightLabel ?? '');
+  const [isHit, setIsHit] = useState(product.isHit);
+  const [isSpicy, setIsSpicy] = useState(product.isSpicy);
+  const [isNew, setIsNew] = useState(product.isNew);
   const [priceOverride, setPriceOverride] = useState(
     product.priceOverride != null ? String(product.priceOverride) : '',
   );
@@ -28,14 +33,23 @@ export function ProductEditor({
   const priceValid =
     priceOverride === '' ||
     (/^\d+$/.test(priceOverride) && Number(priceOverride) <= 10_000_000);
+  const photoValid =
+    displayPhotoUrl.trim() === '' ||
+    /^https?:\/\/[^\s]+$/i.test(displayPhotoUrl.trim());
+  const formValid = priceValid && photoValid;
 
   async function save() {
-    if (!priceValid) return;
+    if (!formValid) return;
     setBusy(true);
     try {
       await api.patch(`/admin/products/${product.id}`, {
         displayName,
         displayDescription,
+        displayPhotoUrl: displayPhotoUrl.trim() || null,
+        weightLabel,
+        isHit,
+        isSpicy,
+        isNew,
         priceOverride: priceOverride === '' ? null : Number(priceOverride),
         appCategoryId,
       });
@@ -55,9 +69,13 @@ export function ProductEditor({
         className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-5 dark:bg-neutral-900 sm:rounded-2xl"
       >
         <div className="mb-4 flex items-start gap-3">
-          {product.photoUrl && (
+          {(displayPhotoUrl || product.photoUrl) && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={product.photoUrl} alt="" className="h-14 w-14 rounded-xl object-cover" />
+            <img
+              src={displayPhotoUrl || product.photoUrl || ''}
+              alt=""
+              className="h-14 w-14 rounded-xl object-cover"
+            />
           )}
           <div className="min-w-0">
             <h2 className="truncate font-semibold">{product.name}</h2>
@@ -87,6 +105,42 @@ export function ProductEditor({
             rows={3}
             className="input resize-y"
           />
+        </Field>
+
+        <Field
+          label="Собственное фото"
+          hint="Прямая ссылка http/https. Пусто — использовать фото из Poster"
+        >
+          <input
+            type="url"
+            value={displayPhotoUrl}
+            onChange={(e) => setDisplayPhotoUrl(e.target.value.slice(0, 2048))}
+            placeholder={product.photoUrl ?? 'https://…/photo.jpg'}
+            className={`input ${photoValid ? '' : '!border-red-500'}`}
+          />
+          {!photoValid && (
+            <span className="mt-1 block text-xs text-red-600">
+              Нужна полная ссылка, начинающаяся с http:// или https://
+            </span>
+          )}
+        </Field>
+
+        <Field label="Вес / размер" hint="Например: 30 см, 450 г или 8 шт.">
+          <input
+            value={weightLabel}
+            onChange={(e) => setWeightLabel(e.target.value)}
+            maxLength={40}
+            placeholder="450 г"
+            className="input"
+          />
+        </Field>
+
+        <Field label="Метки товара">
+          <div className="grid grid-cols-3 gap-2">
+            <Flag checked={isHit} onChange={setIsHit} label="Хит" />
+            <Flag checked={isSpicy} onChange={setIsSpicy} label="Острое" />
+            <Flag checked={isNew} onChange={setIsNew} label="Новинка" />
+          </div>
         </Field>
 
         <Field
@@ -122,7 +176,7 @@ export function ProductEditor({
         <div className="mt-5 flex gap-2">
           <button
             onClick={save}
-            disabled={busy || !priceValid}
+            disabled={busy || !formValid}
             className="flex-1 rounded-xl bg-black py-2.5 font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
           >
             {busy ? 'Сохраняем…' : 'Сохранить'}
@@ -150,6 +204,27 @@ export function ProductEditor({
         `}</style>
       </div>
     </div>
+  );
+}
+
+function Flag({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  label: string;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-black/10 px-3 py-2 text-sm dark:border-white/15">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      {label}
+    </label>
   );
 }
 
