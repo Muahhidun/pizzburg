@@ -1,0 +1,232 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import { Settings, api, formatTenge } from '@/lib/api';
+
+export default function SettingsPage() {
+  const [data, setData] = useState<Settings | null>(null);
+  const [minOrder, setMinOrder] = useState('');
+  const [fee, setFee] = useState('');
+  const [freeFrom, setFreeFrom] = useState('');
+  const [saved, setSaved] = useState(false);
+  const [adding, setAdding] = useState(false);
+
+  const load = useCallback(async () => {
+    const d = await api.get<Settings>('/admin/settings');
+    setData(d);
+    setMinOrder(String(d.settings.delivery?.minOrder ?? 0));
+    setFee(String(d.settings.delivery?.fee ?? 0));
+    setFreeFrom(String(d.settings.delivery?.freeFrom ?? 0));
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function saveDelivery() {
+    await api.patch('/admin/settings', {
+      minOrder: Number(minOrder),
+      fee: Number(fee),
+      freeFrom: Number(freeFrom),
+    });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  if (!data) return <p className="text-neutral-500">Загрузка…</p>;
+
+  return (
+    <div className="space-y-4">
+      <h1 className="text-2xl font-bold">Настройки</h1>
+
+      <section className="rounded-2xl bg-white p-5 shadow-sm dark:bg-neutral-900">
+        <h2 className="mb-1 font-semibold">Доставка</h2>
+        <p className="mb-4 text-sm text-neutral-500">
+          Ниже минимальной суммы клиенту доступен только самовывоз.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <label>
+            <span className="mb-1 block text-sm font-medium">Минимальный заказ, ₸</span>
+            <input
+              type="number"
+              value={minOrder}
+              onChange={(e) => setMinOrder(e.target.value)}
+              className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
+            />
+          </label>
+          <label>
+            <span className="mb-1 block text-sm font-medium">Стоимость доставки, ₸</span>
+            <input
+              type="number"
+              value={fee}
+              onChange={(e) => setFee(e.target.value)}
+              className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
+            />
+          </label>
+          <label>
+            <span className="mb-1 block text-sm font-medium">Бесплатно от, ₸</span>
+            <input
+              type="number"
+              value={freeFrom}
+              onChange={(e) => setFreeFrom(e.target.value)}
+              className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
+            />
+          </label>
+        </div>
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            onClick={saveDelivery}
+            className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-black"
+          >
+            Сохранить
+          </button>
+          {saved && <span className="text-sm text-emerald-600">Сохранено</span>}
+        </div>
+        <p className="mt-3 text-xs text-neutral-400">
+          Сейчас: заказ от {formatTenge(Number(minOrder))}, доставка{' '}
+          {formatTenge(Number(fee))}, бесплатно от {formatTenge(Number(freeFrom))}
+        </p>
+      </section>
+
+      <section className="rounded-2xl bg-white p-5 shadow-sm dark:bg-neutral-900">
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold">Отделы (аккаунты Poster)</h2>
+            <p className="text-sm text-neutral-500">
+              Меню всех отделов сливается в одно; заказ расщепляется по планшетам.
+            </p>
+          </div>
+          <button
+            onClick={() => setAdding(true)}
+            className="shrink-0 rounded-xl border border-black/10 px-3 py-1.5 text-sm dark:border-white/15"
+          >
+            + Отдел
+          </button>
+        </div>
+        <ul className="space-y-1.5">
+          {data.posterAccounts.map((a) => (
+            <li
+              key={a.id}
+              className="flex items-center gap-3 rounded-xl bg-black/[.03] px-3 py-2 dark:bg-white/5"
+            >
+              <span className="text-sm text-neutral-400">{a.sortOrder}</span>
+              <span className="flex-1 font-medium">{a.name}</span>
+              <span
+                className={`text-xs ${a.isActive ? 'text-emerald-600' : 'text-neutral-400'}`}
+              >
+                {a.isActive ? 'активен' : 'выключен'}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-2 text-xs text-neutral-400">
+          Первый по порядку — «главный»: по нему клиенту уходит уведомление о принятии
+          общего заказа.
+        </p>
+      </section>
+
+      <section className="rounded-2xl bg-white p-5 shadow-sm dark:bg-neutral-900">
+        <h2 className="mb-3 font-semibold">Точки</h2>
+        <ul className="space-y-1.5">
+          {data.venues.map((v) => (
+            <li key={v.id} className="rounded-xl bg-black/[.03] px-3 py-2 dark:bg-white/5">
+              <div className="font-medium">{v.name}</div>
+              <div className="text-sm text-neutral-500">{v.address}</div>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {adding && (
+        <AddAccount
+          onClose={() => setAdding(false)}
+          onSaved={() => {
+            setAdding(false);
+            load();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function AddAccount({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const [name, setName] = useState('');
+  const [token, setToken] = useState('');
+  const [sortOrder, setSortOrder] = useState('1');
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    setBusy(true);
+    try {
+      await api.post('/admin/poster-accounts', {
+        name,
+        token: token.trim(),
+        sortOrder: Number(sortOrder),
+      });
+      onSaved();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-30 flex items-end justify-center bg-black/40 sm:items-center sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md rounded-t-2xl bg-white p-5 dark:bg-neutral-900 sm:rounded-2xl"
+      >
+        <h2 className="mb-1 text-lg font-semibold">Новый отдел</h2>
+        <p className="mb-4 text-sm text-neutral-500">
+          Токен берётся в админке Poster: Настройки → API. Он не отображается после
+          сохранения.
+        </p>
+        <label className="mb-3 block">
+          <span className="mb-1 block text-sm font-medium">Название</span>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Например: Sunday"
+            className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
+          />
+        </label>
+        <label className="mb-3 block">
+          <span className="mb-1 block text-sm font-medium">Токен Poster API</span>
+          <input
+            type="password"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 font-mono dark:border-white/15"
+          />
+        </label>
+        <label className="mb-4 block">
+          <span className="mb-1 block text-sm font-medium">Порядок</span>
+          <input
+            type="number"
+            value={sortOrder}
+            onChange={(e) => setSortOrder(e.target.value)}
+            className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
+          />
+        </label>
+        <div className="flex gap-2">
+          <button
+            onClick={save}
+            disabled={busy || !name || !token}
+            className="flex-1 rounded-xl bg-black py-2.5 font-medium text-white disabled:opacity-40 dark:bg-white dark:text-black"
+          >
+            {busy ? 'Сохраняем…' : 'Добавить'}
+          </button>
+          <button
+            onClick={onClose}
+            className="rounded-xl border border-black/10 px-4 py-2.5 dark:border-white/15"
+          >
+            Отмена
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

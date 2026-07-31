@@ -1,0 +1,387 @@
+// PizzBurg Delivery — схема данных (мультитенантная с первого дня)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Тенанты и точки ────────────────────────────────────────────────
+
+model Tenant {
+  id        String   @id @default(cuid())
+  slug      String   @unique // "pizzburg" — идёт в конфиг мобильной сборки
+  name      String
+  // настройки лояльности/брендинга как JSON, чтобы не плодить колонки
+  settings  Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  venues         Venue[]
+  posterAccounts PosterAccount[]
+  categories     Category[]
+  products       Product[]
+  customers      Customer[]
+  orders         Order[]
+  promoCodes     PromoCode[]
+  loyaltyTxns    LoyaltyTransaction[]
+}
+
+/// Аккаунт Poster = отдел на своём планшете. У тенанта их может быть
+/// несколько (PizzBurg — фастфуд, Sunday — суши/роллы); меню сливается
+/// в одно, заказ при оформлении расщепляется по отделам.
+model PosterAccount {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  name      String // «Основной», «Sunday»
+  token     String
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0) // порядок категорий этого отдела в общем меню
+
+  categories Category[]
+  products   Product[]
+  dispatches OrderDispatch[]
+
+  @@unique([tenantId, name])
+}
+
+model Venue {
+  id           String  @id @default(cuid())
+  tenantId     String
+  tenant       Tenant  @relation(fields: [tenantId], references: [id])
+  name         String
+  address      String
+  lat          Float?
+  lng          Float?
+  isActive     Boolean @default(true)
+  // { mon: ["10:00","23:00"], ... }
+  workingHours Json    @default("{}")
+
+  deliveryZones DeliveryZone[]
+  orders        Order[]
+
+  @@index([tenantId])
+}
+
+model DeliveryZone {
+  id          String  @id @default(cuid())
+  venueId     String
+  venue       Venue   @relation(fields: [venueId], references: [id])
+  name        String
+  // GeoJSON-полигон
+  polygon     Json
+  minOrder    Int     @default(0) // ₸
+  deliveryFee Int     @default(0) // ₸
+  freeFrom    Int? // бесплатная доставка от суммы, ₸
+  isActive    Boolean @default(true)
+
+  @@index([venueId])
+}
+
+// ─── Меню (синхронизируется из Poster) ──────────────────────────────
+
+/// Категория ВИТРИНЫ — полностью наша сущность: своё имя, порядок,
+/// видимость. Синк с Poster её не трогает. Одноимённые категории разных
+/// отделов Poster сливаются в одну витринную.
+model AppCategory {
+  id        String  @id @default(cuid())
+  tenantId  String
+  name      String
+  sortOrder Int     @default(0)
+  isVisible Boolean @default(true)
+
+  products         Product[]
+  posterCategories Category[]
+
+  @@index([tenantId])
+}
+
+/// Категория Poster (зеркало кассы, обновляется синком).
+/// appCategoryId — в какую витринную категорию по умолчанию попадают
+/// новые товары этой категории кассы.
+model Category {
+  id              String        @id @default(cuid())
+  tenantId        String
+  tenant          Tenant        @relation(fields: [tenantId], references: [id])
+  posterAccountId String
+  posterAccount   PosterAccount @relation(fields: [posterAccountId], references: [id])
+  posterId        String? // category_id в Poster (уникален только внутри аккаунта)
+  name            String
+  sortOrder       Int           @default(0)
+  isActive        Boolean       @default(true) // скрыта в Poster (обновляется синком)
+  appCategoryId   String?
+  appCategory     AppCategory?  @relation(fields: [appCategoryId], references: [id])
+
+  products Product[]
+
+  @@unique([posterAccountId, posterId])
+  @@index([tenantId])
+}
+
+model Product {
+  id              String        @id @default(cuid())
+  tenantId        String
+  tenant          Tenant        @relation(fields: [tenantId], references: [id])
+  posterAccountId String
+  posterAccount   PosterAccount @relation(fields: [posterAccountId], references: [id])
+  categoryId      String
+  category        Category      @relation(fields: [categoryId], references: [id])
+  posterId        String? // product_id в Poster (уникален только внутри аккаунта)
+  name            String // имя в кассе (синк)
+  description     String        @default("")
+  photoUrl        String?
+  price           Int // ₸, целые (синк)
+  isActive        Boolean       @default(true) // false = стоп-лист/скрыт в Poster (синк)
+  sortOrder       Int           @default(0) // порядок в Poster (синк)
+  // группы модификаторов из Poster: [{name, required, options:[{name, price}]}]
+  modifiers       Json          @default("[]")
+
+  // ─ Витринные поля: правит владелец, синк не трогает ─
+  appCategoryId      String?
+  appCategory        AppCategory? @relation(fields: [appCategoryId], references: [id])
+  displayName        String? // имя в приложении, если отличается от кассового
+  displayDescription String? // описание для приложения (в кассе описаний обычно нет)
+  priceOverride      Int? // ручная цена витрины; приоритет: priceOverride > цена источника «Приложение» в Poster > базовая
+  sortOverride       Int? // ручной порядок внутри витринной категории
+  isVisible          Boolean      @default(true)
+
+  orderItems  OrderItem[]
+  comboGroups ComboGroup[]
+
+  @@unique([posterAccountId, posterId])
+  @@index([tenantId, categoryId])
+}
+
+/// Группа выбора в комбо-товаре («Основное блюдо», «Напиток», «Добавка»).
+/// У SmartPicasso это были служебные категории с нулевыми позициями —
+/// у нас это своя механика поверх обычного товара Poster.
+model ComboGroup {
+  id        String @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  name      String
+  minSelect Int    @default(1)
+  maxSelect Int    @default(1)
+  sortOrder Int    @default(0)
+
+  options ComboOption[]
+
+  @@index([productId])
+}
+
+model ComboOption {
+  id              String  @id @default(cuid())
+  groupId         String
+  group           ComboGroup @relation(fields: [groupId], references: [id])
+  name            String
+  priceDelta      Int     @default(0) // 0 = входит в цену, >0 = доплата (апгрейд)
+  photoUrl        String?
+  posterProductId String? // соответствующая позиция Poster для чека (если есть)
+  isDefault       Boolean @default(false)
+  sortOrder       Int     @default(0)
+  isActive        Boolean @default(true)
+
+  @@index([groupId])
+}
+
+// ─── Клиенты и авторизация ──────────────────────────────────────────
+
+model Customer {
+  id            String    @id @default(cuid())
+  tenantId      String
+  tenant        Tenant    @relation(fields: [tenantId], references: [id])
+  phone         String // идентификатор клиента (как у FoodPicasso — сохранит профили при миграции)
+  name          String?
+  birthday      DateTime?
+  pointsBalance Int       @default(0) // балл = 1 ₸
+  loyaltyLevel  Int       @default(1)
+  pushToken     String? // FCM
+  createdAt     DateTime  @default(now())
+
+  orders      Order[]
+  loyaltyTxns LoyaltyTransaction[]
+
+  @@unique([tenantId, phone])
+}
+
+model OtpCode {
+  id        String   @id @default(cuid())
+  phone     String
+  code      String
+  attempts  Int      @default(0)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([phone])
+}
+
+// ─── Заказы ─────────────────────────────────────────────────────────
+
+enum OrderType {
+  DELIVERY
+  PICKUP
+}
+
+enum OrderStatus {
+  NEW
+  ACCEPTED
+  COOKING
+  READY
+  ON_WAY
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD_ON_DELIVERY
+  KASPI_ONLINE
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  NOT_REQUIRED // оплата при получении
+}
+
+model Order {
+  id            String        @id @default(cuid())
+  tenantId      String
+  tenant        Tenant        @relation(fields: [tenantId], references: [id])
+  venueId       String
+  venue         Venue         @relation(fields: [venueId], references: [id])
+  customerId    String?
+  customer      Customer?     @relation(fields: [customerId], references: [id])
+  number        Int // человекочитаемый номер, сквозной по тенанту
+  type          OrderType
+  status        OrderStatus   @default(NEW)
+  // { street, house, flat, entrance, floor, comment, lat, lng }
+  address       Json?
+  scheduledAt   DateTime? // предзаказ; null = как можно скорее
+  comment       String        @default("")
+  subtotal      Int // ₸ до скидок
+  deliveryFee   Int           @default(0)
+  discount      Int           @default(0) // промокод + списанные баллы
+  pointsSpent   Int           @default(0)
+  pointsEarned  Int           @default(0)
+  total         Int
+  paymentMethod PaymentMethod
+  paymentStatus PaymentStatus @default(NOT_REQUIRED)
+  promoCode     String?
+  cancelReason  String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  items      OrderItem[]
+  dispatches OrderDispatch[]
+
+  @@unique([tenantId, number])
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+}
+
+/// Отправка части заказа в конкретный отдел (аккаунт Poster).
+/// Заказ «пицца + роллы» породит две отправки — на два планшета.
+model OrderDispatch {
+  id              String        @id @default(cuid())
+  orderId         String
+  order           Order         @relation(fields: [orderId], references: [id])
+  posterAccountId String
+  posterAccount   PosterAccount @relation(fields: [posterAccountId], references: [id])
+  posterOrderId   String? // incoming_order_id в этом аккаунте Poster
+  status          String        @default("PENDING") // PENDING | SENT | FAILED
+  // статус на планшете: NEW | ACCEPTED | REJECTED (поллинг Poster)
+  posterStatus    String?
+  error           String?
+  createdAt       DateTime      @default(now())
+
+  @@unique([orderId, posterAccountId])
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id])
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+  // снапшоты на момент заказа — меню меняется, чек неизменен
+  name      String
+  price     Int
+  qty       Int
+  // выбранные модификаторы: [{name, price}]
+  modifiers Json     @default("[]")
+  // подарок по акции: клиент не платит, в Poster уходит полной ценой,
+  // компенсируется «Личной интеграцией»
+  isGift    Boolean  @default(false)
+
+  @@index([orderId])
+}
+
+// ─── Лояльность и промо ─────────────────────────────────────────────
+
+enum LoyaltyTxnType {
+  EARN
+  SPEND
+  ADJUST // ручная корректировка / миграционный импорт
+}
+
+model LoyaltyTransaction {
+  id         String         @id @default(cuid())
+  tenantId   String
+  tenant     Tenant         @relation(fields: [tenantId], references: [id])
+  customerId String
+  customer   Customer       @relation(fields: [customerId], references: [id])
+  orderId    String?
+  type       LoyaltyTxnType
+  amount     Int // ₸/баллы, знак по типу
+  comment    String         @default("")
+  createdAt  DateTime       @default(now())
+
+  @@index([tenantId, customerId])
+}
+
+/// Акция уровня приложения. Первый поддержанный тип — «N товаров из
+/// категории → товар в подарок» (2+1). Скидка при отправке в Poster
+/// уходит «Личной интеграцией» (payment.sum), позиции — полными ценами.
+model Promotion {
+  id                  String    @id @default(cuid())
+  tenantId            String
+  name                String // «2+1 Пицца»
+  code                String? // промокод; null = применяется автоматически
+  isActive            Boolean   @default(true)
+  conditionCategoryId String // витринная категория условия (AppCategory)
+  conditionQty        Int       @default(2) // сколько штук нужно
+  giftProductId       String // подарочный товар (Product)
+  giftQty             Int       @default(1)
+  repeatPerCart       Boolean   @default(true) // «много раз в рамках чека»
+  activeFrom          DateTime?
+  activeTo            DateTime?
+
+  @@index([tenantId])
+}
+
+enum PromoType {
+  FIXED // −N ₸
+  PERCENT // −N %
+  GIFT // подарочная позиция (2+1 и т.п.)
+}
+
+model PromoCode {
+  id         String    @id @default(cuid())
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id])
+  code       String
+  type       PromoType
+  value      Int // ₸ | % | productId-ссылка в config
+  // условия: { minOrder, giftProductId, requiredQty, ... }
+  config     Json      @default("{}")
+  activeFrom DateTime?
+  activeTo   DateTime?
+  usageLimit Int? // на клиента
+  isActive   Boolean   @default(true)
+
+  @@unique([tenantId, code])
+}
