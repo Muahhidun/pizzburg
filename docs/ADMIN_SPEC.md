@@ -104,7 +104,8 @@ POST   /admin/poster-accounts            — {name, token, sortOrder}
   (displayName, priceOverride и т.д.).
 
 > Детальный разбор их админки по разделам с приоритетами —
-> `SMARTPICASSO_AUDIT.md`. Таблица ниже — верхнеуровневая карта.
+> `SMARTPICASSO_AUDIT.md`. Фактический паритет на текущую дату —
+> `FEATURE_PARITY.md`. Таблица ниже — верхнеуровневая карта.
 
 ## Полная карта разделов (паритет с FoodPicasso и дальше)
 

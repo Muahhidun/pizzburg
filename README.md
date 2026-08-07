@@ -15,6 +15,10 @@
 - [docs/ADMIN_SPEC.md](docs/ADMIN_SPEC.md) — ТЗ на админку.
 - [docs/SMARTPICASSO_AUDIT.md](docs/SMARTPICASSO_AUDIT.md) — разбор
   админки конкурента: что забрать, с каким приоритетом, что не нужно.
+- [docs/FEATURE_PARITY.md](docs/FEATURE_PARITY.md) — актуальное «готово /
+  частично / нужно / не берём» по всем функциям SmartPicasso.
+- [docs/DEPLOY_STAGING.md](docs/DEPLOY_STAGING.md) — пошаговая настройка
+  Cloudflare R2 и Railway staging.
 - [docs/HANDOFF.md](docs/HANDOFF.md) — пакет передачи проекта.
 
 ## Запуск
