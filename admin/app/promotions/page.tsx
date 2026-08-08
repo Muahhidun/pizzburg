@@ -145,6 +145,11 @@ function PromoForm({
     giftProductId.length > 0 &&
     quantitiesValid;
 
+  function selectGift(productId: string) {
+    setGiftProductId(productId);
+    setSearch('');
+  }
+
   async function save() {
     if (!formValid) return;
     setBusy(true);
@@ -215,7 +220,7 @@ function PromoForm({
           </label>
         </div>
 
-        <label className="mb-3 block">
+        <div className="mb-3 block">
           <span className="mb-1 block text-sm font-medium">Подарок</span>
           {gift ? (
             <div className="flex items-center gap-2 rounded-xl border border-black/10 px-3 py-2 dark:border-white/15">
@@ -223,6 +228,7 @@ function PromoForm({
                 {gift.displayName ?? gift.name}
               </span>
               <button
+                type="button"
                 onClick={() => {
                   setGiftProductId('');
                   setSearch('');
@@ -237,16 +243,31 @@ function PromoForm({
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && found.length > 0) {
+                    e.preventDefault();
+                    selectGift(found[0].id);
+                  }
+                }}
                 maxLength={120}
                 placeholder="Начните вводить название товара"
+                role="combobox"
+                aria-expanded={found.length > 0}
+                aria-controls="promotion-gift-options"
                 className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
               />
               {found.length > 0 && (
-                <ul className="mt-1 overflow-hidden rounded-xl border border-black/10 dark:border-white/15">
+                <ul
+                  id="promotion-gift-options"
+                  role="listbox"
+                  className="mt-1 overflow-hidden rounded-xl border border-black/10 dark:border-white/15"
+                >
                   {found.map((p) => (
-                    <li key={p.id}>
+                    <li key={p.id} role="option" aria-selected={false}>
                       <button
-                        onClick={() => setGiftProductId(p.id)}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => selectGift(p.id)}
                         className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-black/5 dark:hover:bg-white/10"
                       >
                         <span className="truncate">{p.displayName ?? p.name}</span>
@@ -260,7 +281,7 @@ function PromoForm({
               )}
             </>
           )}
-        </label>
+        </div>
 
         <div className="mb-3 grid grid-cols-2 gap-2">
           <label>
