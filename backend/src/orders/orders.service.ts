@@ -9,6 +9,8 @@ import { PosterClient } from '../poster/poster.client';
 import { PromotionsService } from '../promotions/promotions.service';
 import { CreateOrderDto } from './orders.dto';
 import { normalizeKzPhone } from '../common/phone';
+import { LoyaltyService } from '../loyalty/loyalty.service';
+import { OrderStatus } from '@prisma/client';
 
 interface DeliverySettings {
   minOrder: number;
@@ -37,9 +39,14 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly poster: PosterClient,
     private readonly promotions: PromotionsService,
+    private readonly loyalty: LoyaltyService,
   ) {}
 
-  async createOrder(tenantSlug: string, dto: CreateOrderDto) {
+  async createOrder(
+    tenantSlug: string,
+    dto: CreateOrderDto,
+    authCustomer?: { sub: string; tenantId: string; phone: string },
+  ) {
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: tenantSlug },
       include: { venues: { where: { isActive: true }, take: 1 } },
@@ -104,7 +111,7 @@ export class OrdersService {
       deliveryFee = subtotal >= delivery.freeFrom ? 0 : delivery.fee;
     }
 
-    const total = subtotal + deliveryFee;
+    const grossTotal = subtotal + deliveryFee;
 
     // Акции: подарки клиент не оплачивает; в Poster они уйдут полной
     // ценой и компенсируются «Личной интеграцией»
@@ -125,17 +132,51 @@ export class OrdersService {
     // Формат единый с OTP, иначе один человек создаёт несколько профилей,
     // а Poster может отклонить заказ из-за невалидного номера.
     const normalizedPhone = normalizeKzPhone(dto.phone);
-    const customer = await this.prisma.customer.upsert({
-      where: {
-        tenantId_phone: { tenantId: tenant.id, phone: normalizedPhone },
-      },
-      create: {
-        tenantId: tenant.id,
-        phone: normalizedPhone,
-        name: dto.name,
-      },
-      update: dto.name ? { name: dto.name } : {},
-    });
+    const requestedPoints = dto.pointsToSpend ?? 0;
+    if (
+      requestedPoints > 0 &&
+      (!authCustomer ||
+        authCustomer.tenantId !== tenant.id ||
+        authCustomer.phone !== normalizedPhone)
+    ) {
+      throw new BadRequestException(
+        'Чтобы использовать баллы, войдите по номеру из заказа',
+      );
+    }
+    let customer = authCustomer
+      ? await this.prisma.customer.findFirst({
+          where: {
+            id: authCustomer.sub,
+            tenantId: tenant.id,
+            phone: normalizedPhone,
+          },
+        })
+      : await this.prisma.customer.upsert({
+          where: {
+            tenantId_phone: { tenantId: tenant.id, phone: normalizedPhone },
+          },
+          create: {
+            tenantId: tenant.id,
+            phone: normalizedPhone,
+            name: dto.name,
+          },
+          update: dto.name ? { name: dto.name } : {},
+        });
+    if (!customer) {
+      throw new BadRequestException('Номер заказа не совпадает с профилем');
+    }
+    if (authCustomer && dto.name && customer.name !== dto.name) {
+      customer = await this.prisma.customer.update({
+        where: { id: customer.id },
+        data: { name: dto.name },
+      });
+    }
+    const pointsSpent = this.loyalty.validateSpend(
+      customer.pointsBalance,
+      subtotal,
+      requestedPoints,
+    );
+    const total = grossTotal - pointsSpent;
 
     // Заказ + позиции + отправки в транзакции
     const order = await this.prisma.$transaction(async (tx) => {
@@ -155,7 +196,8 @@ export class OrdersService {
           comment: dto.comment ?? '',
           subtotal,
           deliveryFee,
-          discount: promo.discount,
+          discount: promo.discount + pointsSpent,
+          pointsSpent,
           total,
           promoCode: dto.promoCode,
           paymentMethod: dto.paymentMethod,
@@ -191,6 +233,14 @@ export class OrdersService {
         include: { items: true },
       });
 
+      await this.loyalty.spendForOrder(tx, {
+        tenantId: tenant.id,
+        customerId: customer.id,
+        orderId: created.id,
+        orderNumber: created.number,
+        amount: pointsSpent,
+      });
+
       // Расщепление по отделам (включая отделы подарочных позиций)
       const accountIds = [
         ...new Set([
@@ -219,6 +269,7 @@ export class OrdersService {
       subtotal,
       deliveryFee,
       total,
+      pointsSpent,
       dispatches: fresh.dispatches.map((d) => ({
         department: d.posterAccount.name,
         status: d.status,
@@ -232,12 +283,35 @@ export class OrdersService {
       where: { id: orderId },
       include: {
         items: { include: { product: true } },
-        dispatches: { include: { posterAccount: true } },
+        dispatches: {
+          include: { posterAccount: true },
+          orderBy: { posterAccount: { sortOrder: 'asc' } },
+        },
         customer: true,
       },
     });
 
     const parts = order.dispatches;
+    let remainingPoints = order.pointsSpent;
+    const pointsByDispatch = new Map<string, number>();
+    for (const part of parts) {
+      const payableInPart = order.items
+        .filter(
+          (it) =>
+            !it.isGift && it.product?.posterAccountId === part.posterAccountId,
+        )
+        .reduce((sum, it) => {
+          const modifierTotal = ((it.modifiers as any[]) ?? []).reduce(
+            (modifierSum, modifier) =>
+              modifierSum + Number(modifier.price ?? 0) * Number(modifier.qty ?? 1),
+            0,
+          );
+          return sum + (it.price + modifierTotal) * it.qty;
+        }, 0);
+      const allocated = Math.min(remainingPoints, payableInPart);
+      pointsByDispatch.set(part.id, allocated);
+      remainingPoints -= allocated;
+    }
     for (let i = 0; i < parts.length; i++) {
       const d = parts[i];
       if (d.status === 'SENT') continue;
@@ -258,15 +332,20 @@ export class OrdersService {
         KASPI_ONLINE: 'ОПЛАЧЕНО ОНЛАЙН (Kaspi)',
       }[order.paymentMethod];
 
-      // «Личная интеграция» этой части: подарки по акциям этого отдела
-      // (позже сюда добавятся баллы и онлайн-оплата)
-      const integrationSum = items
+      // «Личная интеграция» этой части: подарки + списанные баллы.
+      const giftIntegrationSum = items
         .filter((it) => it.isGift)
         .reduce((s, it) => s + it.price * it.qty, 0);
+      const pointsIntegrationSum = pointsByDispatch.get(d.id) ?? 0;
+      const integrationSum = giftIntegrationSum + pointsIntegrationSum;
       const giftNote = items
         .filter((it) => it.isGift)
         .map((it) => ` | ПОДАРОК ПО АКЦИИ: ${it.name} ×${it.qty} (оплачен интеграцией)`)
         .join('');
+      const pointsNote =
+        pointsIntegrationSum > 0
+          ? ` | БАЛЛЫ ПРИЛОЖЕНИЯ: ${pointsIntegrationSum} ₸ (оплачено интеграцией)`
+          : '';
 
       const addr = order.address as any;
 
@@ -294,6 +373,7 @@ export class OrdersService {
               `Заказ из приложения №${order.number}. ${payNote}.` +
               (order.comment ? ` ${order.comment}` : '') +
               giftNote +
+              pointsNote +
               partNote,
             client_address:
               order.type === 'DELIVERY' && addr
@@ -396,13 +476,7 @@ export class OrdersService {
     } else if (main?.posterStatus === 'ACCEPTED' && order.status === 'NEW') {
       orderStatus = 'ACCEPTED';
     }
-    if (orderStatus !== order.status) {
-      await this.prisma.order.update({
-        where: { id: orderId },
-        data: { status: orderStatus as any },
-      });
-      // TODO: здесь будет пуш клиенту (FCM) при смене статуса
-    }
+    if (orderStatus !== order.status) await this.setStatus(orderId, orderStatus as OrderStatus);
 
     return {
       orderId,
@@ -413,6 +487,41 @@ export class OrdersService {
         posterStatus: d.posterStatus,
       })),
     };
+  }
+
+  /** Ручное продвижение статуса; DELIVERED начисляет кэшбэк, CANCELLED возвращает списание. */
+  async setStatus(orderId: string, next: OrderStatus, tenantId?: string) {
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, ...(tenantId ? { tenantId } : {}) },
+    });
+    if (!order) throw new NotFoundException('Заказ не найден');
+    if (order.status === next) {
+      // Повторный запрос безопасно завершает начисление/возврат после временного
+      // сбоя между сохранением статуса и записью операции лояльности.
+      await this.loyalty.onStatusChanged(order.id, next);
+      return this.prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    }
+    const allowed: Record<OrderStatus, OrderStatus[]> = {
+      NEW: ['ACCEPTED', 'CANCELLED'],
+      ACCEPTED: ['COOKING', 'READY', 'ON_WAY', 'DELIVERED', 'CANCELLED'],
+      COOKING: ['READY', 'ON_WAY', 'DELIVERED', 'CANCELLED'],
+      READY: ['ON_WAY', 'DELIVERED', 'CANCELLED'],
+      ON_WAY: ['DELIVERED', 'CANCELLED'],
+      DELIVERED: [],
+      CANCELLED: [],
+    };
+    if (!allowed[order.status].includes(next)) {
+      throw new BadRequestException(
+        `Нельзя изменить статус ${order.status} на ${next}`,
+      );
+    }
+    const updated = await this.prisma.order.update({
+      where: { id: order.id },
+      data: { status: next },
+    });
+    await this.loyalty.onStatusChanged(order.id, next);
+    // TODO: здесь будет пуш клиенту (FCM) при смене статуса
+    return this.prisma.order.findUniqueOrThrow({ where: { id: updated.id } });
   }
 
   async getOrder(orderId: string) {

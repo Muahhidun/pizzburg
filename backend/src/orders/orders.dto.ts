@@ -137,6 +137,13 @@ export class CreateOrderDto {
   @Matches(/^[a-zA-Z0-9_-]+$/, { message: 'Проверьте промокод' })
   promoCode?: string;
 
+  /** Баллы собственного приложения; доступны только авторизованному клиенту. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(10_000_000)
+  pointsToSpend?: number;
+
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(100)

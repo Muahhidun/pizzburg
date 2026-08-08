@@ -36,8 +36,9 @@ class _CartScreenState extends State<CartScreen> {
     }
     setState(() => _loading = true);
     try {
-      final preview =
-          await context.read<ApiClient>().previewCart(cart.toApiItems());
+      final preview = await context.read<ApiClient>().previewCart(
+        cart.toApiItems(),
+      );
       if (mounted) {
         setState(() {
           _preview = preview;
@@ -61,8 +62,10 @@ class _CartScreenState extends State<CartScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Корзина',
-            style: TextStyle(fontWeight: FontWeight.w800)),
+        title: const Text(
+          'Корзина',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
         backgroundColor: Colors.white,
         actions: [
           if (!cart.isEmpty)
@@ -77,16 +80,17 @@ class _CartScreenState extends State<CartScreen> {
       ),
       body: cart.isEmpty
           ? const Center(
-              child: Text('Корзина пуста',
-                  style: TextStyle(fontSize: 16, color: Colors.black54)),
+              child: Text(
+                'Корзина пуста',
+                style: TextStyle(fontSize: 16, color: Colors.black54),
+              ),
             )
           : ListView(
               padding: const EdgeInsets.all(12),
               children: [
-                ...cart.lines.map((line) => _CartLineTile(
-                      line: line,
-                      onChanged: _refresh,
-                    )),
+                ...cart.lines.map(
+                  (line) => _CartLineTile(line: line, onChanged: _refresh),
+                ),
                 if (_preview != null && _preview!.gifts.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   ..._preview!.gifts.map((g) => _GiftTile(gift: g)),
@@ -111,7 +115,8 @@ class _CartScreenState extends State<CartScreen> {
                     style: FilledButton.styleFrom(
                       backgroundColor: Colors.black,
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16)),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                     ),
                     onPressed: () => Navigator.push(
                       context,
@@ -122,7 +127,9 @@ class _CartScreenState extends State<CartScreen> {
                     child: Text(
                       'Оформить · ${formatTenge(_preview!.subtotal)}',
                       style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w700),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),
@@ -155,21 +162,29 @@ class _CartLineTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(line.product.name,
-                    style: const TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w600)),
+                Text(
+                  line.product.name,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 if (line.modifiers.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
                       line.modifiers.map((m) => m.name).join(' · '),
                       style: const TextStyle(
-                          fontSize: 13, color: Colors.black54),
+                        fontSize: 13,
+                        color: Colors.black54,
+                      ),
                     ),
                   ),
                 const SizedBox(height: 4),
-                Text(formatTenge(line.total),
-                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                Text(
+                  formatTenge(line.total),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
               ],
             ),
           ),
@@ -195,8 +210,11 @@ class _QtyStepper extends StatelessWidget {
   final VoidCallback onMinus;
   final VoidCallback onPlus;
 
-  const _QtyStepper(
-      {required this.qty, required this.onMinus, required this.onPlus});
+  const _QtyStepper({
+    required this.qty,
+    required this.onMinus,
+    required this.onPlus,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -212,8 +230,10 @@ class _QtyStepper extends StatelessWidget {
             icon: const Icon(Icons.remove, size: 18),
             visualDensity: VisualDensity.compact,
           ),
-          Text('$qty',
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+          Text(
+            '$qty',
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+          ),
           IconButton(
             onPressed: onPlus,
             icon: const Icon(Icons.add, size: 18),
@@ -248,21 +268,33 @@ class _GiftTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('${gift.name} × ${gift.qty}',
-                    style: const TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w600)),
-                Text('Подарок · ${gift.promotion}',
-                    style: const TextStyle(
-                        fontSize: 13, color: Color(0xFF2E7D32))),
+                Text(
+                  '${gift.name} × ${gift.qty}',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  'Подарок · ${gift.promotion}',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF2E7D32),
+                  ),
+                ),
               ],
             ),
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              const Text('0 ₸',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w700, color: Color(0xFF2E7D32))),
+              const Text(
+                '0 ₸',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF2E7D32),
+                ),
+              ),
               Text(
                 formatTenge(gift.fullPrice * gift.qty),
                 style: const TextStyle(
@@ -295,8 +327,11 @@ class _Totals extends StatelessWidget {
         children: [
           _row('Товары', formatTenge(preview.subtotal)),
           if (preview.promoDiscount > 0)
-            _row('Выгода по акции', formatTenge(preview.promoDiscount),
-                color: const Color(0xFF2E7D32)),
+            _row(
+              'Выгода по акции',
+              formatTenge(preview.promoDiscount),
+              color: const Color(0xFF2E7D32),
+            ),
           if (!preview.deliveryAvailable)
             Padding(
               padding: const EdgeInsets.only(top: 8),
@@ -315,15 +350,19 @@ class _Totals extends StatelessWidget {
   }
 
   Widget _row(String label, String value, {Color? color}) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label, style: TextStyle(color: color ?? Colors.black54)),
-            Text(value,
-                style: TextStyle(
-                    fontWeight: FontWeight.w600, color: color ?? Colors.black)),
-          ],
+    padding: const EdgeInsets.symmetric(vertical: 3),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: TextStyle(color: color ?? Colors.black54)),
+        Text(
+          value,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: color ?? Colors.black,
+          ),
         ),
-      );
+      ],
+    ),
+  );
 }

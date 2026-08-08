@@ -3,19 +3,27 @@ import 'package:provider/provider.dart';
 import 'api/api_client.dart';
 import 'state/cart.dart';
 import 'screens/menu_screen.dart';
+import 'state/auth.dart';
 
-void main() {
-  runApp(const PizzBurgApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final api = ApiClient();
+  final auth = AuthState(api);
+  await auth.restore();
+  runApp(PizzBurgApp(api: api, auth: auth));
 }
 
 class PizzBurgApp extends StatelessWidget {
-  const PizzBurgApp({super.key});
+  final ApiClient api;
+  final AuthState auth;
+  const PizzBurgApp({super.key, required this.api, required this.auth});
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        Provider(create: (_) => ApiClient()),
+        Provider.value(value: api),
+        ChangeNotifierProvider.value(value: auth),
         ChangeNotifierProvider(create: (_) => Cart()),
       ],
       child: MaterialApp(

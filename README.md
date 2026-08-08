@@ -19,6 +19,8 @@
   частично / нужно / не берём» по всем функциям SmartPicasso.
 - [docs/DEPLOY_STAGING.md](docs/DEPLOY_STAGING.md) — пошаговая настройка
   Cloudflare R2 и Railway staging.
+- [docs/LOYALTY.md](docs/LOYALTY.md) — правила собственного кэшбэка,
+  staging-проверка и импорт старых балансов.
 - [docs/HANDOFF.md](docs/HANDOFF.md) — пакет передачи проекта.
 
 ## Запуск

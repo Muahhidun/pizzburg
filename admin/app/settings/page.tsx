@@ -8,6 +8,7 @@ export default function SettingsPage() {
   const [minOrder, setMinOrder] = useState('');
   const [fee, setFee] = useState('');
   const [freeFrom, setFreeFrom] = useState('');
+  const [cashbackPct, setCashbackPct] = useState('3');
   const [saved, setSaved] = useState(false);
   const [adding, setAdding] = useState(false);
 
@@ -17,6 +18,7 @@ export default function SettingsPage() {
     setMinOrder(String(d.settings.delivery?.minOrder ?? 0));
     setFee(String(d.settings.delivery?.fee ?? 0));
     setFreeFrom(String(d.settings.delivery?.freeFrom ?? 0));
+    setCashbackPct(String(d.settings.loyalty?.cashbackPct ?? 3));
   }, []);
 
   useEffect(() => {
@@ -38,6 +40,15 @@ export default function SettingsPage() {
       fee: Number(fee),
       freeFrom: Number(freeFrom),
     });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  const loyaltyValid = /^\d+$/.test(cashbackPct) && Number(cashbackPct) <= 100;
+
+  async function saveLoyalty() {
+    if (!loyaltyValid) return;
+    await api.patch('/admin/settings', { cashbackPct: Number(cashbackPct) });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -111,6 +122,38 @@ export default function SettingsPage() {
           Сейчас: заказ от {formatTenge(Number(minOrder))}, доставка{' '}
           {formatTenge(Number(fee))}, бесплатно от {formatTenge(Number(freeFrom))}
         </p>
+      </section>
+
+      <section className="rounded-2xl bg-white p-5 shadow-sm dark:bg-neutral-900">
+        <h2 className="mb-1 font-semibold">Кэшбэк приложения</h2>
+        <p className="mb-4 text-sm text-neutral-500">
+          Начисляется после статуса «Доставлен». Бонусы Poster, включая их 7%,
+          здесь не используются.
+        </p>
+        <div className="flex max-w-sm items-end gap-3">
+          <label className="flex-1">
+            <span className="mb-1 block text-sm font-medium">Кэшбэк, %</span>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={1}
+              value={cashbackPct}
+              onChange={(e) => setCashbackPct(e.target.value)}
+              className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
+            />
+          </label>
+          <button
+            onClick={saveLoyalty}
+            disabled={!loyaltyValid}
+            className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-40 dark:bg-white dark:text-black"
+          >
+            Сохранить
+          </button>
+        </div>
+        {!loyaltyValid && (
+          <p className="mt-2 text-sm text-red-600">Укажите целое число от 0 до 100.</p>
+        )}
       </section>
 
       <section className="rounded-2xl bg-white p-5 shadow-sm dark:bg-neutral-900">

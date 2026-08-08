@@ -3,9 +3,12 @@ import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { CustomerAuthGuard } from './customer-auth.guard';
+import { OptionalCustomerAuthGuard } from './optional-customer-auth.guard';
+import { LoyaltyModule } from '../loyalty/loyalty.module';
 
 @Module({
   imports: [
+    LoyaltyModule,
     JwtModule.register({
       global: true,
       secret: process.env.JWT_SECRET ?? 'dev-secret-change-in-prod',
@@ -13,7 +16,7 @@ import { CustomerAuthGuard } from './customer-auth.guard';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, CustomerAuthGuard],
-  exports: [AuthService, CustomerAuthGuard],
+  providers: [AuthService, CustomerAuthGuard, OptionalCustomerAuthGuard],
+  exports: [AuthService, CustomerAuthGuard, OptionalCustomerAuthGuard],
 })
 export class AuthModule {}

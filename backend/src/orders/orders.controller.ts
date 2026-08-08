@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { OptionalCustomerAuthGuard } from '../auth/optional-customer-auth.guard';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './orders.dto';
 
@@ -7,8 +8,13 @@ export class OrdersController {
   constructor(private readonly orders: OrdersService) {}
 
   @Post(':tenantSlug')
-  create(@Param('tenantSlug') tenantSlug: string, @Body() dto: CreateOrderDto) {
-    return this.orders.createOrder(tenantSlug, dto);
+  @UseGuards(OptionalCustomerAuthGuard)
+  create(
+    @Param('tenantSlug') tenantSlug: string,
+    @Body() dto: CreateOrderDto,
+    @Req() req: any,
+  ) {
+    return this.orders.createOrder(tenantSlug, dto, req.customer);
   }
 
   @Get('by-id/:orderId')

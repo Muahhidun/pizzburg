@@ -114,6 +114,8 @@ export interface AdminOrder {
   subtotal: number;
   deliveryFee: number;
   discount: number;
+  pointsSpent: number;
+  pointsEarned: number;
   total: number;
   items: {
     name: string;
@@ -148,7 +150,10 @@ export interface Promotion {
 
 export interface Settings {
   tenant: { id: string; slug: string; name: string };
-  settings: { delivery?: { minOrder: number; fee: number; freeFrom: number } };
+  settings: {
+    delivery?: { minOrder: number; fee: number; freeFrom: number };
+    loyalty?: { cashbackPct?: number };
+  };
   venues: { id: string; name: string; address: string }[];
   posterAccounts: { id: string; name: string; sortOrder: number; isActive: boolean }[];
 }

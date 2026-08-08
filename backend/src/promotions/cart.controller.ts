@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import { IsArray, IsInt, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
 import { PromotionsService } from './promotions.service';
+import { LoyaltyService } from '../loyalty/loyalty.service';
 
 class CartPreviewItemDto {
   @IsString()
@@ -35,6 +36,7 @@ export class CartController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly promotions: PromotionsService,
+    private readonly loyalty: LoyaltyService,
   ) {}
 
   @Post(':tenantSlug/preview')
@@ -88,6 +90,9 @@ export class CartController {
       subtotal,
       // клиент платит subtotal; скидка — справочно (уйдёт «Личной интеграцией»)
       promoDiscount: promo.discount,
+      loyalty: {
+        cashbackPct: this.loyalty.cashbackPct(tenant.settings),
+      },
       delivery: {
         minOrder: settings.minOrder ?? 0,
         fee: subtotal >= (settings.freeFrom ?? Infinity) ? 0 : (settings.fee ?? 0),

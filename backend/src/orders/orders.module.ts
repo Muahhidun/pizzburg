@@ -4,10 +4,13 @@ import { PromotionsModule } from '../promotions/promotions.module';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { StatusPollerService } from './status-poller.service';
+import { AuthModule } from '../auth/auth.module';
+import { LoyaltyModule } from '../loyalty/loyalty.module';
 
 @Module({
-  imports: [PosterModule, PromotionsModule],
+  imports: [PosterModule, PromotionsModule, AuthModule, LoyaltyModule],
   controllers: [OrdersController],
   providers: [OrdersService, StatusPollerService],
+  exports: [OrdersService],
 })
 export class OrdersModule {}

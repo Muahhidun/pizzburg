@@ -1,5 +1,6 @@
 import {
   IsBoolean,
+  IsEnum,
   IsInt,
   IsISO8601,
   IsOptional,
@@ -11,6 +12,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { OrderStatus } from '@prisma/client';
 
 export class UpdateCategoryDto {
   @IsOptional() @IsString() @Length(1, 80) name?: string;
@@ -63,6 +65,17 @@ export class UpdateSettingsDto {
   @IsOptional() @IsInt() @Min(0) @Max(100_000_000) minOrder?: number;
   @IsOptional() @IsInt() @Min(0) @Max(100_000_000) fee?: number;
   @IsOptional() @IsInt() @Min(0) @Max(100_000_000) freeFrom?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(100) cashbackPct?: number;
+}
+
+export class UpdateOrderStatusDto {
+  @IsEnum(OrderStatus)
+  status: OrderStatus;
+}
+
+export class AdjustLoyaltyDto {
+  @IsInt() @Min(-10_000_000) @Max(10_000_000) amount: number;
+  @IsString() @Length(3, 300) comment: string;
 }
 
 export class PosterAccountDto {

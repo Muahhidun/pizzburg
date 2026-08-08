@@ -13,6 +13,9 @@ import {
   UpdateProductDto,
   UpdateSettingsDto,
 } from './admin.dto';
+import { LoyaltyService } from '../loyalty/loyalty.service';
+import { OrdersService } from '../orders/orders.service';
+import { OrderStatus } from '@prisma/client';
 
 /**
  * Админка владельца. Правит ТОЛЬКО витринные поля — данные, приходящие
@@ -24,6 +27,8 @@ export class AdminService {
     private readonly prisma: PrismaService,
     private readonly poster: PosterClient,
     private readonly storage: ObjectStorageService,
+    private readonly loyalty: LoyaltyService,
+    private readonly orderService: OrdersService,
   ) {}
 
   private async tenant(slug = 'pizzburg') {
@@ -225,6 +230,8 @@ export class AdminService {
         subtotal: o.subtotal,
         deliveryFee: o.deliveryFee,
         discount: o.discount,
+        pointsSpent: o.pointsSpent,
+        pointsEarned: o.pointsEarned,
         total: o.total,
         items: o.items.map((i) => ({
           name: i.name,
@@ -397,6 +404,16 @@ export class AdminService {
     return customer;
   }
 
+  async adjustCustomerPoints(id: string, amount: number, comment: string) {
+    const tenant = await this.tenant();
+    return this.loyalty.adjust(id, amount, comment, tenant.id);
+  }
+
+  async updateOrderStatus(id: string, status: OrderStatus) {
+    const tenant = await this.tenant();
+    return this.orderService.setStatus(id, status, tenant.id);
+  }
+
   async promotions() {
     const tenant = await this.tenant();
     const promos = await this.prisma.promotion.findMany({
@@ -491,7 +508,12 @@ export class AdminService {
   async updateSettings(dto: UpdateSettingsDto) {
     const tenant = await this.tenant();
     const current = (tenant.settings as any) ?? {};
-    const delivery = { ...(current.delivery ?? {}), ...dto };
+    const { cashbackPct, ...deliveryPatch } = dto;
+    const delivery = { ...(current.delivery ?? {}), ...deliveryPatch };
+    const loyalty = {
+      ...(current.loyalty ?? {}),
+      ...(cashbackPct !== undefined ? { cashbackPct } : {}),
+    };
     if (
       delivery.freeFrom > 0 &&
       delivery.minOrder > 0 &&
@@ -503,7 +525,7 @@ export class AdminService {
     }
     return this.prisma.tenant.update({
       where: { id: tenant.id },
-      data: { settings: { ...current, delivery } },
+      data: { settings: { ...current, delivery, loyalty } },
       select: { settings: true },
     });
   }

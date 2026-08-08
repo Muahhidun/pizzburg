@@ -20,13 +20,13 @@ class CartLine {
   int get total => unitPrice * qty;
 
   Map<String, dynamic> toApiJson() => {
-        'productId': product.id,
-        'qty': qty,
-        if (modifiers.isNotEmpty)
-          'modifiers': modifiers
-              .map((m) => {'posterId': m.id, 'name': m.name, 'price': m.price})
-              .toList(),
-      };
+    'productId': product.id,
+    'qty': qty,
+    if (modifiers.isNotEmpty)
+      'modifiers': modifiers
+          .map((m) => {'posterId': m.id, 'name': m.name, 'price': m.price})
+          .toList(),
+  };
 }
 
 class Cart extends ChangeNotifier {

@@ -280,8 +280,9 @@ model Order {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  items      OrderItem[]
-  dispatches OrderDispatch[]
+  items       OrderItem[]
+  dispatches  OrderDispatch[]
+  loyaltyTxns LoyaltyTransaction[]
 
   @@unique([tenantId, number])
   @@index([tenantId, status])
@@ -340,12 +341,14 @@ model LoyaltyTransaction {
   customerId String
   customer   Customer       @relation(fields: [customerId], references: [id])
   orderId    String?
+  order      Order?         @relation(fields: [orderId], references: [id])
   type       LoyaltyTxnType
   amount     Int // ₸/баллы, знак по типу
   comment    String         @default("")
   createdAt  DateTime       @default(now())
 
   @@index([tenantId, customerId])
+  @@index([orderId, type])
 }
 
 /// Акция уровня приложения. Первый поддержанный тип — «N товаров из

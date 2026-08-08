@@ -21,6 +21,8 @@ import {
   UpdateCategoryDto,
   UpdateProductDto,
   UpdateSettingsDto,
+  UpdateOrderStatusDto,
+  AdjustLoyaltyDto,
 } from './admin.dto';
 
 @Controller('admin')
@@ -85,9 +87,25 @@ export class AdminController {
     return this.admin.customerDetails(id);
   }
 
+  @Post('customers/:id/loyalty-adjust')
+  adjustCustomerPoints(
+    @Param('id') id: string,
+    @Body() dto: AdjustLoyaltyDto,
+  ) {
+    return this.admin.adjustCustomerPoints(id, dto.amount, dto.comment);
+  }
+
   @Get('orders')
   orders(@Query('date') date?: string, @Query('status') status?: string) {
     return this.admin.orders({ date, status });
+  }
+
+  @Patch('orders/:id/status')
+  updateOrderStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateOrderStatusDto,
+  ) {
+    return this.admin.updateOrderStatus(id, dto.status);
   }
 
   @Get('promotions')

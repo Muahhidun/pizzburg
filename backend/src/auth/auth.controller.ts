@@ -11,6 +11,7 @@ import { IsString, Matches, MaxLength } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from './auth.service';
 import { CustomerAuthGuard } from './customer-auth.guard';
+import { LoyaltyService } from '../loyalty/loyalty.service';
 
 class RequestOtpDto {
   @IsString()
@@ -35,6 +36,7 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly prisma: PrismaService,
+    private readonly loyalty: LoyaltyService,
   ) {}
 
   @Post(':tenantSlug/request-otp')
@@ -61,20 +63,43 @@ export class AuthController {
         loyaltyLevel: true,
       },
     });
-    const orders = await this.prisma.order.findMany({
-      where: { customerId: req.customer.sub },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-      select: {
-        id: true,
-        number: true,
-        type: true,
-        status: true,
-        total: true,
-        createdAt: true,
-        items: { select: { name: true, qty: true, price: true, isGift: true } },
+    const [orders, loyaltyTransactions, tenant] = await Promise.all([
+      this.prisma.order.findMany({
+        where: { customerId: req.customer.sub },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: {
+          id: true,
+          number: true,
+          type: true,
+          status: true,
+          total: true,
+          pointsSpent: true,
+          pointsEarned: true,
+          createdAt: true,
+          items: { select: { name: true, qty: true, price: true, isGift: true } },
+        },
+      }),
+      this.prisma.loyaltyTransaction.findMany({
+        where: { customerId: req.customer.sub },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+      this.prisma.tenant.findUnique({
+        where: { id: req.customer.tenantId },
+        select: { settings: true },
+      }),
+    ]);
+    return {
+      customer,
+      orders,
+      loyaltyTransactions,
+      loyalty: {
+        cashbackPct: this.loyalty.cashbackPct(
+          tenant?.settings ?? {},
+          customer?.loyaltyLevel ?? 1,
+        ),
       },
-    });
-    return { customer, orders };
+    };
   }
 }

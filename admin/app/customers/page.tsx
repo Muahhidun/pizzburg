@@ -114,6 +114,13 @@ interface CustomerDetails {
   name: string | null;
   phone: string;
   pointsBalance: number;
+  loyaltyTxns: {
+    id: string;
+    type: 'EARN' | 'SPEND' | 'ADJUST';
+    amount: number;
+    comment: string;
+    createdAt: string;
+  }[];
   orders: {
     id: string;
     number: number;
@@ -132,10 +139,43 @@ function CustomerCard({
   onClose: () => void;
 }) {
   const [details, setDetails] = useState<CustomerDetails | null>(null);
+  const [amount, setAmount] = useState('');
+  const [comment, setComment] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadDetails = useCallback(() => {
     api.get<CustomerDetails>(`/admin/customers/${customer.id}`).then(setDetails);
   }, [customer.id]);
+
+  useEffect(() => {
+    loadDetails();
+  }, [loadDetails]);
+
+  const adjustmentValid =
+    /^-?\d+$/.test(amount) &&
+    Number(amount) !== 0 &&
+    Math.abs(Number(amount)) <= 10_000_000 &&
+    comment.trim().length >= 3;
+
+  async function adjust() {
+    if (!adjustmentValid) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post(`/admin/customers/${customer.id}/loyalty-adjust`, {
+        amount: Number(amount),
+        comment: comment.trim(),
+      });
+      setAmount('');
+      setComment('');
+      loadDetails();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось изменить баланс');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div
@@ -152,8 +192,59 @@ function CustomerCard({
         <div className="my-4 grid grid-cols-3 gap-2 text-center">
           <Mini label="Заказов" value={String(customer.ordersCount)} />
           <Mini label="Потратил" value={formatTenge(customer.totalSpent)} />
-          <Mini label="Баллы" value={String(customer.pointsBalance)} />
+          <Mini label="Баллы" value={String(details?.pointsBalance ?? customer.pointsBalance)} />
         </div>
+
+        <div className="mb-4 rounded-xl bg-black/[.03] p-3 dark:bg-white/5">
+          <h3 className="mb-2 font-medium">Корректировка баланса</h3>
+          <div className="grid gap-2 sm:grid-cols-[120px_1fr]">
+            <input
+              type="number"
+              step={1}
+              min={-10000000}
+              max={10000000}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="+100 / −100"
+              className="rounded-lg border border-black/10 bg-transparent px-3 py-2 text-sm dark:border-white/15"
+            />
+            <input
+              value={comment}
+              maxLength={300}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="Причина корректировки"
+              className="rounded-lg border border-black/10 bg-transparent px-3 py-2 text-sm dark:border-white/15"
+            />
+          </div>
+          <button
+            onClick={adjust}
+            disabled={!adjustmentValid || busy}
+            className="mt-2 rounded-lg bg-black px-3 py-1.5 text-sm text-white disabled:opacity-40 dark:bg-white dark:text-black"
+          >
+            {busy ? 'Сохраняем…' : 'Применить'}
+          </button>
+          {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+        </div>
+
+        <h3 className="mb-2 font-medium">Журнал баллов</h3>
+        <ul className="mb-4 space-y-1.5">
+          {details?.loyaltyTxns.map((txn) => (
+            <li key={txn.id} className="flex items-start justify-between gap-3 rounded-lg bg-black/[.03] px-3 py-2 text-sm dark:bg-white/5">
+              <div>
+                <div>{txn.comment}</div>
+                <div className="text-xs text-neutral-500">
+                  {new Date(txn.createdAt).toLocaleString('ru-RU')}
+                </div>
+              </div>
+              <span className={txn.amount > 0 ? 'text-emerald-600' : 'text-red-600'}>
+                {txn.amount > 0 ? '+' : ''}{txn.amount}
+              </span>
+            </li>
+          ))}
+          {details?.loyaltyTxns.length === 0 && (
+            <li className="text-sm text-neutral-500">Операций ещё не было</li>
+          )}
+        </ul>
 
         <h3 className="mb-2 font-medium">История заказов</h3>
         {!details && <p className="text-sm text-neutral-500">Загрузка…</p>}

@@ -156,17 +156,23 @@ function OrderDetails({ order, onRefresh }: { order: AdminOrder; onRefresh: () =
                 <span>{formatTenge(order.deliveryFee)}</span>
               </div>
             )}
-            {order.discount > 0 && (
+            {order.discount - order.pointsSpent > 0 && (
               <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
                 <span>Выгода клиента по акции</span>
-                <span>{formatTenge(order.discount)}</span>
+                <span>{formatTenge(order.discount - order.pointsSpent)}</span>
+              </div>
+            )}
+            {order.pointsSpent > 0 && (
+              <div className="flex justify-between text-sky-600 dark:text-sky-400">
+                <span>Оплачено баллами</span>
+                <span>−{formatTenge(order.pointsSpent)}</span>
               </div>
             )}
             <div className="flex justify-between font-semibold text-black dark:text-white">
               <span>К оплате</span>
               <span>{formatTenge(order.total)}</span>
             </div>
-            {order.discount > 0 && (
+            {order.discount - order.pointsSpent > 0 && (
               <p className="pt-1 text-xs text-neutral-400">
                 Подарок уходит в кассу полной ценой и закрывается «Личной
                 интеграцией» — выручка смены сходится.
@@ -179,6 +185,9 @@ function OrderDetails({ order, onRefresh }: { order: AdminOrder; onRefresh: () =
           <h3 className="font-medium">Детали</h3>
           <p className="text-neutral-500">Оплата: {PAY_RU[order.paymentMethod]}</p>
           <p className="text-neutral-500">Статус: {STATUS_RU[order.status] ?? order.status}</p>
+          {order.pointsEarned > 0 && (
+            <p className="text-emerald-600">Начислено: {order.pointsEarned} баллов</p>
+          )}
           {order.scheduledAt && (
             <p className="text-neutral-500">
               Предзаказ на{' '}
@@ -215,8 +224,76 @@ function OrderDetails({ order, onRefresh }: { order: AdminOrder; onRefresh: () =
           >
             {busy ? 'Обновляем…' : '↻ Обновить статусы с планшетов'}
           </button>
+          <StatusActions order={order} onRefresh={onRefresh} />
         </div>
       </div>
+    </div>
+  );
+}
+
+const NEXT_STATUS: Record<string, { value: string; label: string }[]> = {
+  NEW: [
+    { value: 'ACCEPTED', label: 'Принять' },
+    { value: 'CANCELLED', label: 'Отменить' },
+  ],
+  ACCEPTED: [
+    { value: 'COOKING', label: 'Готовится' },
+    { value: 'READY', label: 'Готов' },
+    { value: 'ON_WAY', label: 'В пути' },
+    { value: 'DELIVERED', label: 'Доставлен' },
+    { value: 'CANCELLED', label: 'Отменить' },
+  ],
+  COOKING: [
+    { value: 'READY', label: 'Готов' },
+    { value: 'ON_WAY', label: 'В пути' },
+    { value: 'DELIVERED', label: 'Доставлен' },
+    { value: 'CANCELLED', label: 'Отменить' },
+  ],
+  READY: [
+    { value: 'ON_WAY', label: 'В пути' },
+    { value: 'DELIVERED', label: 'Выдан / доставлен' },
+    { value: 'CANCELLED', label: 'Отменить' },
+  ],
+  ON_WAY: [
+    { value: 'DELIVERED', label: 'Доставлен' },
+    { value: 'CANCELLED', label: 'Отменить' },
+  ],
+};
+
+function StatusActions({ order, onRefresh }: { order: AdminOrder; onRefresh: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const options = NEXT_STATUS[order.status] ?? [];
+  if (options.length === 0) return null;
+
+  async function update(status: string) {
+    if (status === 'CANCELLED' && !window.confirm(`Отменить заказ №${order.number}?`)) return;
+    setBusy(status);
+    try {
+      await api.patch(`/admin/orders/${order.id}/status`, { status });
+      onRefresh();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          onClick={() => update(option.value)}
+          disabled={busy !== null}
+          className={`rounded-lg px-3 py-1.5 text-xs disabled:opacity-50 ${
+            option.value === 'DELIVERED'
+              ? 'bg-emerald-600 text-white'
+              : option.value === 'CANCELLED'
+                ? 'border border-red-300 text-red-600'
+                : 'border border-black/10 dark:border-white/15'
+          }`}
+        >
+          {busy === option.value ? 'Сохраняем…' : option.label}
+        </button>
+      ))}
     </div>
   );
 }

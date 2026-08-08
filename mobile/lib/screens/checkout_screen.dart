@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
 import '../state/cart.dart';
 import '../utils/input_validation.dart';
 import 'order_screen.dart';
+import '../state/auth.dart';
 
 /// Оформление заказа: тип, контакты, адрес, способ оплаты.
 class CheckoutScreen extends StatefulWidget {
@@ -27,6 +29,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final _entrance = TextEditingController();
   final _floor = TextEditingController();
   final _comment = TextEditingController();
+  final _points = TextEditingController(text: '0');
   bool _sending = false;
   String? _error;
 
@@ -34,11 +37,45 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   void initState() {
     super.initState();
     if (!widget.preview.deliveryAvailable) _type = 'PICKUP';
+    WidgetsBinding.instance.addPostFrameCallback((_) => _prefillProfile());
+  }
+
+  void _prefillProfile() {
+    final auth = context.read<AuthState>();
+    if (!auth.isAuthenticated) return;
+    setState(() {
+      _phone.text = auth.phone;
+      if (_name.text.isEmpty && auth.name.isNotEmpty) _name.text = auth.name;
+    });
+  }
+
+  @override
+  void dispose() {
+    for (final controller in [
+      _name,
+      _phone,
+      _street,
+      _house,
+      _flat,
+      _entrance,
+      _floor,
+      _comment,
+      _points,
+    ]) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  int get _pointsToSpend {
+    if (!context.read<AuthState>().isAuthenticated) return 0;
+    return int.tryParse(_points.text) ?? 0;
   }
 
   int get _total =>
       widget.preview.subtotal +
-      (_type == 'DELIVERY' ? widget.preview.deliveryFee : 0);
+      (_type == 'DELIVERY' ? widget.preview.deliveryFee : 0) -
+      _pointsToSpend.clamp(0, widget.preview.subtotal);
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
@@ -54,6 +91,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         'phone': _phone.text.trim(),
         if (_name.text.trim().isNotEmpty) 'name': _name.text.trim(),
         'paymentMethod': _payment,
+        if (_pointsToSpend > 0) 'pointsToSpend': _pointsToSpend,
         if (_comment.text.trim().isNotEmpty) 'comment': _comment.text.trim(),
         if (_type == 'DELIVERY')
           'address': {
@@ -66,6 +104,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           },
         'items': cart.toApiItems(),
       });
+      if (!mounted) return;
+      final auth = context.read<AuthState>();
+      if (auth.isAuthenticated) await auth.refresh();
       if (!mounted) return;
       cart.clear();
       Navigator.pushAndRemoveUntil(
@@ -207,6 +248,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   ],
                 ),
               ),
+            _LoyaltySection(
+              controller: _points,
+              subtotal: widget.preview.subtotal,
+              cashbackPct: widget.preview.cashbackPct,
+              onChanged: () => setState(() {}),
+              onLoggedIn: _prefillProfile,
+            ),
             _Section(
               title: 'Оплата',
               child: Column(
@@ -298,6 +346,255 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       borderSide: BorderSide.none,
     ),
   );
+}
+
+class _LoyaltySection extends StatelessWidget {
+  final TextEditingController controller;
+  final int subtotal;
+  final int cashbackPct;
+  final VoidCallback onChanged;
+  final VoidCallback onLoggedIn;
+
+  const _LoyaltySection({
+    required this.controller,
+    required this.subtotal,
+    required this.cashbackPct,
+    required this.onChanged,
+    required this.onLoggedIn,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthState>();
+    if (!auth.isAuthenticated) {
+      return _Section(
+        title: 'Кэшбэк приложения',
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Войдите по телефону, чтобы копить и использовать баллы',
+                ),
+              ),
+              TextButton(
+                onPressed: () async {
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (_) => const LoyaltyLoginDialog(),
+                  );
+                  if (ok == true) onLoggedIn();
+                },
+                child: const Text('Войти'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final maxPoints = auth.pointsBalance < subtotal
+        ? auth.pointsBalance
+        : subtotal;
+    final spending = (int.tryParse(controller.text) ?? 0).clamp(0, maxPoints);
+    final earning = ((subtotal - spending) * cashbackPct / 100).floor();
+    return _Section(
+      title: 'Баллы',
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Доступно: ${auth.pointsBalance} баллов',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: controller,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: _pointsInput('Списать баллов'),
+                    onChanged: (_) => onChanged(),
+                    validator: (value) {
+                      final amount = int.tryParse(value ?? '') ?? 0;
+                      if (amount > maxPoints) return 'Максимум $maxPoints';
+                      return null;
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: maxPoints == 0
+                      ? null
+                      : () {
+                          controller.text = '$maxPoints';
+                          onChanged();
+                        },
+                  child: const Text('Использовать все'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              earning > 0
+                  ? 'После выполнения заказа начислим примерно $earning баллов ($cashbackPct%)'
+                  : 'Кэшбэк начисляется после выполнения заказа',
+              style: const TextStyle(fontSize: 12, color: Colors.black54),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static InputDecoration _pointsInput(String label) => InputDecoration(
+    labelText: label,
+    filled: true,
+    fillColor: const Color(0xFFF6F6F6),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide.none,
+    ),
+  );
+}
+
+class LoyaltyLoginDialog extends StatefulWidget {
+  const LoyaltyLoginDialog({super.key});
+
+  @override
+  State<LoyaltyLoginDialog> createState() => _LoyaltyLoginDialogState();
+}
+
+class _LoyaltyLoginDialogState extends State<LoyaltyLoginDialog> {
+  final _phone = TextEditingController(text: '+7 ');
+  final _code = TextEditingController();
+  bool _codeSent = false;
+  bool _busy = false;
+  String? _devCode;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final saved = context.read<AuthState>().phone;
+    if (saved.isNotEmpty) _phone.text = saved;
+  }
+
+  @override
+  void dispose() {
+    _phone.dispose();
+    _code.dispose();
+    super.dispose();
+  }
+
+  Future<void> _request() async {
+    final validation = validateKzPhone(_phone.text);
+    if (validation != null) {
+      setState(() => _error = validation);
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final result = await context.read<AuthState>().requestOtp(
+        _phone.text.trim(),
+      );
+      if (mounted) {
+        setState(() {
+          _codeSent = true;
+          _devCode = result['devCode']?.toString();
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _verify() async {
+    if (!RegExp(r'^\d{4}$').hasMatch(_code.text)) {
+      setState(() => _error = 'Введите код из 4 цифр');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await context.read<AuthState>().verifyOtp(_phone.text.trim(), _code.text);
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Вход в профиль'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _phone,
+            enabled: !_codeSent,
+            keyboardType: TextInputType.phone,
+            inputFormatters: [KzPhoneInputFormatter()],
+            decoration: const InputDecoration(labelText: 'Телефон'),
+          ),
+          if (_codeSent) ...[
+            const SizedBox(height: 10),
+            TextField(
+              controller: _code,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              maxLength: 4,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: InputDecoration(
+                labelText: 'Код из SMS',
+                helperText: _devCode == null ? null : 'Тестовый код: $_devCode',
+              ),
+            ),
+          ],
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(_error!, style: const TextStyle(color: Colors.red)),
+            ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context, false),
+          child: const Text('Отмена'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : (_codeSent ? _verify : _request),
+          child: Text(
+            _busy ? 'Подождите…' : (_codeSent ? 'Войти' : 'Получить код'),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _Section extends StatelessWidget {

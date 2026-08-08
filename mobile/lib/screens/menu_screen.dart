@@ -6,6 +6,9 @@ import '../state/cart.dart';
 import '../widgets/product_card.dart';
 import 'product_screen.dart';
 import 'cart_screen.dart';
+import '../state/auth.dart';
+import 'profile_screen.dart';
+import 'checkout_screen.dart';
 
 /// Каталог: липкая лента категорий + список товаров.
 ///
@@ -45,6 +48,7 @@ class _MenuScreenState extends State<MenuScreen> {
 
   final List<_Row> _rows = [];
   List<MenuCategory> _categories = [];
+
   /// categoryId → смещение заголовка от начала списка
   final Map<String, double> _offsets = {};
   String? _activeCategory;
@@ -73,10 +77,12 @@ class _MenuScreenState extends State<MenuScreen> {
       _rows.add(_HeaderRow(c.id, c.name));
       offset += _headerHeight;
       for (var i = 0; i < c.products.length; i += 2) {
-        _rows.add(_ProductsRow(
-          c.id,
-          c.products.sublist(i, (i + 2).clamp(0, c.products.length)),
-        ));
+        _rows.add(
+          _ProductsRow(
+            c.id,
+            c.products.sublist(i, (i + 2).clamp(0, c.products.length)),
+          ),
+        );
         offset += _productRowHeight;
       }
     }
@@ -103,10 +109,15 @@ class _MenuScreenState extends State<MenuScreen> {
   void _scrollChipsTo(String categoryId) {
     final index = _categories.indexWhere((c) => c.id == categoryId);
     if (index < 0 || !_chipsController.hasClients) return;
-    final target = (index * 110.0 - 60)
-        .clamp(0.0, _chipsController.position.maxScrollExtent);
-    _chipsController.animateTo(target,
-        duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+    final target = (index * 110.0 - 60).clamp(
+      0.0,
+      _chipsController.position.maxScrollExtent,
+    );
+    _chipsController.animateTo(
+      target,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
   }
 
   Future<void> _jumpToCategory(String categoryId) async {
@@ -140,7 +151,8 @@ class _MenuScreenState extends State<MenuScreen> {
               return _ErrorView(
                 message: snapshot.error.toString(),
                 onRetry: () => setState(
-                    () => _future = context.read<ApiClient>().fetchMenu()),
+                  () => _future = context.read<ApiClient>().fetchMenu(),
+                ),
               );
             }
 
@@ -171,7 +183,9 @@ class _MenuScreenState extends State<MenuScreen> {
                             child: Text(
                               row.title,
                               style: const TextStyle(
-                                  fontSize: 24, fontWeight: FontWeight.w800),
+                                fontSize: 24,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
                           ),
                         );
@@ -181,14 +195,17 @@ class _MenuScreenState extends State<MenuScreen> {
                         height: _productRowHeight,
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 4),
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
                           child: Row(
                             children: [
                               for (final p in products)
                                 Expanded(
                                   child: Padding(
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 4),
+                                      horizontal: 4,
+                                    ),
                                     child: ProductCard(
                                       product: p,
                                       onTap: () => Navigator.push(
@@ -226,14 +243,47 @@ class _TopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthState>();
     return Container(
       width: double.infinity,
       color: Colors.white,
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-      alignment: Alignment.center,
-      child: Text(
-        title,
-        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+      child: Row(
+        children: [
+          const SizedBox(width: 42),
+          Expanded(
+            child: Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+            ),
+          ),
+          IconButton(
+            tooltip: auth.isAuthenticated
+                ? '${auth.pointsBalance} баллов'
+                : 'Войти',
+            onPressed: () async {
+              if (!auth.isAuthenticated) {
+                final ok = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => const LoyaltyLoginDialog(),
+                );
+                if (ok != true || !context.mounted) return;
+              }
+              if (context.mounted) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                );
+              }
+            },
+            icon: Icon(
+              auth.isAuthenticated
+                  ? Icons.account_circle
+                  : Icons.person_outline,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -310,7 +360,8 @@ class _CartBar extends StatelessWidget {
             style: FilledButton.styleFrom(
               backgroundColor: Colors.black,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16)),
+                borderRadius: BorderRadius.circular(16),
+              ),
             ),
             onPressed: () => Navigator.push(
               context,
@@ -319,12 +370,20 @@ class _CartBar extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Корзина · ${cart.count}',
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w600)),
-                Text(formatTenge(cart.subtotal),
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w700)),
+                Text(
+                  'Корзина · ${cart.count}',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  formatTenge(cart.subtotal),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ],
             ),
           ),
@@ -347,12 +406,16 @@ class _ErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Не удалось загрузить меню',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            const Text(
+              'Не удалось загрузить меню',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 8),
-            Text(message,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.black54)),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.black54),
+            ),
             const SizedBox(height: 16),
             FilledButton(onPressed: onRetry, child: const Text('Повторить')),
           ],

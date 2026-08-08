@@ -9,18 +9,21 @@ import 'models.dart';
 /// Для запуска на реальном iPhone указывайте IP Mac в локальной сети:
 ///   --dart-define=API_URL=http://192.168.0.10:3210
 class ApiClient {
-  static const baseUrl =
-      String.fromEnvironment('API_URL', defaultValue: 'http://localhost:3210');
-  static const tenant =
-      String.fromEnvironment('TENANT', defaultValue: 'pizzburg');
+  static const baseUrl = String.fromEnvironment(
+    'API_URL',
+    defaultValue: 'http://localhost:3210',
+  );
+  static const tenant = String.fromEnvironment(
+    'TENANT',
+    defaultValue: 'pizzburg',
+  );
 
-  String? _token;
-  set token(String? value) => _token = value;
+  String? token;
 
   Map<String, String> get _headers => {
-        'Content-Type': 'application/json',
-        if (_token != null) 'Authorization': 'Bearer $_token',
-      };
+    'Content-Type': 'application/json',
+    if (token != null) 'Authorization': 'Bearer $token',
+  };
 
   Future<MenuResponse> fetchMenu() async {
     final res = await http.get(Uri.parse('$baseUrl/menu/$tenant'));
@@ -72,8 +75,17 @@ class ApiClient {
     );
     _ensureOk(res);
     final data = jsonDecode(utf8.decode(res.bodyBytes));
-    _token = data['token'];
+    token = data['token']?.toString();
     return data;
+  }
+
+  Future<Map<String, dynamic>> me() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/auth/me'),
+      headers: _headers,
+    );
+    _ensureOk(res);
+    return jsonDecode(utf8.decode(res.bodyBytes));
   }
 
   Future<Map<String, dynamic>> orderStatus(String orderId) async {

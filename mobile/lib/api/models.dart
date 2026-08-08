@@ -124,6 +124,7 @@ class CartPreview {
   final int minOrder;
   final int? freeFrom;
   final bool deliveryAvailable;
+  final int cashbackPct;
 
   CartPreview({
     required this.subtotal,
@@ -134,6 +135,7 @@ class CartPreview {
     required this.minOrder,
     this.freeFrom,
     required this.deliveryAvailable,
+    required this.cashbackPct,
   });
 
   factory CartPreview.fromJson(Map<String, dynamic> json) {
@@ -150,6 +152,7 @@ class CartPreview {
       minOrder: d['minOrder'] ?? 0,
       freeFrom: d['freeFrom'],
       deliveryAvailable: d['available'] ?? true,
+      cashbackPct: json['loyalty']?['cashbackPct'] ?? 3,
     );
   }
 }
@@ -179,13 +182,20 @@ class CreatedOrder {
   final String id;
   final int number;
   final int total;
+  final int pointsSpent;
 
-  CreatedOrder({required this.id, required this.number, required this.total});
+  CreatedOrder({
+    required this.id,
+    required this.number,
+    required this.total,
+    required this.pointsSpent,
+  });
 
   factory CreatedOrder.fromJson(Map<String, dynamic> json) => CreatedOrder(
     id: json['id'],
     number: json['number'],
     total: json['total'],
+    pointsSpent: json['pointsSpent'] ?? 0,
   );
 }
 

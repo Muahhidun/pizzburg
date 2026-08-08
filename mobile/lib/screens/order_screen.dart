@@ -45,8 +45,7 @@ class _OrderScreenState extends State<OrderScreen> {
 
   Future<void> _load() async {
     try {
-      final data =
-          await context.read<ApiClient>().orderStatus(widget.order.id);
+      final data = await context.read<ApiClient>().orderStatus(widget.order.id);
       if (mounted) setState(() => _data = data);
     } catch (_) {
       // молча — попробуем на следующем тике
@@ -61,8 +60,10 @@ class _OrderScreenState extends State<OrderScreen> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.white,
-        title: Text('Заказ №${widget.order.number}',
-            style: const TextStyle(fontWeight: FontWeight.w800)),
+        title: Text(
+          'Заказ №${widget.order.number}',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
@@ -79,8 +80,8 @@ class _OrderScreenState extends State<OrderScreen> {
                   status == 'CANCELLED'
                       ? Icons.cancel_outlined
                       : status == 'DELIVERED'
-                          ? Icons.check_circle_outline
-                          : Icons.local_pizza_outlined,
+                      ? Icons.check_circle_outline
+                      : Icons.local_pizza_outlined,
                   size: 56,
                   color: status == 'CANCELLED'
                       ? Colors.red
@@ -90,7 +91,9 @@ class _OrderScreenState extends State<OrderScreen> {
                 Text(
                   _statusLabels[status] ?? status,
                   style: const TextStyle(
-                      fontSize: 22, fontWeight: FontWeight.w800),
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -137,8 +140,11 @@ class _StepRow extends StatelessWidget {
   final bool done;
   final bool isLast;
 
-  const _StepRow(
-      {required this.label, required this.done, required this.isLast});
+  const _StepRow({
+    required this.label,
+    required this.done,
+    required this.isLast,
+  });
 
   @override
   Widget build(BuildContext context) {
