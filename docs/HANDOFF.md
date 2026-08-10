@@ -8,6 +8,7 @@
 актуальная матрица переноса, `docs/DEPLOY_STAGING.md` — точные шаги
 Cloudflare R2 и Railway staging, `docs/LOYALTY.md` — правила и проверка
 собственного кэшбэка.
+Подключение уведомлений описано в `docs/FCM_SETUP.md`.
 
 ## Суть проекта в трёх абзацах
 
@@ -76,14 +77,17 @@ GET  /orders/by-id/:id
 POST /orders/by-id/:id/sync-status        — статусы частей с планшетов
 POST /auth/:slug/request-otp | /verify    — OTP → JWT (180 дней)
 GET  /auth/me                             — профиль + история (Bearer)
+POST /auth/push-token                     — зарегистрировать установку для FCM
+DELETE /auth/push-token                   — отключить токен при выходе
 PATCH /admin/orders/:id/status            — ручной статус; DELIVERED
                                             начисляет кэшбэк
 POST /admin/customers/:id/loyalty-adjust  — корректировка с причиной
 POST /admin/products/:id/photo            — multipart `file`, оптимизация
                                             и загрузка в object storage
 ```
-Кроны: синк меню */15 мин; поллинг статусов активных заказов */1 мин
-(лог смены статуса = точка подключения FCM-пушей).
+Кроны: синк меню */15 мин; поллинг статусов активных заказов */1 мин.
+Все смены статуса проходят через `OrdersService.setStatus`, который отправляет
+FCM как неблокирующий побочный канал.
 
 ## Что дальше (порядок согласован с владельцем)
 
@@ -98,7 +102,9 @@ POST /admin/products/:id/photo            — multipart `file`, оптимиза
    Затем провести один согласованный боевой заказ со списанием баллов и сверить
    реальный чек: сумма списанных баллов должна попасть в «Личную
    интеграцию». Базовые сценарии списания/возврата уже пройдены.
-3. FCM-пуши при смене статуса; Telegram-бот кассиров (страховочный канал).
+3. Создать Firebase-проект, добавить backend service account и APNs key,
+   затем проверить уже готовые FCM-пуши на реальном iPhone по
+   `docs/FCM_SETUP.md`. После этого — Telegram-бот кассиров.
 4. Kaspi Pay онлайн (договор эквайринга уже на юрлице владельца,
    заявка на API-доступы подана ~31.07.2026; Apple Developer — тоже).
 5. Админка v3/P1 из `docs/SMARTPICASSO_AUDIT.md`: новые типы акций,

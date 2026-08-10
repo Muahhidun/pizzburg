@@ -4,8 +4,8 @@ import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
 
-/// Экран статуса заказа. Пока опрашивает API; после подключения FCM
-/// статус будет прилетать пушем.
+/// Экран статуса заказа. FCM возвращает клиента сюда при нажатии на пуш,
+/// а редкий polling остаётся страховкой при отключённых уведомлениях.
 class OrderScreen extends StatefulWidget {
   final CreatedOrder order;
   const OrderScreen({super.key, required this.order});

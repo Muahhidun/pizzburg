@@ -5,8 +5,8 @@ import { OrdersService } from './orders.service';
 
 /**
  * Раз в минуту подтягивает статусы активных заказов с планшетов Poster.
- * Смена агрегированного статуса — точка отправки пуша клиенту (FCM
- * подключим следующим шагом; сейчас — лог).
+ * Смена агрегированного статуса проходит через OrdersService.setStatus,
+ * где сохраняется статус, обрабатывается лояльность и отправляется FCM.
  */
 @Injectable()
 export class StatusPollerService {
@@ -34,7 +34,7 @@ export class StatusPollerService {
         const res = await this.orders.syncStatus(o.id);
         if (res.status !== o.status) {
           this.logger.log(
-            `Заказ №${o.number}: ${o.status} → ${res.status} (тут будет пуш клиенту)`,
+            `Заказ №${o.number}: ${o.status} → ${res.status}`,
           );
         }
       } catch (e) {

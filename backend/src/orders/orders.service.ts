@@ -11,6 +11,7 @@ import { CreateOrderDto } from './orders.dto';
 import { normalizeKzPhone } from '../common/phone';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { OrderStatus } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 
 interface DeliverySettings {
   minOrder: number;
@@ -40,6 +41,7 @@ export class OrdersService {
     private readonly poster: PosterClient,
     private readonly promotions: PromotionsService,
     private readonly loyalty: LoyaltyService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async createOrder(
@@ -533,7 +535,7 @@ export class OrdersService {
       data: { status: next },
     });
     await this.loyalty.onStatusChanged(order.id, next);
-    // TODO: здесь будет пуш клиенту (FCM) при смене статуса
+    await this.notifications.sendOrderStatus(order.id, next);
     return this.prisma.order.findUniqueOrThrow({ where: { id: updated.id } });
   }
 

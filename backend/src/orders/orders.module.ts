@@ -6,9 +6,16 @@ import { OrdersService } from './orders.service';
 import { StatusPollerService } from './status-poller.service';
 import { AuthModule } from '../auth/auth.module';
 import { LoyaltyModule } from '../loyalty/loyalty.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [PosterModule, PromotionsModule, AuthModule, LoyaltyModule],
+  imports: [
+    PosterModule,
+    PromotionsModule,
+    AuthModule,
+    LoyaltyModule,
+    NotificationsModule,
+  ],
   controllers: [OrdersController],
   providers: [OrdersService, StatusPollerService],
   exports: [OrdersService],

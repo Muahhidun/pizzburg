@@ -88,6 +88,30 @@ class ApiClient {
     return jsonDecode(utf8.decode(res.bodyBytes));
   }
 
+  Future<void> registerPushToken(
+    String pushToken, {
+    required String platform,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/auth/push-token'),
+      headers: _headers,
+      body: jsonEncode({'token': pushToken, 'platform': platform}),
+    );
+    _ensureOk(res);
+  }
+
+  Future<void> unregisterPushToken(
+    String pushToken, {
+    required String platform,
+  }) async {
+    final res = await http.delete(
+      Uri.parse('$baseUrl/auth/push-token'),
+      headers: _headers,
+      body: jsonEncode({'token': pushToken, 'platform': platform}),
+    );
+    _ensureOk(res);
+  }
+
   Future<Map<String, dynamic>> orderStatus(String orderId) async {
     final res = await http.get(Uri.parse('$baseUrl/orders/by-id/$orderId'));
     _ensureOk(res);

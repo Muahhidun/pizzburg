@@ -203,13 +203,38 @@ model Customer {
   birthday      DateTime?
   pointsBalance Int       @default(0) // балл = 1 ₸
   loyaltyLevel  Int       @default(1)
-  pushToken     String? // FCM
+  pushToken     String? // устаревшее поле; новые токены хранятся в PushDevice
   createdAt     DateTime  @default(now())
 
   orders      Order[]
   loyaltyTxns LoyaltyTransaction[]
+  pushDevices PushDevice[]
 
   @@unique([tenantId, phone])
+}
+
+enum PushPlatform {
+  IOS
+  ANDROID
+  WEB
+  UNKNOWN
+}
+
+/// Отдельная запись на каждую установку приложения. Один клиент может
+/// одновременно пользоваться несколькими телефонами и веб-приложением.
+model PushDevice {
+  id         String       @id @default(cuid())
+  customerId String
+  customer   Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  token      String       @unique
+  platform   PushPlatform @default(UNKNOWN)
+  appVersion String?
+  isEnabled  Boolean      @default(true)
+  lastSeenAt DateTime     @default(now())
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@index([customerId, isEnabled])
 }
 
 model OtpCode {

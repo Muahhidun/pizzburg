@@ -1,17 +1,20 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { IsString, Matches, MaxLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { PushPlatform } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from './auth.service';
 import { CustomerAuthGuard } from './customer-auth.guard';
 import { LoyaltyService } from '../loyalty/loyalty.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 class RequestOtpDto {
   @IsString()
@@ -31,17 +34,44 @@ class VerifyOtpDto {
   code: string;
 }
 
+class PushTokenDto {
+  @IsString()
+  @MaxLength(4096)
+  token: string;
+
+  @IsIn(['IOS', 'ANDROID', 'WEB', 'UNKNOWN'])
+  platform: PushPlatform;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  appVersion?: string;
+}
+
 @Controller('auth')
 export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly prisma: PrismaService,
     private readonly loyalty: LoyaltyService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   @Post(':tenantSlug/request-otp')
   requestOtp(@Body() dto: RequestOtpDto) {
     return this.auth.requestOtp(dto.phone);
+  }
+
+  @Post('push-token')
+  @UseGuards(CustomerAuthGuard)
+  registerPushToken(@Req() req: any, @Body() dto: PushTokenDto) {
+    return this.notifications.registerDevice(req.customer.sub, dto);
+  }
+
+  @Delete('push-token')
+  @UseGuards(CustomerAuthGuard)
+  unregisterPushToken(@Req() req: any, @Body() dto: PushTokenDto) {
+    return this.notifications.unregisterDevice(req.customer.sub, dto.token);
   }
 
   @Post(':tenantSlug/verify')

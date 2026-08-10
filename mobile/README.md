@@ -1,17 +1,25 @@
-# pizzburg
+# PizzBurg Flutter
 
-A new Flutter project.
+Клиент доставки PizzBurg для iOS, Android и web.
 
-## Getting Started
+## Локальный запуск
 
-This project is a starting point for a Flutter application.
+```bash
+flutter pub get
+flutter run -d chrome --dart-define=API_URL=http://127.0.0.1:3210
+```
 
-A few resources to get you started if this is your first Flutter project:
+Для реального iPhone вместо `127.0.0.1` нужен локальный IP компьютера:
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+```bash
+flutter run --dart-define=API_URL=http://<IP-Mac>:3210
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Если запуск через Xcode Automation зависает, см. раздел установки iPhone в
+[`docs/HANDOFF.md`](../docs/HANDOFF.md).
+
+## Push-уведомления
+
+Приложение работает без Firebase, но push в этом режиме отключены. Нативные
+файлы конфигурации, APNs и staging-тест описаны в
+[`docs/FCM_SETUP.md`](../docs/FCM_SETUP.md).

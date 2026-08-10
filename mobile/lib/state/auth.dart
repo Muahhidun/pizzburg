@@ -6,6 +6,8 @@ class AuthState extends ChangeNotifier {
   static const _tokenKey = 'pizzburg_customer_token';
   final ApiClient api;
   Map<String, dynamic>? _profile;
+  Future<void> Function()? afterLogin;
+  Future<void> Function()? beforeLogout;
 
   AuthState(this.api);
 
@@ -42,6 +44,7 @@ class AuthState extends ChangeNotifier {
     await prefs.setString(_tokenKey, result['token'].toString());
     api.token = result['token'].toString();
     await refresh();
+    await afterLogin?.call();
   }
 
   Future<void> refresh() async {
@@ -50,6 +53,7 @@ class AuthState extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    await beforeLogout?.call();
     api.token = null;
     _profile = null;
     final prefs = await SharedPreferences.getInstance();
