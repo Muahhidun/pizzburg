@@ -31,6 +31,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final _comment = TextEditingController();
   final _points = TextEditingController(text: '0');
   bool _sending = false;
+  bool _skipPromotions = false;
   String? _error;
 
   @override
@@ -92,6 +93,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         if (_name.text.trim().isNotEmpty) 'name': _name.text.trim(),
         'paymentMethod': _payment,
         if (_pointsToSpend > 0) 'pointsToSpend': _pointsToSpend,
+        if (_pointsToSpend > 0 && _skipPromotions) 'skipPromotions': true,
         if (_comment.text.trim().isNotEmpty) 'comment': _comment.text.trim(),
         if (_type == 'DELIVERY')
           'address': {
@@ -252,6 +254,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               controller: _points,
               subtotal: widget.preview.subtotal,
               cashbackPct: widget.preview.cashbackPct,
+              hasPromotion: widget.preview.appliedPromotions.isNotEmpty,
+              earnWhenPointsSpent: widget.preview.earnWhenPointsSpent,
+              allowPointsWithPromotions:
+                  widget.preview.allowPointsWithPromotions,
+              earnOnPromotionalOrders: widget.preview.earnOnPromotionalOrders,
+              skipPromotions: _skipPromotions,
+              onChoosePointsInstead: () => setState(() {
+                _skipPromotions = true;
+              }),
+              onRestorePromotion: () => setState(() {
+                _skipPromotions = false;
+                _points.text = '0';
+              }),
               onChanged: () => setState(() {}),
               onLoggedIn: _prefillProfile,
             ),
@@ -352,6 +367,13 @@ class _LoyaltySection extends StatelessWidget {
   final TextEditingController controller;
   final int subtotal;
   final int cashbackPct;
+  final bool hasPromotion;
+  final bool earnWhenPointsSpent;
+  final bool allowPointsWithPromotions;
+  final bool earnOnPromotionalOrders;
+  final bool skipPromotions;
+  final VoidCallback onChoosePointsInstead;
+  final VoidCallback onRestorePromotion;
   final VoidCallback onChanged;
   final VoidCallback onLoggedIn;
 
@@ -359,6 +381,13 @@ class _LoyaltySection extends StatelessWidget {
     required this.controller,
     required this.subtotal,
     required this.cashbackPct,
+    required this.hasPromotion,
+    required this.earnWhenPointsSpent,
+    required this.allowPointsWithPromotions,
+    required this.earnOnPromotionalOrders,
+    required this.skipPromotions,
+    required this.onChoosePointsInstead,
+    required this.onRestorePromotion,
     required this.onChanged,
     required this.onLoggedIn,
   });
@@ -401,8 +430,16 @@ class _LoyaltySection extends StatelessWidget {
     final maxPoints = auth.pointsBalance < subtotal
         ? auth.pointsBalance
         : subtotal;
+    final pointsBlockedByPromotion =
+        hasPromotion && !allowPointsWithPromotions && !skipPromotions;
     final spending = (int.tryParse(controller.text) ?? 0).clamp(0, maxPoints);
-    final earning = ((subtotal - spending) * cashbackPct / 100).floor();
+    final promotionWillApply = hasPromotion && !skipPromotions;
+    final cashbackBlocked =
+        (spending > 0 && !earnWhenPointsSpent) ||
+        (promotionWillApply && !earnOnPromotionalOrders);
+    final earning = cashbackBlocked
+        ? 0
+        : ((subtotal - spending) * cashbackPct / 100).floor();
     return _Section(
       title: 'Баллы',
       child: Container(
@@ -419,37 +456,70 @@ class _LoyaltySection extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: controller,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    decoration: _pointsInput('Списать баллов'),
-                    onChanged: (_) => onChanged(),
-                    validator: (value) {
-                      final amount = int.tryParse(value ?? '') ?? 0;
-                      if (amount > maxPoints) return 'Максимум $maxPoints';
-                      return null;
-                    },
-                  ),
+            if (pointsBlockedByPromotion) ...[
+              const Text(
+                'В корзине действует акция. По правилам заведения акция и баллы не суммируются.',
+                style: TextStyle(fontSize: 13, color: Colors.black54),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: maxPoints == 0 ? null : onChoosePointsInstead,
+                child: const Text('Использовать баллы вместо акции'),
+              ),
+            ] else ...[
+              if (hasPromotion && skipPromotions) ...[
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Акция отключится для этого заказа.',
+                        style: TextStyle(fontSize: 13, color: Colors.black54),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: onRestorePromotion,
+                      child: const Text('Вернуть акцию'),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                TextButton(
-                  onPressed: maxPoints == 0
-                      ? null
-                      : () {
-                          controller.text = '$maxPoints';
-                          onChanged();
-                        },
-                  child: const Text('Использовать все'),
-                ),
+                const SizedBox(height: 6),
               ],
-            ),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: controller,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: _pointsInput('Списать баллов'),
+                      onChanged: (_) => onChanged(),
+                      validator: (value) {
+                        final amount = int.tryParse(value ?? '') ?? 0;
+                        if (amount > maxPoints) return 'Максимум $maxPoints';
+                        return null;
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: maxPoints == 0
+                        ? null
+                        : () {
+                            controller.text = '$maxPoints';
+                            onChanged();
+                          },
+                    child: const Text('Использовать все'),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 8),
             Text(
-              earning > 0
+              cashbackBlocked
+                  ? spending > 0 && !earnWhenPointsSpent
+                        ? 'За заказ с оплатой баллами кэшбэк не начисляется'
+                        : 'За акционный заказ кэшбэк не начисляется'
+                  : earning > 0
                   ? 'После выполнения заказа начислим примерно $earning баллов ($cashbackPct%)'
                   : 'Кэшбэк начисляется после выполнения заказа',
               style: const TextStyle(fontSize: 12, color: Colors.black54),

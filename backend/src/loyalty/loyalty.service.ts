@@ -4,6 +4,13 @@ import { PrismaService } from '../prisma/prisma.service';
 
 type Tx = Prisma.TransactionClient;
 
+export interface LoyaltyPolicy {
+  cashbackPct: number;
+  earnWhenPointsSpent: boolean;
+  allowPointsWithPromotions: boolean;
+  earnOnPromotionalOrders: boolean;
+}
+
 @Injectable()
 export class LoyaltyService {
   constructor(private readonly prisma: PrismaService) {}
@@ -57,10 +64,7 @@ export class LoyaltyService {
     });
   }
 
-  /**
-   * Начисляет кэшбэк один раз после доставки. База — реально оплаченные
-   * товары без доставки; часть, закрытая баллами, новый кэшбэк не даёт.
-   */
+  /** Начисляет кэшбэк один раз после доставки по текущей политике заведения. */
   async earnForDeliveredOrder(orderId: string) {
     return this.prisma.$transaction(async (tx) => {
       // Блокировка заказа сериализует параллельные смены статуса без
@@ -73,9 +77,16 @@ export class LoyaltyService {
       if (!order) throw new NotFoundException('Заказ не найден');
       if (order.status !== 'DELIVERED' || !order.customerId) return 0;
 
-      const pct = this.cashbackPct(order.tenant.settings, 1);
-      const eligible = Math.max(0, order.subtotal - order.pointsSpent);
-      const amount = Math.floor((eligible * pct) / 100);
+      const promotionalDiscount = Math.max(
+        0,
+        order.discount - order.pointsSpent,
+      );
+      const policy = this.policy(order.tenant.settings, 1);
+      const amount = this.cashbackAmount(order.tenant.settings, {
+        subtotal: order.subtotal,
+        pointsSpent: order.pointsSpent,
+        promotionalDiscount,
+      });
       if (amount <= 0) return 0;
 
       const existing = await tx.loyaltyTransaction.findFirst({
@@ -90,7 +101,7 @@ export class LoyaltyService {
           orderId: order.id,
           type: 'EARN',
           amount,
-          comment: `Кэшбэк ${pct}% за заказ №${order.number}`,
+          comment: `Кэшбэк ${policy.cashbackPct}% за заказ №${order.number}`,
         },
       });
 
@@ -191,5 +202,43 @@ export class LoyaltyService {
     return Number.isFinite(fromLevel) && fromLevel >= 0 && fromLevel <= 100
       ? fromLevel
       : 3;
+  }
+
+  /**
+   * Правила по умолчанию повторяют действующую политику заведения:
+   * баллы и акции не складываются, а за заказ с любой из этих выгод
+   * новый кэшбэк не начисляется.
+   */
+  policy(settings: Prisma.JsonValue, loyaltyLevel = 1): LoyaltyPolicy {
+    const loyalty = (settings as any)?.loyalty ?? {};
+    return {
+      cashbackPct: this.cashbackPct(settings, loyaltyLevel),
+      earnWhenPointsSpent: loyalty.earnWhenPointsSpent === true,
+      allowPointsWithPromotions:
+        loyalty.allowPointsWithPromotions === true,
+      earnOnPromotionalOrders:
+        loyalty.earnOnPromotionalOrders === true,
+    };
+  }
+
+  cashbackAmount(
+    settings: Prisma.JsonValue,
+    order: {
+      subtotal: number;
+      pointsSpent: number;
+      promotionalDiscount: number;
+      loyaltyLevel?: number;
+    },
+  ) {
+    const policy = this.policy(settings, order.loyaltyLevel ?? 1);
+    if (order.pointsSpent > 0 && !policy.earnWhenPointsSpent) return 0;
+    if (
+      order.promotionalDiscount > 0 &&
+      !policy.earnOnPromotionalOrders
+    ) {
+      return 0;
+    }
+    const eligible = Math.max(0, order.subtotal - order.pointsSpent);
+    return Math.floor((eligible * policy.cashbackPct) / 100);
   }
 }

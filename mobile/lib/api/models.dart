@@ -125,6 +125,9 @@ class CartPreview {
   final int? freeFrom;
   final bool deliveryAvailable;
   final int cashbackPct;
+  final bool earnWhenPointsSpent;
+  final bool allowPointsWithPromotions;
+  final bool earnOnPromotionalOrders;
 
   CartPreview({
     required this.subtotal,
@@ -136,6 +139,9 @@ class CartPreview {
     this.freeFrom,
     required this.deliveryAvailable,
     required this.cashbackPct,
+    required this.earnWhenPointsSpent,
+    required this.allowPointsWithPromotions,
+    required this.earnOnPromotionalOrders,
   });
 
   factory CartPreview.fromJson(Map<String, dynamic> json) {
@@ -153,6 +159,11 @@ class CartPreview {
       freeFrom: d['freeFrom'],
       deliveryAvailable: d['available'] ?? true,
       cashbackPct: json['loyalty']?['cashbackPct'] ?? 3,
+      earnWhenPointsSpent: json['loyalty']?['earnWhenPointsSpent'] == true,
+      allowPointsWithPromotions:
+          json['loyalty']?['allowPointsWithPromotions'] == true,
+      earnOnPromotionalOrders:
+          json['loyalty']?['earnOnPromotionalOrders'] == true,
     );
   }
 }

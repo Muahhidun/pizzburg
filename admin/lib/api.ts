@@ -17,8 +17,7 @@ export function clearToken() {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const isFormData =
-    typeof FormData !== 'undefined' && init?.body instanceof FormData;
+  const isFormData = typeof FormData !== 'undefined' && init?.body instanceof FormData;
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: {
@@ -44,7 +43,10 @@ export const api = {
   patch: <T>(p: string, body: unknown) =>
     request<T>(p, { method: 'PATCH', body: JSON.stringify(body) }),
   post: <T>(p: string, body?: unknown) =>
-    request<T>(p, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
+    request<T>(p, {
+      method: 'POST',
+      body: body ? JSON.stringify(body) : undefined,
+    }),
   upload: <T>(p: string, file: File) => {
     const form = new FormData();
     form.append('file', file);
@@ -152,14 +154,23 @@ export interface Settings {
   tenant: { id: string; slug: string; name: string };
   settings: {
     delivery?: { minOrder: number; fee: number; freeFrom: number };
-    loyalty?: { cashbackPct?: number };
+    loyalty?: {
+      cashbackPct?: number;
+      earnWhenPointsSpent?: boolean;
+      allowPointsWithPromotions?: boolean;
+      earnOnPromotionalOrders?: boolean;
+    };
   };
   venues: { id: string; name: string; address: string }[];
-  posterAccounts: { id: string; name: string; sortOrder: number; isActive: boolean }[];
+  posterAccounts: {
+    id: string;
+    name: string;
+    sortOrder: number;
+    isActive: boolean;
+  }[];
 }
 
-export const formatTenge = (v: number) =>
-  `${v.toLocaleString('ru-RU').replace(/,/g, ' ')} ₸`;
+export const formatTenge = (v: number) => `${v.toLocaleString('ru-RU').replace(/,/g, ' ')} ₸`;
 
 /** Локальная календарная дата YYYY-MM-DD (не UTC — иначе ночь уезжает в соседние сутки) */
 export const todayLocal = () => {

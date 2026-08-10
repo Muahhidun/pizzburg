@@ -105,4 +105,39 @@ void main() {
     expect(validateFloor('9'), isNull);
     expect(validateFloor('Первый'), isNotNull);
   });
+
+  test('политика баллов по умолчанию не разрешает двойную выгоду', () {
+    final preview = CartPreview.fromJson({
+      'subtotal': 6400,
+      'promoDiscount': 2550,
+      'gifts': <dynamic>[],
+      'appliedPromotions': ['2+1 Пицца'],
+      'loyalty': {'cashbackPct': 3},
+      'delivery': {'fee': 0, 'minOrder': 0, 'available': true},
+    });
+
+    expect(preview.earnWhenPointsSpent, isFalse);
+    expect(preview.allowPointsWithPromotions, isFalse);
+    expect(preview.earnOnPromotionalOrders, isFalse);
+  });
+
+  test('приложение читает включённые исключения политики баллов', () {
+    final preview = CartPreview.fromJson({
+      'subtotal': 6400,
+      'gifts': <dynamic>[],
+      'appliedPromotions': <dynamic>[],
+      'loyalty': {
+        'cashbackPct': 5,
+        'earnWhenPointsSpent': true,
+        'allowPointsWithPromotions': true,
+        'earnOnPromotionalOrders': true,
+      },
+      'delivery': {'fee': 0, 'minOrder': 0, 'available': true},
+    });
+
+    expect(preview.cashbackPct, 5);
+    expect(preview.earnWhenPointsSpent, isTrue);
+    expect(preview.allowPointsWithPromotions, isTrue);
+    expect(preview.earnOnPromotionalOrders, isTrue);
+  });
 }

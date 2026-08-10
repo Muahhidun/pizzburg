@@ -115,11 +115,30 @@ export class OrdersService {
 
     // Акции: подарки клиент не оплачивает; в Poster они уйдут полной
     // ценой и компенсируются «Личной интеграцией»
-    const promo = await this.promotions.evaluate(
+    let promo = await this.promotions.evaluate(
       tenant.id,
       dto.items,
       dto.promoCode,
     );
+
+    // Клиент по телефону (профиль сохраняется между заказами).
+    // Формат единый с OTP, иначе один человек создаёт несколько профилей,
+    // а Poster может отклонить заказ из-за невалидного номера.
+    const normalizedPhone = normalizeKzPhone(dto.phone);
+    const requestedPoints = dto.pointsToSpend ?? 0;
+    const loyaltyPolicy = this.loyalty.policy(tenant.settings);
+    if (
+      requestedPoints > 0 &&
+      promo.applied.length > 0 &&
+      !loyaltyPolicy.allowPointsWithPromotions
+    ) {
+      if (!dto.skipPromotions) {
+        throw new BadRequestException(
+          'Баллы нельзя использовать вместе с акцией. Выберите акцию или баллы',
+        );
+      }
+      promo = { gifts: [], discount: 0, applied: [] };
+    }
     const giftProducts =
       promo.gifts.length > 0
         ? await this.prisma.product.findMany({
@@ -127,12 +146,6 @@ export class OrdersService {
           })
         : [];
     const giftById = new Map(giftProducts.map((p) => [p.id, p]));
-
-    // Клиент по телефону (профиль сохраняется между заказами).
-    // Формат единый с OTP, иначе один человек создаёт несколько профилей,
-    // а Poster может отклонить заказ из-за невалидного номера.
-    const normalizedPhone = normalizeKzPhone(dto.phone);
-    const requestedPoints = dto.pointsToSpend ?? 0;
     if (
       requestedPoints > 0 &&
       (!authCustomer ||

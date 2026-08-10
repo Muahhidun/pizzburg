@@ -9,6 +9,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "loyalty:import": "tsx prisma/import-loyalty-balances.ts",
+    "test": "tsx --test test/**/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

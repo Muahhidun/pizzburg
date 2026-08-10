@@ -76,6 +76,7 @@ export class CartController {
     );
 
     const settings = (tenant.settings as any)?.delivery ?? {};
+    const loyaltyPolicy = this.loyalty.policy(tenant.settings);
     return {
       items: lines,
       gifts: promo.gifts.map((g) => ({
@@ -91,7 +92,7 @@ export class CartController {
       // клиент платит subtotal; скидка — справочно (уйдёт «Личной интеграцией»)
       promoDiscount: promo.discount,
       loyalty: {
-        cashbackPct: this.loyalty.cashbackPct(tenant.settings),
+        ...loyaltyPolicy,
       },
       delivery: {
         minOrder: settings.minOrder ?? 0,

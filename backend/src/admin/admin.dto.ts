@@ -66,6 +66,9 @@ export class UpdateSettingsDto {
   @IsOptional() @IsInt() @Min(0) @Max(100_000_000) fee?: number;
   @IsOptional() @IsInt() @Min(0) @Max(100_000_000) freeFrom?: number;
   @IsOptional() @IsInt() @Min(0) @Max(100) cashbackPct?: number;
+  @IsOptional() @IsBoolean() earnWhenPointsSpent?: boolean;
+  @IsOptional() @IsBoolean() allowPointsWithPromotions?: boolean;
+  @IsOptional() @IsBoolean() earnOnPromotionalOrders?: boolean;
 }
 
 export class UpdateOrderStatusDto {

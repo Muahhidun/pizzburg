@@ -9,6 +9,9 @@ export default function SettingsPage() {
   const [fee, setFee] = useState('');
   const [freeFrom, setFreeFrom] = useState('');
   const [cashbackPct, setCashbackPct] = useState('3');
+  const [earnWhenPointsSpent, setEarnWhenPointsSpent] = useState(false);
+  const [allowPointsWithPromotions, setAllowPointsWithPromotions] = useState(false);
+  const [earnOnPromotionalOrders, setEarnOnPromotionalOrders] = useState(false);
   const [saved, setSaved] = useState(false);
   const [adding, setAdding] = useState(false);
 
@@ -19,6 +22,9 @@ export default function SettingsPage() {
     setFee(String(d.settings.delivery?.fee ?? 0));
     setFreeFrom(String(d.settings.delivery?.freeFrom ?? 0));
     setCashbackPct(String(d.settings.loyalty?.cashbackPct ?? 3));
+    setEarnWhenPointsSpent(d.settings.loyalty?.earnWhenPointsSpent === true);
+    setAllowPointsWithPromotions(d.settings.loyalty?.allowPointsWithPromotions === true);
+    setEarnOnPromotionalOrders(d.settings.loyalty?.earnOnPromotionalOrders === true);
   }, []);
 
   useEffect(() => {
@@ -29,9 +35,7 @@ export default function SettingsPage() {
     [minOrder, fee, freeFrom].every(
       (value) => /^\d+$/.test(value) && Number(value) <= 100_000_000,
     ) &&
-    (Number(freeFrom) === 0 ||
-      Number(minOrder) === 0 ||
-      Number(freeFrom) >= Number(minOrder));
+    (Number(freeFrom) === 0 || Number(minOrder) === 0 || Number(freeFrom) >= Number(minOrder));
 
   async function saveDelivery() {
     if (!deliveryValid) return;
@@ -48,7 +52,12 @@ export default function SettingsPage() {
 
   async function saveLoyalty() {
     if (!loyaltyValid) return;
-    await api.patch('/admin/settings', { cashbackPct: Number(cashbackPct) });
+    await api.patch('/admin/settings', {
+      cashbackPct: Number(cashbackPct),
+      earnWhenPointsSpent,
+      allowPointsWithPromotions,
+      earnOnPromotionalOrders,
+    });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -114,21 +123,21 @@ export default function SettingsPage() {
         </div>
         {!deliveryValid && (
           <p className="mt-2 text-sm text-red-600">
-            Все суммы должны быть целыми и неотрицательными; бесплатная доставка
-            не может начинаться ниже минимального заказа.
+            Все суммы должны быть целыми и неотрицательными; бесплатная доставка не может начинаться
+            ниже минимального заказа.
           </p>
         )}
         <p className="mt-3 text-xs text-neutral-400">
-          Сейчас: заказ от {formatTenge(Number(minOrder))}, доставка{' '}
-          {formatTenge(Number(fee))}, бесплатно от {formatTenge(Number(freeFrom))}
+          Сейчас: заказ от {formatTenge(Number(minOrder))}, доставка {formatTenge(Number(fee))},
+          бесплатно от {formatTenge(Number(freeFrom))}
         </p>
       </section>
 
       <section className="rounded-2xl bg-white p-5 shadow-sm dark:bg-neutral-900">
         <h2 className="mb-1 font-semibold">Кэшбэк приложения</h2>
         <p className="mb-4 text-sm text-neutral-500">
-          Начисляется после статуса «Доставлен». Бонусы Poster, включая их 7%,
-          здесь не используются.
+          Начисляется после статуса «Доставлен». Бонусы Poster, включая их 7%, здесь не
+          используются.
         </p>
         <div className="flex max-w-sm items-end gap-3">
           <label className="flex-1">
@@ -150,6 +159,26 @@ export default function SettingsPage() {
           >
             Сохранить
           </button>
+        </div>
+        <div className="mt-5 space-y-3">
+          <PolicyToggle
+            checked={earnWhenPointsSpent}
+            onChange={setEarnWhenPointsSpent}
+            title="Начислять кэшбэк, если заказ частично оплачен баллами"
+            description="Выключено: любое списание баллов отменяет начисление кэшбэка за этот заказ."
+          />
+          <PolicyToggle
+            checked={allowPointsWithPromotions}
+            onChange={setAllowPointsWithPromotions}
+            title="Разрешать использовать баллы вместе с акциями"
+            description="Выключено: клиент выбирает либо подарок/скидку по акции, либо оплату баллами."
+          />
+          <PolicyToggle
+            checked={earnOnPromotionalOrders}
+            onChange={setEarnOnPromotionalOrders}
+            title="Начислять кэшбэк за заказы с акциями"
+            description="Выключено: за заказ с подарком или скидкой новый кэшбэк не начисляется."
+          />
         </div>
         {!loyaltyValid && (
           <p className="mt-2 text-sm text-red-600">Укажите целое число от 0 до 100.</p>
@@ -179,17 +208,15 @@ export default function SettingsPage() {
             >
               <span className="text-sm text-neutral-400">{a.sortOrder}</span>
               <span className="flex-1 font-medium">{a.name}</span>
-              <span
-                className={`text-xs ${a.isActive ? 'text-emerald-600' : 'text-neutral-400'}`}
-              >
+              <span className={`text-xs ${a.isActive ? 'text-emerald-600' : 'text-neutral-400'}`}>
                 {a.isActive ? 'активен' : 'выключен'}
               </span>
             </li>
           ))}
         </ul>
         <p className="mt-2 text-xs text-neutral-400">
-          Первый по порядку — «главный»: по нему клиенту уходит уведомление о принятии
-          общего заказа.
+          Первый по порядку — «главный»: по нему клиенту уходит уведомление о принятии общего
+          заказа.
         </p>
       </section>
 
@@ -215,6 +242,33 @@ export default function SettingsPage() {
         />
       )}
     </div>
+  );
+}
+
+function PolicyToggle({
+  checked,
+  onChange,
+  title,
+  description,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  title: string;
+  description: string;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-black/10 p-3 dark:border-white/15">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="mt-1 h-4 w-4 accent-black dark:accent-white"
+      />
+      <span>
+        <span className="block text-sm font-medium">{title}</span>
+        <span className="mt-0.5 block text-xs text-neutral-500">{description}</span>
+      </span>
+    </label>
   );
 }
 
@@ -261,8 +315,7 @@ function AddAccount({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
       >
         <h2 className="mb-1 text-lg font-semibold">Новый отдел</h2>
         <p className="mb-4 text-sm text-neutral-500">
-          Токен берётся в админке Poster: Настройки → API. Он не отображается после
-          сохранения.
+          Токен берётся в админке Poster: Настройки → API. Он не отображается после сохранения.
         </p>
         <label className="mb-3 block">
           <span className="mb-1 block text-sm font-medium">Название</span>

@@ -508,11 +508,24 @@ export class AdminService {
   async updateSettings(dto: UpdateSettingsDto) {
     const tenant = await this.tenant();
     const current = (tenant.settings as any) ?? {};
-    const { cashbackPct, ...deliveryPatch } = dto;
+    const {
+      cashbackPct,
+      earnWhenPointsSpent,
+      allowPointsWithPromotions,
+      earnOnPromotionalOrders,
+      ...deliveryPatch
+    } = dto;
     const delivery = { ...(current.delivery ?? {}), ...deliveryPatch };
     const loyalty = {
       ...(current.loyalty ?? {}),
       ...(cashbackPct !== undefined ? { cashbackPct } : {}),
+      ...(earnWhenPointsSpent !== undefined ? { earnWhenPointsSpent } : {}),
+      ...(allowPointsWithPromotions !== undefined
+        ? { allowPointsWithPromotions }
+        : {}),
+      ...(earnOnPromotionalOrders !== undefined
+        ? { earnOnPromotionalOrders }
+        : {}),
     };
     if (
       delivery.freeFrom > 0 &&

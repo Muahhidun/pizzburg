@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsInt,
   IsISO8601,
@@ -143,6 +144,11 @@ export class CreateOrderDto {
   @Min(0)
   @Max(10_000_000)
   pointsToSpend?: number;
+
+  /** Клиент явно отказался от доступной акции, чтобы использовать баллы. */
+  @IsOptional()
+  @IsBoolean()
+  skipPromotions?: boolean;
 
   @IsArray()
   @ArrayMinSize(1)
