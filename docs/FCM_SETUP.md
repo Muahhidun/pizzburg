@@ -1,7 +1,22 @@
 # Firebase Cloud Messaging: подключение PizzBurg
 
-Код уведомлений уже подключён к backend и Flutter. Пока Firebase не настроен,
-приложение и приём заказов продолжают работать, а FCM тихо отключён.
+Код уведомлений подключён к backend и Flutter. Firebase-проект,
+Railway backend и нативная конфигурация iOS настроены 10 августа 2026 года.
+До первого теста на реальном iPhone осталось загрузить APNs-ключ Apple в
+Firebase и подписать сборку активной командой Apple Developer.
+
+## Текущий статус
+
+- Firebase-проект: `pizzburg-delivery`;
+- iOS Bundle ID: `kz.pizzburg.pizzburg`;
+- Railway backend: FCM включён, в логах подтверждено
+  `FCM готов к отправке уведомлений`;
+- `GoogleService-Info.plist` добавлен в target `Runner`;
+- включены **Push Notifications** и **Background Modes** (`Background fetch`,
+  `Remote notifications`);
+- release-сборка iOS без подписи проходит;
+- APNs Auth Key в Firebase: ещё не загружен;
+- тест на реальном iPhone: ещё не проведён.
 
 ## Что уже реализовано
 
@@ -18,18 +33,18 @@
 ## 1. Создать проект Firebase
 
 1. Открыть [Firebase Console](https://console.firebase.google.com/).
-2. Создать проект, например `pizzburg`.
-3. Включить Cloud Messaging. Отдельную Firebase Database создавать не нужно.
+2. Использовать созданный проект `pizzburg-delivery`.
+3. Отдельную Firebase Database создавать не нужно.
 
 ## 2. Подключить backend в Railway
 
 1. Firebase Console → **Project settings** → **Service accounts**.
 2. Нажать **Generate new private key** и сохранить JSON только на своём
    компьютере. Этот файл нельзя коммитить или пересылать в чат.
-3. Превратить JSON в одну строку base64:
+3. Превратить JSON в одну строку base64 и скопировать в буфер macOS:
 
    ```bash
-   base64 -i firebase-service-account.json | tr -d '\n'
+   base64 -i firebase-service-account.json | tr -d '\n' | pbcopy
    ```
 
 4. Railway → staging-проект → сервис `backend` → **Variables**. Добавить:
@@ -47,26 +62,23 @@
 
 ## 3. Подключить iPhone
 
-1. Firebase Console → **Project settings** → **Your apps** → добавить iOS app.
-2. Bundle ID: `kz.pizzburg.pizzburg`.
-3. Скачать `GoogleService-Info.plist` и добавить в
-   `mobile/ios/Runner` через Xcode с включённым **Copy items if needed** и target
+1. В Firebase зарегистрировано iOS-приложение с Bundle ID
+   `kz.pizzburg.pizzburg`.
+2. `GoogleService-Info.plist` уже добавлен в `mobile/ios/Runner` и target
    `Runner`.
-4. Xcode → Runner → **Signing & Capabilities**:
-   - добавить **Push Notifications**;
-   - добавить **Background Modes** и включить **Remote notifications**.
-5. Apple Developer → Keys: создать APNs Auth Key (`.p8`), записать Key ID и
+3. В Xcode уже включены **Push Notifications** и **Background Modes** с
+   **Background fetch** и **Remote notifications**.
+4. Apple Developer → Keys: создать APNs Auth Key (`.p8`), записать Key ID и
    Team ID. Firebase Console → Project settings → Cloud Messaging → iOS app →
    загрузить этот APNs key.
-6. На Mac в папке `mobile` выполнить:
+5. Для проверки сборки на Mac в папке `mobile` выполнить:
 
    ```bash
-   dart pub global activate flutterfire_cli
-   flutterfire configure
-   flutter run
+   flutter build ios --release --no-codesign
    ```
 
-7. При первом запуске разрешить уведомления и войти по номеру телефона.
+6. После настройки подписи установить приложение на реальный iPhone, при
+   первом запуске разрешить уведомления и войти по номеру телефона.
 
 ## 4. Android
 
@@ -104,4 +116,3 @@ FIREBASE_IOS_BUNDLE_ID
 5. На каждом статусе сверить текст push и переход на правильный заказ.
 6. Проверить push при свёрнутом и полностью закрытом приложении.
 7. Выйти из профиля: последующие уведомления на устройство приходить не должны.
-
