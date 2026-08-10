@@ -1,9 +1,10 @@
 # Firebase Cloud Messaging: подключение PizzBurg
 
-Код уведомлений подключён к backend и Flutter. Firebase-проект,
-Railway backend и нативная конфигурация iOS настроены 10 августа 2026 года.
-До первого теста на реальном iPhone осталось загрузить APNs-ключ Apple в
-Firebase и подписать сборку активной командой Apple Developer.
+Код уведомлений подключён к backend и Flutter. Firebase-проект, Railway
+backend, web-клиент и нативная конфигурация iOS настроены 10 августа 2026 года.
+Web можно проверить без Apple Developer. Для теста на реальном iPhone всё ещё
+нужно загрузить APNs-ключ Apple в Firebase и подписать сборку активной командой
+Apple Developer.
 
 ## Текущий статус
 
@@ -15,7 +16,11 @@ Firebase и подписать сборку активной командой Ap
 - включены **Push Notifications** и **Background Modes** (`Background fetch`,
   `Remote notifications`);
 - release-сборка iOS без подписи проходит;
+- web app зарегистрирован в Firebase, добавлены VAPID key и
+  `firebase-messaging-sw.js`;
+- web staging запускается с готовым `config/web_staging.json`;
 - APNs Auth Key в Firebase: ещё не загружен;
+- тест web-push: ещё не проведён;
 - тест на реальном iPhone: ещё не проведён.
 
 ## Что уже реализовано
@@ -87,7 +92,42 @@ Firebase app создаётся с package name `kz.pizzburg.pizzburg`. Посл
 `flutterfire configure`. Разрешение уведомлений Android 13+ уже добавлено в
 манифест.
 
-## 5. Временная конфигурация через `dart-define`
+## 5. Web без Apple Developer
+
+Публичная конфигурация Firebase и VAPID key находятся в
+`mobile/config/web_staging.json`, а фоновый обработчик — в
+`mobile/web/firebase-messaging-sw.js`.
+
+1. Перейти в папку Flutter-клиента:
+
+   ```bash
+   cd mobile
+   ```
+
+2. Получить зависимости:
+
+   ```bash
+   flutter pub get
+   ```
+
+3. Запустить staging в Chrome:
+
+   ```bash
+   flutter run -d chrome --web-port=3212 \
+     --dart-define-from-file=config/web_staging.json
+   ```
+
+4. Использовать именно `http://localhost:3212`, а не IP локальной сети.
+   `localhost` считается безопасным контекстом для service worker и web-push.
+5. При запросе Chrome нажать **Разрешить уведомления** и войти в профиль.
+6. Если разрешение ранее было запрещено: открыть настройки сайта слева от
+   адреса → **Уведомления** → **Разрешить**, затем обновить страницу.
+
+Firebase web config и VAPID key — публичные идентификаторы клиента, их можно
+хранить в репозитории. Приватный JSON service account нельзя добавлять в web
+config: он остаётся только в переменной Railway.
+
+## 6. Дополнительная конфигурация через `dart-define`
 
 Для web или запуска без нативных файлов клиент также понимает:
 
@@ -102,11 +142,23 @@ FIREBASE_WEB_VAPID_KEY
 FIREBASE_IOS_BUNDLE_ID
 ```
 
-Для фоновых web-push дополнительно нужен `firebase-messaging-sw.js`. Это не
-блокирует iPhone/Android и может быть подключено отдельно, когда появится
-публичный web-домен приложения.
+В staging эти значения уже собраны в `mobile/config/web_staging.json`.
 
-## 6. Проверка на staging
+## 7. Проверка web-push на staging
+
+1. Оставить `POSTER_DRY_RUN=1`, чтобы тест не ушёл кассирам.
+2. Запустить web-приложение командой из раздела 5 и войти в профиль.
+3. Оформить тестовый заказ.
+4. В админке нажать **Принять**. В открытом приложении должна появиться
+   внутренняя плашка с новым статусом.
+5. Свернуть Chrome или переключиться на другую вкладку.
+6. В админке последовательно выбрать **Готовится**, **Готов**, **В пути**.
+   На каждый статус должно прийти системное уведомление Chrome.
+7. Нажать уведомление: должна открыться карточка соответствующего заказа.
+8. Вернуться в профиль, выйти из аккаунта, снова изменить статус. После выхода
+   уведомление на эту установку приходить не должно.
+
+## 8. Проверка iPhone на staging
 
 1. Оставить `POSTER_DRY_RUN=1`, чтобы тест не ушёл кассирам.
 2. Войти в Flutter-приложение на реальном iPhone и разрешить уведомления.

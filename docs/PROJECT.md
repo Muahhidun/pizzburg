@@ -150,9 +150,10 @@ wdrink.kz (склад/финучёт общепита, Railway), заменил 
       кроме dry-run) — src/orders/status-poller.service.ts; смена
       агрегированного статуса проходит через единый обработчик.
 - [~] Пуши FCM клиенту: backend-отправка, отдельные device-токены, очистка
-      недействительных токенов, Flutter-регистрация и переход на заказ готовы.
-      Остались Firebase/APNs credentials и проверка на реальном iPhone — см.
-      `docs/FCM_SETUP.md`.
+      недействительных токенов, Flutter-регистрация, web service worker и
+      переход на заказ готовы. Web можно проверить без Apple Developer;
+      остаются web staging-тест и Firebase/APNs credentials с проверкой на
+      реальном iPhone — см. `docs/FCM_SETUP.md`.
 - [ ] Telegram-бот кассиров (страховочный канал, как у FoodPicasso)
 - [ ] Kaspi Pay онлайн-оплата (переиспользовать действующий договор)
 - [x] **Веб-админка v1** (`admin/`, Next.js 15 + Tailwind 4 + dnd-kit,
@@ -392,6 +393,10 @@ Staging-тест лояльности 09.08 пройден: ручное нач�
 
 Во Flutter добавлены запрос разрешения, регистрация и обновление токена,
 уведомление в foreground и переход из push на экран заказа. Поллинг остался
-резервным каналом. Код собирается и без Firebase-конфигурации. До полного
-завершения нужны Firebase service account, `GoogleService-Info.plist`, APNs
-key и проверка на реальном iPhone по `docs/FCM_SETUP.md`.
+резервным каналом. Код собирается и без Firebase-конфигурации. Firebase
+service account подключён к Railway, а запуск backend подтверждает
+`FCM готов к отправке уведомлений`. Зарегистрировано Firebase web-приложение,
+добавлены публичная конфигурация, VAPID key и
+`web/firebase-messaging-sw.js`; web-сборка проходит. Следующий ручной шаг —
+web-push тест на staging по `docs/FCM_SETUP.md`. `GoogleService-Info.plist`
+уже скачан, но iPhone-тест ждёт Apple Developer и APNs key.

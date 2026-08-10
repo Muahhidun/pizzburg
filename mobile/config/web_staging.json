@@ -1,0 +1,11 @@
+{
+  "API_URL": "https://pizzburg-staging-production.up.railway.app",
+  "TENANT": "pizzburg",
+  "FIREBASE_API_KEY": "AIzaSyDJZfAxPxVDOMG5joGrHuvpnzACHW4-8Kk",
+  "FIREBASE_AUTH_DOMAIN": "pizzburg-delivery.firebaseapp.com",
+  "FIREBASE_PROJECT_ID": "pizzburg-delivery",
+  "FIREBASE_STORAGE_BUCKET": "pizzburg-delivery.firebasestorage.app",
+  "FIREBASE_MESSAGING_SENDER_ID": "174858068171",
+  "FIREBASE_APP_ID": "1:174858068171:web:029034484eb0008f43fb4e",
+  "FIREBASE_WEB_VAPID_KEY": "BBZxCckHVj9WwjuQMU6VDOja6Y449UVOHyct7E-lgBJhViZTiBu1_katHDiarrgLCn-Xkh-Y_fS81gO_1ujIpy0"
+}

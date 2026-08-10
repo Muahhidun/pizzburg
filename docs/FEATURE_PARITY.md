@@ -52,7 +52,7 @@ SmartPicasso/FoodPicasso и фактическое состояние нашег
 | Персональная скидка | Позже, P3 | ⬜ | После общего discount engine. |
 | Платформа iOS/Android | Берём, P3 | ✅ | `PushDevice.platform`; один клиент может иметь несколько установок. |
 | День рождения | Берём, P2 | 🟡 | Поле в БД есть; нужны сбор, редактирование и автопуш. |
-| FCM-пуш по статусу заказа | Берём, P1 | 🟡 | Backend, device-токены и Flutter готовы; остались Firebase/APNs credentials и тест на iPhone. |
+| FCM-пуш по статусу заказа | Берём, P1 | 🟡 | Backend, device-токены, Flutter и web service worker готовы; остались web-тест и Firebase/APNs с тестом на iPhone. |
 | Массовая рассылка по сегменту | Берём, P1 | ⬜ | FCM + сегменты + журнал рассылок. |
 | Deep link в товар/раздел/акцию | Берём, P1 | ⬜ | Общая схема action payload в backend и Flutter. |
 | Пуш с начислением баллов | Берём, P2 | ⬜ | Только после транзакционного loyalty service. |
