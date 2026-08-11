@@ -47,14 +47,20 @@ Future<void> main() async {
       ),
     );
   };
-  runApp(PizzBurgApp(api: api, auth: auth));
+  runApp(PizzBurgApp(api: api, auth: auth, push: push));
   unawaited(push.initialize());
 }
 
 class PizzBurgApp extends StatelessWidget {
   final ApiClient api;
   final AuthState auth;
-  const PizzBurgApp({super.key, required this.api, required this.auth});
+  final PushNotificationsService push;
+  const PizzBurgApp({
+    super.key,
+    required this.api,
+    required this.auth,
+    required this.push,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -62,6 +68,7 @@ class PizzBurgApp extends StatelessWidget {
       providers: [
         Provider.value(value: api),
         ChangeNotifierProvider.value(value: auth),
+        ChangeNotifierProvider.value(value: push),
         ChangeNotifierProvider(create: (_) => Cart()),
       ],
       child: MaterialApp(

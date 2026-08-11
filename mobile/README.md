@@ -28,10 +28,13 @@ flutter run --dart-define=API_URL=http://<IP-Mac>:3210
 одной командой из папки `mobile`:
 
 ```bash
-flutter run -d chrome --web-port=3212 \
+flutter run -d web-server --web-hostname=localhost --web-port=3212 \
   --dart-define-from-file=config/web_staging.json
 ```
 
-Открывать нужно адрес `http://localhost:3212`, разрешив уведомления браузера.
+Открывать нужно адрес `http://localhost:3212`. После входа открыть профиль и
+нажать **Включить уведомления**: Safari показывает системный запрос только
+после явного действия пользователя. `localhost` и `127.0.0.1` считаются
+разными сайтами и имеют разные разрешения.
 Конфигурация web-приложения и VAPID key являются публичными идентификаторами;
 приватный Firebase service account остаётся только в Railway.

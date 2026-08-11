@@ -6,10 +6,20 @@ import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
 
+enum PushNotificationsStatus {
+  checking,
+  notRequested,
+  requesting,
+  enabled,
+  denied,
+  unavailable,
+  error,
+}
+
 /// Подключает FCM, регистрирует токен установки в нашем backend и передаёт
 /// события интерфейсу. До добавления Firebase-конфигурации тихо отключается,
 /// поэтому локальный web/staging продолжает запускаться.
-class PushNotificationsService {
+class PushNotificationsService extends ChangeNotifier {
   static const _webVapidKey = String.fromEnvironment('FIREBASE_WEB_VAPID_KEY');
   static const _apiKey = String.fromEnvironment('FIREBASE_API_KEY');
   static const _appId = String.fromEnvironment('FIREBASE_APP_ID');
@@ -32,24 +42,98 @@ class PushNotificationsService {
   StreamSubscription<String>? _tokenRefresh;
   StreamSubscription<RemoteMessage>? _foregroundMessages;
   StreamSubscription<RemoteMessage>? _openedMessages;
+  Future<void>? _initialization;
+  bool _permissionGranted = false;
+  bool _listenersAttached = false;
+  PushNotificationsStatus _status = PushNotificationsStatus.checking;
+  String? _lastError;
 
   void Function(String title, String body)? onForegroundMessage;
   void Function(Map<String, dynamic> data)? onNotificationOpened;
 
   PushNotificationsService(this.api);
 
-  Future<void> initialize() async {
+  PushNotificationsStatus get status => _status;
+  String? get lastError => _lastError;
+
+  Future<void> initialize() {
+    return _initialization ??= _initialize();
+  }
+
+  Future<void> _initialize() async {
     try {
-      if (!await _initializeFirebase()) return;
+      if (!await _initializeFirebase()) {
+        _setStatus(PushNotificationsStatus.unavailable);
+        return;
+      }
       _messaging = FirebaseMessaging.instance;
-      final permission = await _messaging!.requestPermission(
+      if (!await _messaging!.isSupported()) {
+        _messaging = null;
+        _setStatus(PushNotificationsStatus.unavailable);
+        return;
+      }
+      final permission = await _messaging!.getNotificationSettings();
+      if (_isGranted(permission.authorizationStatus)) {
+        _permissionGranted = true;
+        await _activateMessaging();
+        _setStatus(PushNotificationsStatus.enabled);
+        return;
+      }
+      _setStatus(
+        permission.authorizationStatus == AuthorizationStatus.denied
+            ? PushNotificationsStatus.denied
+            : PushNotificationsStatus.notRequested,
+      );
+    } catch (error) {
+      // Firebase ещё не настроен либо браузер не поддерживает push. Это не
+      // должно мешать просмотру меню и оформлению заказа.
+      debugPrint('FCM отключён: $error');
+      _setStatus(PushNotificationsStatus.error, error: error);
+    }
+  }
+
+  /// Должен вызываться напрямую из обработчика нажатия: Safari блокирует
+  /// системный запрос разрешения, если он запущен автоматически при старте.
+  Future<bool> requestPermission() async {
+    if (_messaging == null) await initialize();
+    final messaging = _messaging;
+    if (messaging == null) {
+      _setStatus(PushNotificationsStatus.unavailable);
+      return false;
+    }
+
+    _setStatus(PushNotificationsStatus.requesting);
+    try {
+      final permission = await messaging.requestPermission(
         alert: true,
         badge: true,
         sound: true,
       );
-      if (permission.authorizationStatus == AuthorizationStatus.denied) return;
+      if (!_isGranted(permission.authorizationStatus)) {
+        _setStatus(
+          permission.authorizationStatus == AuthorizationStatus.denied
+              ? PushNotificationsStatus.denied
+              : PushNotificationsStatus.notRequested,
+        );
+        return false;
+      }
 
-      await _messaging!.setAutoInitEnabled(true);
+      _permissionGranted = true;
+      await _activateMessaging();
+      _setStatus(PushNotificationsStatus.enabled);
+      return true;
+    } catch (error) {
+      debugPrint('Не удалось запросить разрешение FCM: $error');
+      _setStatus(PushNotificationsStatus.error, error: error);
+      return false;
+    }
+  }
+
+  Future<void> _activateMessaging() async {
+    final messaging = _messaging!;
+    await messaging.setAutoInitEnabled(true);
+    if (!_listenersAttached) {
+      _listenersAttached = true;
       _foregroundMessages = FirebaseMessaging.onMessage.listen((message) {
         final title = message.notification?.title ?? 'PizzBurg';
         final body = message.notification?.body ?? '';
@@ -58,25 +142,22 @@ class PushNotificationsService {
       _openedMessages = FirebaseMessaging.onMessageOpenedApp.listen(
         (message) => onNotificationOpened?.call(message.data),
       );
-      final initial = await _messaging!.getInitialMessage();
+      final initial = await messaging.getInitialMessage();
       if (initial != null) onNotificationOpened?.call(initial.data);
 
-      _tokenRefresh = _messaging!.onTokenRefresh.listen((token) async {
+      _tokenRefresh = messaging.onTokenRefresh.listen((token) async {
         _token = token;
         await syncAfterLogin();
       });
-      _token = await _messaging!.getToken(
-        vapidKey: kIsWeb && _webVapidKey.isNotEmpty ? _webVapidKey : null,
-      );
-      await syncAfterLogin();
-    } catch (error) {
-      // Firebase ещё не настроен либо браузер не поддерживает push. Это не
-      // должно мешать просмотру меню и оформлению заказа.
-      debugPrint('FCM отключён: $error');
     }
+    _token = await messaging.getToken(
+      vapidKey: kIsWeb && _webVapidKey.isNotEmpty ? _webVapidKey : null,
+    );
+    await syncAfterLogin();
   }
 
   Future<void> syncAfterLogin() async {
+    if (!_permissionGranted) return;
     if (_token == null && _messaging != null) {
       try {
         _token = await _messaging!.getToken(
@@ -145,6 +226,17 @@ class PushNotificationsService {
     return true;
   }
 
+  bool _isGranted(AuthorizationStatus status) {
+    return status == AuthorizationStatus.authorized ||
+        status == AuthorizationStatus.provisional;
+  }
+
+  void _setStatus(PushNotificationsStatus value, {Object? error}) {
+    _status = value;
+    _lastError = error?.toString();
+    notifyListeners();
+  }
+
   String get _platform {
     if (kIsWeb) return 'WEB';
     return switch (defaultTargetPlatform) {
@@ -154,9 +246,11 @@ class PushNotificationsService {
     };
   }
 
-  Future<void> dispose() async {
-    await _tokenRefresh?.cancel();
-    await _foregroundMessages?.cancel();
-    await _openedMessages?.cancel();
+  @override
+  void dispose() {
+    unawaited(_tokenRefresh?.cancel());
+    unawaited(_foregroundMessages?.cancel());
+    unawaited(_openedMessages?.cancel());
+    super.dispose();
   }
 }
