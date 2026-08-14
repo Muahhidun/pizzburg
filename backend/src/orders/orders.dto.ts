@@ -132,6 +132,16 @@ export class CreateOrderDto {
   @IsEnum(['CASH', 'CARD_ON_DELIVERY', 'KASPI_ONLINE'])
   paymentMethod: 'CASH' | 'CARD_ON_DELIVERY' | 'KASPI_ONLINE';
 
+  /**
+   * «Сдача с» — купюра, которой клиент расплатится наличными.
+   * Кассир и курьер видят её в комментарии к заказу и готовят размен.
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(1_000_000)
+  changeFrom?: number;
+
   @IsOptional()
   @IsString()
   @MaxLength(40)

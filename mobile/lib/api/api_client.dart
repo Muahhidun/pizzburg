@@ -57,6 +57,48 @@ class ApiClient {
     return CreatedOrder.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
   }
 
+  /// Режим приёма заказов, расписание и окно отмены.
+  /// Экрану заказа нужен `cancelWindowMinutes`, а он приходит только сюда.
+  Future<Availability> fetchAvailability() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/menu/$tenant/availability'),
+    );
+    _ensureOk(res);
+    return Availability.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
+  }
+
+  /// Слоты предзаказа для выбранного способа получения
+  Future<List<PreorderSlot>> preorderSlots(String type) async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/menu/$tenant/preorder-slots?type=$type'),
+    );
+    _ensureOk(res);
+    final data = jsonDecode(utf8.decode(res.bodyBytes));
+    return ((data['slots'] ?? []) as List)
+        .map((s) => PreorderSlot.fromJson(s))
+        .toList();
+  }
+
+  /// Отмена заказа клиентом в отведённое окно.
+  ///
+  /// `reasonId` — причина из справочника; без неё отчёт по отменам не
+  /// построить, поэтому свободный текст остаётся лишь дополнением.
+  Future<void> cancelOrder(
+    String orderId, {
+    String? reasonId,
+    String? reason,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/orders/by-id/$orderId/cancel'),
+      headers: _headers,
+      body: jsonEncode({
+        'reasonId': ?reasonId,
+        if (reason != null && reason.isNotEmpty) 'reason': reason,
+      }),
+    );
+    _ensureOk(res);
+  }
+
   Future<Map<String, dynamic>> requestOtp(String phone) async {
     final res = await http.post(
       Uri.parse('$baseUrl/auth/$tenant/request-otp'),
@@ -77,6 +119,42 @@ class ApiClient {
     final data = jsonDecode(utf8.decode(res.bodyBytes));
     token = data['token']?.toString();
     return data;
+  }
+
+  /// Действующие редакции документов. Нужны и экрану согласия, и профилю:
+  /// Apple с Google требуют работающую ссылку на политику из приложения.
+  Future<List<LegalDocument>> fetchLegalDocuments() async {
+    final res = await http.get(Uri.parse('$baseUrl/legal/$tenant'));
+    _ensureOk(res);
+    final data = jsonDecode(utf8.decode(res.bodyBytes));
+    return ((data['documents'] ?? []) as List)
+        .map((d) => LegalDocument.fromJson(d))
+        .toList();
+  }
+
+  Future<LegalDocument> fetchLegalDocument(String type) async {
+    final res = await http.get(Uri.parse('$baseUrl/legal/$tenant/$type'));
+    _ensureOk(res);
+    return LegalDocument.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
+  }
+
+  /// Клиент принял действующие редакции. Версии проставляет сервер.
+  Future<void> acceptLegal() async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/legal/$tenant/accept'),
+      headers: _headers,
+    );
+    _ensureOk(res);
+  }
+
+  /// Причины отмены, которые разрешено показывать клиенту
+  Future<List<CancelReason>> fetchCancelReasons() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/orders/$tenant/cancel-reasons'),
+    );
+    _ensureOk(res);
+    final data = jsonDecode(utf8.decode(res.bodyBytes)) as List;
+    return data.map((r) => CancelReason.fromJson(r)).toList();
   }
 
   Future<Map<String, dynamic>> me() async {

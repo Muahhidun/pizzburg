@@ -206,11 +206,58 @@ model Customer {
   pushToken     String? // устаревшее поле; новые токены хранятся в PushDevice
   createdAt     DateTime  @default(now())
 
+  /// Согласие с офертой и политикой: { "OFFER": 3, "PRIVACY": 1 }
+  /// Храним версии, а не флаг: при выпуске новой редакции согласие
+  /// нужно запросить заново, и это должно быть видно.
+  legalVersions   Json      @default("{}")
+  legalAcceptedAt DateTime?
+
   orders      Order[]
   loyaltyTxns LoyaltyTransaction[]
   pushDevices PushDevice[]
 
   @@unique([tenantId, phone])
+}
+
+enum LegalDocumentType {
+  OFFER // публичная оферта
+  PRIVACY // политика конфиденциальности
+  REQUISITES // реквизиты продавца
+}
+
+/// Версионируемый юридический документ.
+/// Нужен для ревью App Store и Google Play и как доказательство того,
+/// с какой редакцией согласился клиент. Старые версии не удаляются.
+model LegalDocument {
+  id          String            @id @default(cuid())
+  tenantId    String
+  type        LegalDocumentType
+  version     Int
+  title       String
+  /// Markdown; приложение и сайт рендерят как есть
+  content     String
+  isCurrent   Boolean           @default(false)
+  publishedAt DateTime          @default(now())
+
+  @@unique([tenantId, type, version])
+  @@index([tenantId, type, isCurrent])
+}
+
+/// Справочник причин отмены — иначе отчёт по отменам не построить:
+/// свободный текст кассира не сгруппировать.
+model CancelReason {
+  id                  String  @id @default(cuid())
+  tenantId            String
+  label               String
+  sortOrder           Int     @default(0)
+  isActive            Boolean @default(true)
+  /// Показывать ли причину клиенту в приложении
+  availableToCustomer Boolean @default(false)
+
+  orders Order[]
+
+  @@unique([tenantId, label])
+  @@index([tenantId])
 }
 
 enum PushPlatform {
@@ -301,7 +348,19 @@ model Order {
   paymentMethod PaymentMethod
   paymentStatus PaymentStatus @default(NOT_REQUIRED)
   promoCode     String?
-  cancelReason  String?
+  /// Купюра для сдачи при оплате наличными; кассир готовит размен
+  changeFrom    Int?
+  /// Свободный комментарий к отмене
+  cancelReason   String?
+  /// Причина из справочника — по ней строится отчёт
+  cancelReasonId String?
+  cancelReasonRef CancelReason? @relation(fields: [cancelReasonId], references: [id])
+  /// Кто отменил: CUSTOMER | ADMIN | POSTER — для отчёта по отменам
+  cancelledBy   String?
+  cancelledAt   DateTime?
+  /// Версии документов, действовавшие при оформлении — доказательство
+  /// согласия именно на эту редакцию
+  legalVersions Json?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 

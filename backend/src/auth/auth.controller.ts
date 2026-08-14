@@ -14,6 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from './auth.service';
 import { CustomerAuthGuard } from './customer-auth.guard';
 import { LoyaltyService } from '../loyalty/loyalty.service';
+import { LegalService } from '../legal/legal.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
 class RequestOtpDto {
@@ -29,8 +30,10 @@ class VerifyOtpDto {
   @Matches(/^\+?[\d\s()-]{10,24}$/, { message: 'Неверный формат номера' })
   phone: string;
 
+  // Диапазон, а не ровно шесть: коды, выданные до перехода на шестизначные,
+  // должны доработать свои пять минут, а не отвалиться на валидации.
   @IsString()
-  @Matches(/^\d{4}$/, { message: 'Код должен состоять из 4 цифр' })
+  @Matches(/^\d{4,6}$/, { message: 'Код должен состоять из цифр' })
   code: string;
 }
 
@@ -54,6 +57,7 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly prisma: PrismaService,
     private readonly loyalty: LoyaltyService,
+    private readonly legal: LegalService,
     private readonly notifications: NotificationsService,
   ) {}
 
@@ -79,6 +83,15 @@ export class AuthController {
     return this.auth.verifyOtp(tenantSlug, dto.phone, dto.code);
   }
 
+  /** Обязательные документы, которых клиент ещё не принял */
+  private async pendingConsent(customerId: string, tenantId: string) {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { legalVersions: true },
+    });
+    return this.legal.pendingConsent(tenantId, customer?.legalVersions);
+  }
+
   /** Профиль + история заказов текущего клиента */
   @Get('me')
   @UseGuards(CustomerAuthGuard)
@@ -93,7 +106,7 @@ export class AuthController {
         loyaltyLevel: true,
       },
     });
-    const [orders, loyaltyTransactions, tenant] = await Promise.all([
+    const [orders, loyaltyTransactions, tenant, consent] = await Promise.all([
       this.prisma.order.findMany({
         where: { customerId: req.customer.sub },
         orderBy: { createdAt: 'desc' },
@@ -119,6 +132,7 @@ export class AuthController {
         where: { id: req.customer.tenantId },
         select: { settings: true },
       }),
+      this.pendingConsent(req.customer.sub, req.customer.tenantId),
     ]);
     return {
       customer,
@@ -130,6 +144,10 @@ export class AuthController {
           customer?.loyaltyLevel ?? 1,
         ),
       },
+      // Каких редакций не хватает — решает сервер, а не приложение: клиент
+      // не должен сам сравнивать номера версий, иначе новая редакция оферты
+      // тихо разойдётся со старой сборкой.
+      legal: { pending: consent },
     };
   }
 }

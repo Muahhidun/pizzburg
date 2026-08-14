@@ -30,15 +30,51 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final _floor = TextEditingController();
   final _comment = TextEditingController();
   final _points = TextEditingController(text: '0');
+  final _changeFrom = TextEditingController();
   bool _sending = false;
   bool _skipPromotions = false;
   String? _error;
+
+  /// null — «как можно быстрее», иначе выбранный слот предзаказа
+  PreorderSlot? _slot;
+  List<PreorderSlot> _slots = [];
+  bool _loadingSlots = false;
+
+  Availability get _availability => widget.preview.availability;
 
   @override
   void initState() {
     super.initState();
     if (!widget.preview.deliveryAvailable) _type = 'PICKUP';
+    _payment = _firstEnabledPayment();
+    // Закрыто — заказ возможен только на конкретное время
+    if (!_availability.asapAvailable) _loadSlots();
     WidgetsBinding.instance.addPostFrameCallback((_) => _prefillProfile());
+  }
+
+  String _firstEnabledPayment() {
+    if (_availability.cashEnabled) return 'CASH';
+    if (_availability.cardOnDeliveryEnabled) return 'CARD_ON_DELIVERY';
+    return 'KASPI_ONLINE';
+  }
+
+  Future<void> _loadSlots() async {
+    setState(() => _loadingSlots = true);
+    try {
+      final slots = await context.read<ApiClient>().preorderSlots(_type);
+      if (!mounted) return;
+      setState(() {
+        _slots = slots;
+        // Когда «побыстрее» недоступно, сразу подставляем ближайший слот,
+        // чтобы клиент не упёрся в ошибку сервера
+        if (!_availability.asapAvailable && _slot == null && slots.isNotEmpty) {
+          _slot = slots.first;
+        }
+        _loadingSlots = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingSlots = false);
+    }
   }
 
   void _prefillProfile() {
@@ -62,6 +98,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       _floor,
       _comment,
       _points,
+      _changeFrom,
     ]) {
       controller.dispose();
     }
@@ -92,6 +129,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         'phone': _phone.text.trim(),
         if (_name.text.trim().isNotEmpty) 'name': _name.text.trim(),
         'paymentMethod': _payment,
+        if (_slot != null) 'scheduledAt': _slot!.at.toUtc().toIso8601String(),
+        if (_payment == 'CASH' && (int.tryParse(_changeFrom.text) ?? 0) > 0)
+          'changeFrom': int.parse(_changeFrom.text),
         if (_pointsToSpend > 0) 'pointsToSpend': _pointsToSpend,
         if (_pointsToSpend > 0 && _skipPromotions) 'skipPromotions': true,
         if (_comment.text.trim().isNotEmpty) 'comment': _comment.text.trim(),
@@ -142,6 +182,28 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            if (_availability.message != null)
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF4E5),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFFFCC80)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, color: Color(0xFFE65100)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _availability.message!,
+                        style: const TextStyle(color: Color(0xFFE65100)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             _Section(
               title: 'Способ получения',
               child: Row(
@@ -151,7 +213,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       label: 'Доставка',
                       selected: _type == 'DELIVERY',
                       enabled: widget.preview.deliveryAvailable,
-                      onTap: () => setState(() => _type = 'DELIVERY'),
+                      onTap: () {
+                        setState(() {
+                          _type = 'DELIVERY';
+                          _slot = null;
+                        });
+                        if (!_availability.asapAvailable) _loadSlots();
+                      },
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -159,12 +227,32 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     child: _Choice(
                       label: 'Самовывоз',
                       selected: _type == 'PICKUP',
-                      onTap: () => setState(() => _type = 'PICKUP'),
+                      enabled: _availability.pickupAvailable,
+                      onTap: () {
+                        setState(() {
+                          _type = 'PICKUP';
+                          _slot = null;
+                        });
+                        if (!_availability.asapAvailable) _loadSlots();
+                      },
                     ),
                   ),
                 ],
               ),
             ),
+            if (_availability.preorderEnabled)
+              _Section(
+                title: 'Когда',
+                child: _TimePicker(
+                  slot: _slot,
+                  slots: _slots,
+                  loading: _loadingSlots,
+                  asapAvailable: _availability.asapAvailable,
+                  onAsap: () => setState(() => _slot = null),
+                  onPick: (s) => setState(() => _slot = s),
+                  onNeedSlots: _loadSlots,
+                ),
+              ),
             _Section(
               title: 'Контакты',
               child: Column(
@@ -274,23 +362,51 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               title: 'Оплата',
               child: Column(
                 children: [
-                  _PaymentOption(
-                    label: 'Наличными',
-                    value: 'CASH',
-                    group: _payment,
-                    onChanged: (v) => setState(() => _payment = v),
-                  ),
-                  _PaymentOption(
-                    label: 'Картой курьеру',
-                    value: 'CARD_ON_DELIVERY',
-                    group: _payment,
-                    onChanged: (v) => setState(() => _payment = v),
-                  ),
+                  // Выключенные заведением способы не показываем совсем:
+                  // сервер их всё равно отклонит
+                  if (_availability.cashEnabled)
+                    _PaymentOption(
+                      label: 'Наличными',
+                      value: 'CASH',
+                      group: _payment,
+                      onChanged: (v) => setState(() => _payment = v),
+                    ),
+                  if (_availability.cashEnabled &&
+                      _availability.askChangeFrom &&
+                      _payment == 'CASH')
+                    Padding(
+                      padding: const EdgeInsets.only(left: 12, bottom: 6),
+                      child: TextFormField(
+                        controller: _changeFrom,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(7),
+                        ],
+                        decoration: _input('Подготовить сдачу с суммы'),
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) return null;
+                          final amount = int.tryParse(v);
+                          if (amount == null) return 'Только цифры';
+                          if (amount < _total) {
+                            return 'Меньше суммы заказа (${formatTenge(_total)})';
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
+                  if (_availability.cardOnDeliveryEnabled)
+                    _PaymentOption(
+                      label: 'Картой курьеру',
+                      value: 'CARD_ON_DELIVERY',
+                      group: _payment,
+                      onChanged: (v) => setState(() => _payment = v),
+                    ),
                   _PaymentOption(
                     label: 'Kaspi онлайн',
                     value: 'KASPI_ONLINE',
-                    subtitle: 'Скоро',
-                    enabled: false,
+                    subtitle: _availability.kaspiOnlineEnabled ? null : 'Скоро',
+                    enabled: _availability.kaspiOnlineEnabled,
                     group: _payment,
                     onChanged: (v) => setState(() => _payment = v),
                   ),
@@ -598,8 +714,8 @@ class _LoyaltyLoginDialogState extends State<LoyaltyLoginDialog> {
   }
 
   Future<void> _verify() async {
-    if (!RegExp(r'^\d{4}$').hasMatch(_code.text)) {
-      setState(() => _error = 'Введите код из 4 цифр');
+    if (!RegExp(r'^\d{6}$').hasMatch(_code.text)) {
+      setState(() => _error = 'Введите код из 6 цифр');
       return;
     }
     setState(() {
@@ -636,7 +752,7 @@ class _LoyaltyLoginDialogState extends State<LoyaltyLoginDialog> {
               controller: _code,
               autofocus: true,
               keyboardType: TextInputType.number,
-              maxLength: 4,
+              maxLength: 6,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               decoration: InputDecoration(
                 labelText: 'Код из SMS',
@@ -805,5 +921,116 @@ class _PaymentOption extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Выбор времени: «как можно быстрее» или конкретный слот предзаказа.
+/// Когда заведение закрыто или скоро закрытие, «побыстрее» недоступно.
+class _TimePicker extends StatelessWidget {
+  final PreorderSlot? slot;
+  final List<PreorderSlot> slots;
+  final bool loading;
+  final bool asapAvailable;
+  final VoidCallback onAsap;
+  final ValueChanged<PreorderSlot> onPick;
+  final VoidCallback onNeedSlots;
+
+  const _TimePicker({
+    required this.slot,
+    required this.slots,
+    required this.loading,
+    required this.asapAvailable,
+    required this.onAsap,
+    required this.onPick,
+    required this.onNeedSlots,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _Choice(
+                label: 'Как можно быстрее',
+                selected: slot == null,
+                enabled: asapAvailable,
+                onTap: onAsap,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _Choice(
+                label: slot == null ? 'Ко времени' : slot!.label,
+                selected: slot != null,
+                onTap: () {
+                  if (slots.isEmpty) onNeedSlots();
+                  _showSlots(context);
+                },
+              ),
+            ),
+          ],
+        ),
+        if (loading)
+          const Padding(
+            padding: EdgeInsets.only(top: 10),
+            child: Text(
+              'Загружаем свободное время…',
+              style: TextStyle(fontSize: 13, color: Colors.black54),
+            ),
+          ),
+      ],
+    );
+  }
+
+  void _showSlots(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: slots.isEmpty
+            ? const Padding(
+                padding: EdgeInsets.all(24),
+                child: Text('Свободного времени пока нет'),
+              )
+            : ListView.builder(
+                shrinkWrap: true,
+                itemCount: slots.length,
+                itemBuilder: (_, i) {
+                  final s = slots[i];
+                  return ListTile(
+                    title: Text(s.label),
+                    subtitle: Text(_dayLabel(s.at)),
+                    trailing: slot?.at == s.at
+                        ? const Icon(Icons.check, color: Colors.black)
+                        : null,
+                    onTap: () {
+                      onPick(s);
+                      Navigator.pop(sheetContext);
+                    },
+                  );
+                },
+              ),
+      ),
+    );
+  }
+
+  static String _dayLabel(DateTime at) {
+    final now = DateTime.now();
+    final local = at.toLocal();
+    final isToday =
+        local.year == now.year && local.month == now.month && local.day == now.day;
+    if (isToday) return 'Сегодня';
+    final tomorrow = now.add(const Duration(days: 1));
+    final isTomorrow = local.year == tomorrow.year &&
+        local.month == tomorrow.month &&
+        local.day == tomorrow.day;
+    if (isTomorrow) return 'Завтра';
+    return '${local.day.toString().padLeft(2, '0')}.${local.month.toString().padLeft(2, '0')}';
   }
 }

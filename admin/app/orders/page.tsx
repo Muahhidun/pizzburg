@@ -1,7 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { AdminOrder, OrdersResponse, api, formatTenge, todayLocal } from '@/lib/api';
+import {
+  AdminCancelReason,
+  AdminOrder,
+  OrdersResponse,
+  api,
+  formatTenge,
+  todayLocal,
+} from '@/lib/api';
 
 const STATUS_RU: Record<string, string> = {
   NEW: 'Новый',
@@ -262,11 +269,17 @@ const NEXT_STATUS: Record<string, { value: string; label: string }[]> = {
 
 function StatusActions({ order, onRefresh }: { order: AdminOrder; onRefresh: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
   const options = NEXT_STATUS[order.status] ?? [];
   if (options.length === 0) return null;
 
   async function update(status: string) {
-    if (status === 'CANCELLED' && !window.confirm(`Отменить заказ №${order.number}?`)) return;
+    // Отмена идёт не через смену статуса, а отдельным окном: без причины
+    // из справочника отчёт по отменам не сгруппировать.
+    if (status === 'CANCELLED') {
+      setCancelling(true);
+      return;
+    }
     setBusy(status);
     try {
       await api.patch(`/admin/orders/${order.id}/status`, { status });
@@ -277,23 +290,138 @@ function StatusActions({ order, onRefresh }: { order: AdminOrder; onRefresh: () 
   }
 
   return (
-    <div className="mt-2 flex flex-wrap gap-1.5">
-      {options.map((option) => (
-        <button
-          key={option.value}
-          onClick={() => update(option.value)}
-          disabled={busy !== null}
-          className={`rounded-lg px-3 py-1.5 text-xs disabled:opacity-50 ${
-            option.value === 'DELIVERED'
-              ? 'bg-emerald-600 text-white'
-              : option.value === 'CANCELLED'
-                ? 'border border-red-300 text-red-600'
-                : 'border border-black/10 dark:border-white/15'
-          }`}
-        >
-          {busy === option.value ? 'Сохраняем…' : option.label}
-        </button>
-      ))}
+    <>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {options.map((option) => (
+          <button
+            key={option.value}
+            onClick={() => update(option.value)}
+            disabled={busy !== null}
+            className={`rounded-lg px-3 py-1.5 text-xs disabled:opacity-50 ${
+              option.value === 'DELIVERED'
+                ? 'bg-emerald-600 text-white'
+                : option.value === 'CANCELLED'
+                  ? 'border border-red-300 text-red-600'
+                  : 'border border-black/10 dark:border-white/15'
+            }`}
+          >
+            {busy === option.value ? 'Сохраняем…' : option.label}
+          </button>
+        ))}
+      </div>
+      {cancelling && (
+        <CancelDialog
+          order={order}
+          onClose={() => setCancelling(false)}
+          onDone={() => {
+            setCancelling(false);
+            onRefresh();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function CancelDialog({
+  order,
+  onClose,
+  onDone,
+}: {
+  order: AdminOrder;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [reasons, setReasons] = useState<AdminCancelReason[] | null>(null);
+  const [reasonId, setReasonId] = useState('');
+  const [comment, setComment] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .get<AdminCancelReason[]>('/admin/cancel-reasons')
+      // Оператору доступны все активные причины, включая внутренние
+      .then((list) => setReasons(list.filter((r) => r.isActive)))
+      .catch((e) => setError(e.message));
+  }, []);
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.patch(`/admin/orders/${order.id}/cancel`, {
+        reasonId,
+        ...(comment.trim() ? { comment: comment.trim() } : {}),
+      });
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-5 dark:bg-neutral-900">
+        <h3 className="text-lg font-semibold">Отмена заказа №{order.number}</h3>
+        <p className="mt-1 text-sm text-neutral-500">
+          {formatTenge(order.total)} · причина попадёт в отчёт по отменам
+        </p>
+
+        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+
+        <div className="mt-4 max-h-64 space-y-1 overflow-y-auto">
+          {reasons === null ? (
+            <p className="text-sm text-neutral-500">Загружаем причины…</p>
+          ) : (
+            reasons.map((r) => (
+              <label
+                key={r.id}
+                className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-black/5 dark:hover:bg-white/10"
+              >
+                <input
+                  type="radio"
+                  name={`cancel-${order.id}`}
+                  checked={reasonId === r.id}
+                  onChange={() => setReasonId(r.id)}
+                />
+                <span>{r.label}</span>
+                {!r.availableToCustomer && (
+                  <span className="text-xs text-neutral-400">внутренняя</span>
+                )}
+              </label>
+            ))
+          )}
+        </div>
+
+        <textarea
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          maxLength={300}
+          rows={2}
+          placeholder="Комментарий (необязательно)"
+          className="mt-3 w-full rounded-lg border border-black/10 px-3 py-2 text-sm dark:border-white/15 dark:bg-neutral-800"
+        />
+
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            disabled={busy}
+            className="rounded-lg border border-black/10 px-3 py-1.5 text-sm disabled:opacity-50 dark:border-white/15"
+          >
+            Не отменять
+          </button>
+          <button
+            onClick={submit}
+            disabled={busy || !reasonId}
+            className="rounded-lg bg-red-600 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+          >
+            {busy ? 'Отменяем…' : 'Отменить заказ'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

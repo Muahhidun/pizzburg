@@ -1,8 +1,11 @@
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsEnum,
   IsInt,
   IsISO8601,
+  IsObject,
   IsOptional,
   IsString,
   IsUrl,
@@ -11,7 +14,9 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { OrderStatus } from '@prisma/client';
 
 export class UpdateCategoryDto {
@@ -69,6 +74,93 @@ export class UpdateSettingsDto {
   @IsOptional() @IsBoolean() earnWhenPointsSpent?: boolean;
   @IsOptional() @IsBoolean() allowPointsWithPromotions?: boolean;
   @IsOptional() @IsBoolean() earnOnPromotionalOrders?: boolean;
+}
+
+/** Аварийный режим приёма заказов и сообщения клиенту */
+export class UpdateOrderingDto {
+  @IsOptional()
+  @IsEnum(['ALL', 'PICKUP_ONLY', 'CLOSED'])
+  mode?: 'ALL' | 'PICKUP_ONLY' | 'CLOSED';
+
+  @IsOptional() @IsString() @MaxLength(200) closedMessage?: string;
+  @IsOptional() @IsString() @MaxLength(200) pickupOnlyMessage?: string;
+}
+
+/** Профиль расписания: обычный, Рамадан, конец года */
+export class ScheduleProfileDto {
+  @IsString() @Length(1, 40) id: string;
+  @IsString() @Length(1, 60) name: string;
+
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Дата в формате ГГГГ-ММ-ДД' })
+  activeFrom?: string | null;
+
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Дата в формате ГГГГ-ММ-ДД' })
+  activeTo?: string | null;
+
+  /** { mon: [["10:00","22:00"]], ... }; пустой массив — выходной */
+  @IsObject()
+  hours: Record<string, [string, string][]>;
+}
+
+export class UpdateScheduleDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  timezone?: string;
+
+  @IsArray()
+  @ArrayMaxSize(12)
+  @ValidateNested({ each: true })
+  @Type(() => ScheduleProfileDto)
+  profiles: ScheduleProfileDto[];
+}
+
+export class UpdatePreorderDto {
+  @IsOptional() @IsBoolean() enabled?: boolean;
+  @IsOptional() @IsInt() @Min(0) @Max(1440) deliveryLeadMinutes?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(1440) pickupLeadMinutes?: number;
+  @IsOptional() @IsInt() @Min(5) @Max(120) slotStepMinutes?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(120) displayPaddingMinutes?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(120) closeAsapBeforeMinutes?: number;
+  @IsOptional() @IsInt() @Min(1) @Max(30) maxDaysAhead?: number;
+}
+
+export class UpdatePaymentsDto {
+  @IsOptional() @IsBoolean() cash?: boolean;
+  @IsOptional() @IsBoolean() cardOnDelivery?: boolean;
+  @IsOptional() @IsBoolean() kaspiOnline?: boolean;
+  @IsOptional() @IsBoolean() askChangeFrom?: boolean;
+}
+
+export class UpdateCancellationDto {
+  @IsInt() @Min(0) @Max(120) customerWindowMinutes: number;
+}
+
+export class PublishLegalDto {
+  @IsEnum(['OFFER', 'PRIVACY', 'REQUISITES'])
+  type: 'OFFER' | 'PRIVACY' | 'REQUISITES';
+
+  @IsString() @Length(3, 200) title: string;
+  @IsString() @Length(10, 200_000) content: string;
+}
+
+export class CancelReasonDto {
+  @IsString() @Length(2, 100) label: string;
+  @IsOptional() @IsBoolean() availableToCustomer?: boolean;
+}
+
+export class UpdateCancelReasonDto {
+  @IsOptional() @IsString() @Length(2, 100) label?: string;
+  @IsOptional() @IsBoolean() isActive?: boolean;
+  @IsOptional() @IsBoolean() availableToCustomer?: boolean;
+  @IsOptional() @IsInt() @Min(0) sortOrder?: number;
+}
+
+export class CancelOrderByAdminDto {
+  @IsString() reasonId: string;
+  @IsOptional() @IsString() @MaxLength(300) comment?: string;
 }
 
 export class UpdateOrderStatusDto {

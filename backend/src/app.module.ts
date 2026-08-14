@@ -9,6 +9,8 @@ import { PromotionsModule } from './promotions/promotions.module';
 import { AuthModule } from './auth/auth.module';
 import { AdminModule } from './admin/admin.module';
 import { LoyaltyModule } from './loyalty/loyalty.module';
+import { AvailabilityModule } from './availability/availability.module';
+import { LegalModule } from './legal/legal.module';
 
 @Controller()
 class RootController {
@@ -44,6 +46,8 @@ class RootController {
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
     PrismaModule,
+    AvailabilityModule,
+    LegalModule,
     PosterModule,
     MenuModule,
     OrdersModule,

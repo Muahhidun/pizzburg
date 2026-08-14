@@ -8,6 +8,7 @@ import 'screens/menu_screen.dart';
 import 'state/auth.dart';
 import 'services/push_notifications.dart';
 import 'screens/order_screen.dart';
+import 'screens/legal_screen.dart';
 import 'api/models.dart';
 
 final _navigatorKey = GlobalKey<NavigatorState>();
@@ -85,8 +86,44 @@ class PizzBurgApp extends StatelessWidget {
           scaffoldBackgroundColor: const Color(0xFFF6F6F6),
           fontFamily: 'Inter',
         ),
-        home: const MenuScreen(),
+        home: const _LegalGate(child: MenuScreen()),
       ),
     );
+  }
+}
+
+/// Поднимает экран согласия, как только сервер сообщил о непринятых
+/// редакциях: после входа, после восстановления сессии и после публикации
+/// новой оферты. Витрину при этом не прячет — меню можно смотреть без
+/// согласия, оно требуется к моменту заказа.
+class _LegalGate extends StatefulWidget {
+  final Widget child;
+  const _LegalGate({required this.child});
+
+  @override
+  State<_LegalGate> createState() => _LegalGateState();
+}
+
+class _LegalGateState extends State<_LegalGate> {
+  bool _showing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final needs = context.watch<AuthState>().needsLegalConsent;
+    if (needs && !_showing) {
+      _showing = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await _navigatorKey.currentState?.push(
+          MaterialPageRoute(
+            builder: (_) => const LegalConsentScreen(),
+            fullscreenDialog: true,
+          ),
+        );
+        // Сбрасываем флаг после закрытия: если клиент вышел и вошёл снова
+        // либо вышла новая редакция, экран должен подняться заново.
+        if (mounted) _showing = false;
+      });
+    }
+    return widget.child;
   }
 }

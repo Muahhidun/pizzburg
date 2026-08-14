@@ -20,9 +20,18 @@ import {
   ReorderDto,
   UpdateCategoryDto,
   UpdateProductDto,
+  UpdateCancellationDto,
+  UpdateOrderingDto,
+  UpdatePaymentsDto,
+  UpdatePreorderDto,
+  UpdateScheduleDto,
   UpdateSettingsDto,
   UpdateOrderStatusDto,
   AdjustLoyaltyDto,
+  PublishLegalDto,
+  CancelReasonDto,
+  CancelOrderByAdminDto,
+  UpdateCancelReasonDto,
 } from './admin.dto';
 
 @Controller('admin')
@@ -108,6 +117,12 @@ export class AdminController {
     return this.admin.updateOrderStatus(id, dto.status);
   }
 
+  /** Отмена оператором: причина обязательна, иначе отчёт неполон */
+  @Patch('orders/:id/cancel')
+  cancelOrder(@Param('id') id: string, @Body() dto: CancelOrderByAdminDto) {
+    return this.admin.cancelOrder(id, dto.reasonId, dto.comment);
+  }
+
   @Get('promotions')
   promotions() {
     return this.admin.promotions();
@@ -131,6 +146,71 @@ export class AdminController {
   @Patch('settings')
   updateSettings(@Body() dto: UpdateSettingsDto) {
     return this.admin.updateSettings(dto);
+  }
+
+  /** Аварийный режим приёма заказов */
+  @Patch('settings/ordering')
+  updateOrdering(@Body() dto: UpdateOrderingDto) {
+    return this.admin.updateOrdering(dto);
+  }
+
+  /** Профили расписания (обычное, Рамадан, конец года) */
+  @Patch('settings/schedule')
+  updateSchedule(@Body() dto: UpdateScheduleDto) {
+    return this.admin.updateSchedule(dto);
+  }
+
+  @Patch('settings/preorder')
+  updatePreorder(@Body() dto: UpdatePreorderDto) {
+    return this.admin.updatePreorder(dto);
+  }
+
+  @Patch('settings/payments')
+  updatePayments(@Body() dto: UpdatePaymentsDto) {
+    return this.admin.updatePayments(dto);
+  }
+
+  @Patch('settings/cancellation')
+  updateCancellation(@Body() dto: UpdateCancellationDto) {
+    return this.admin.updateCancellation(dto);
+  }
+
+  // ─── Юридические документы ───────────────────────────────────
+
+  @Get('legal')
+  legalDocuments() {
+    return this.admin.legalDocuments();
+  }
+
+  /** Публикация новой редакции; старые версии сохраняются */
+  @Post('legal')
+  publishLegal(@Body() dto: PublishLegalDto) {
+    return this.admin.publishLegal(dto);
+  }
+
+  // ─── Причины отмены ──────────────────────────────────────────
+
+  @Get('cancel-reasons')
+  cancelReasons() {
+    return this.admin.cancelReasons();
+  }
+
+  @Post('cancel-reasons')
+  createCancelReason(@Body() dto: CancelReasonDto) {
+    return this.admin.createCancelReason(dto);
+  }
+
+  @Patch('cancel-reasons/:id')
+  updateCancelReason(
+    @Param('id') id: string,
+    @Body() dto: UpdateCancelReasonDto,
+  ) {
+    return this.admin.updateCancelReason(id, dto);
+  }
+
+  @Get('reports/cancellations')
+  cancellationReport(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.admin.cancellationReport(from, to);
   }
 
   @Post('poster-accounts')

@@ -4,6 +4,7 @@ import { IsArray, IsInt, IsOptional, IsString, Min, ValidateNested } from 'class
 import { PrismaService } from '../prisma/prisma.service';
 import { PromotionsService } from './promotions.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
+import { AvailabilityService } from '../availability/availability.service';
 
 class CartPreviewItemDto {
   @IsString()
@@ -37,6 +38,7 @@ export class CartController {
     private readonly prisma: PrismaService,
     private readonly promotions: PromotionsService,
     private readonly loyalty: LoyaltyService,
+    private readonly availability: AvailabilityService,
   ) {}
 
   @Post(':tenantSlug/preview')
@@ -77,6 +79,7 @@ export class CartController {
 
     const settings = (tenant.settings as any)?.delivery ?? {};
     const loyaltyPolicy = this.loyalty.policy(tenant.settings);
+    const availability = this.availability.getState(tenant.settings);
     return {
       items: lines,
       gifts: promo.gifts.map((g) => ({
@@ -98,7 +101,22 @@ export class CartController {
         minOrder: settings.minOrder ?? 0,
         fee: subtotal >= (settings.freeFrom ?? Infinity) ? 0 : (settings.fee ?? 0),
         freeFrom: settings.freeFrom ?? null,
-        available: subtotal >= (settings.minOrder ?? 0),
+        // Доставка доступна и по сумме, и по режиму приёма/расписанию
+        available:
+          subtotal >= (settings.minOrder ?? 0) && availability.deliveryAvailable,
+      },
+      // Режим приёма, расписание, предзаказ, способы оплаты и окно отмены
+      availability: {
+        mode: availability.mode,
+        isOpenNow: availability.isOpenNow,
+        deliveryAvailable: availability.deliveryAvailable,
+        pickupAvailable: availability.pickupAvailable,
+        asapAvailable: availability.asapAvailable,
+        message: availability.message,
+        todayHours: availability.todayHours,
+        preorderEnabled: availability.preorder.enabled,
+        payments: availability.payments,
+        cancelWindowMinutes: availability.cancellation.customerWindowMinutes,
       },
     };
   }

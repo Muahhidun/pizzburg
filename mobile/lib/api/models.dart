@@ -128,6 +128,7 @@ class CartPreview {
   final bool earnWhenPointsSpent;
   final bool allowPointsWithPromotions;
   final bool earnOnPromotionalOrders;
+  final Availability availability;
 
   CartPreview({
     required this.subtotal,
@@ -142,6 +143,7 @@ class CartPreview {
     required this.earnWhenPointsSpent,
     required this.allowPointsWithPromotions,
     required this.earnOnPromotionalOrders,
+    required this.availability,
   });
 
   factory CartPreview.fromJson(Map<String, dynamic> json) {
@@ -164,8 +166,81 @@ class CartPreview {
           json['loyalty']?['allowPointsWithPromotions'] == true,
       earnOnPromotionalOrders:
           json['loyalty']?['earnOnPromotionalOrders'] == true,
+      availability: Availability.fromJson(json['availability']),
     );
   }
+}
+
+/// Режим приёма заказов: что сейчас можно предложить клиенту.
+/// Считает сервер — приложение только показывает.
+class Availability {
+  final String mode; // ALL | PICKUP_ONLY | CLOSED
+  final bool isOpenNow;
+  final bool deliveryAvailable;
+  final bool pickupAvailable;
+  final bool asapAvailable;
+  final String? message;
+  final bool preorderEnabled;
+  final List<List<String>> todayHours;
+  final bool cashEnabled;
+  final bool cardOnDeliveryEnabled;
+  final bool kaspiOnlineEnabled;
+  final bool askChangeFrom;
+  final int cancelWindowMinutes;
+
+  const Availability({
+    required this.mode,
+    required this.isOpenNow,
+    required this.deliveryAvailable,
+    required this.pickupAvailable,
+    required this.asapAvailable,
+    this.message,
+    required this.preorderEnabled,
+    required this.todayHours,
+    required this.cashEnabled,
+    required this.cardOnDeliveryEnabled,
+    required this.kaspiOnlineEnabled,
+    required this.askChangeFrom,
+    required this.cancelWindowMinutes,
+  });
+
+  /// Отсутствие блока в ответе не должно ломать приложение:
+  /// считаем, что всё доступно, а сервер всё равно перепроверит.
+  factory Availability.fromJson(Map<String, dynamic>? json) {
+    final j = json ?? const <String, dynamic>{};
+    final payments = (j['payments'] as Map?)?.cast<String, dynamic>() ??
+        const <String, dynamic>{};
+    return Availability(
+      mode: j['mode'] ?? 'ALL',
+      isOpenNow: j['isOpenNow'] ?? true,
+      deliveryAvailable: j['deliveryAvailable'] ?? true,
+      pickupAvailable: j['pickupAvailable'] ?? true,
+      asapAvailable: j['asapAvailable'] ?? true,
+      message: j['message'],
+      preorderEnabled: j['preorderEnabled'] ?? true,
+      todayHours: ((j['todayHours'] ?? const []) as List)
+          .map<List<String>>((i) => (i as List).cast<String>())
+          .toList(),
+      cashEnabled: payments['cash'] ?? true,
+      cardOnDeliveryEnabled: payments['cardOnDelivery'] ?? true,
+      kaspiOnlineEnabled: payments['kaspiOnline'] ?? false,
+      askChangeFrom: payments['askChangeFrom'] ?? true,
+      cancelWindowMinutes: j['cancelWindowMinutes'] ?? 0,
+    );
+  }
+}
+
+/// Слот предзаказа из /menu/:slug/preorder-slots
+class PreorderSlot {
+  final DateTime at;
+  final String label;
+
+  const PreorderSlot({required this.at, required this.label});
+
+  factory PreorderSlot.fromJson(Map<String, dynamic> json) => PreorderSlot(
+    at: DateTime.parse(json['at']),
+    label: json['label'] ?? '',
+  );
 }
 
 class CartGift {
@@ -207,6 +282,60 @@ class CreatedOrder {
     number: json['number'],
     total: json['total'],
     pointsSpent: json['pointsSpent'] ?? 0,
+  );
+}
+
+/// Юридический документ в действующей редакции.
+///
+/// Номер версии носим с собой не для красоты: согласие хранится версией, и
+/// при выпуске новой редакции оферты его нужно запросить заново.
+class LegalDocument {
+  final String type;
+  final int version;
+  final String title;
+  final String content;
+
+  const LegalDocument({
+    required this.type,
+    required this.version,
+    required this.title,
+    required this.content,
+  });
+
+  factory LegalDocument.fromJson(Map<String, dynamic> json) => LegalDocument(
+    type: json['type']?.toString() ?? '',
+    version: (json['version'] as num?)?.toInt() ?? 0,
+    title: json['title']?.toString() ?? '',
+    content: json['content']?.toString() ?? '',
+  );
+
+  /// Человеческое название для заголовков и ссылок
+  String get displayTitle {
+    if (title.isNotEmpty) return title;
+    switch (type) {
+      case 'OFFER':
+        return 'Публичная оферта';
+      case 'PRIVACY':
+        return 'Политика конфиденциальности';
+      case 'REQUISITES':
+        return 'Реквизиты';
+      default:
+        return type;
+    }
+  }
+}
+
+/// Причина отмены из справочника. Свободный текст кассира невозможно
+/// сгруппировать в отчёт, поэтому клиент выбирает из списка.
+class CancelReason {
+  final String id;
+  final String label;
+
+  const CancelReason({required this.id, required this.label});
+
+  factory CancelReason.fromJson(Map<String, dynamic> json) => CancelReason(
+    id: json['id']?.toString() ?? '',
+    label: json['label']?.toString() ?? '',
   );
 }
 

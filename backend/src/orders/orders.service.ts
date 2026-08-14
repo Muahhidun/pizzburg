@@ -12,6 +12,9 @@ import { normalizeKzPhone } from '../common/phone';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { OrderStatus } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AvailabilityService } from '../availability/availability.service';
+import { CancelReasonsService } from './cancel-reasons.service';
+import { LegalService } from '../legal/legal.service';
 
 interface DeliverySettings {
   minOrder: number;
@@ -42,6 +45,9 @@ export class OrdersService {
     private readonly promotions: PromotionsService,
     private readonly loyalty: LoyaltyService,
     private readonly notifications: NotificationsService,
+    private readonly availability: AvailabilityService,
+    private readonly cancelReasons: CancelReasonsService,
+    private readonly legal: LegalService,
   ) {}
 
   async createOrder(
@@ -61,8 +67,26 @@ export class OrdersService {
       throw new BadRequestException('Kaspi онлайн ещё не подключён');
     }
 
+    // Режим приёма, расписание, предзаказ и включённые способы оплаты.
+    // Клиент прячет недоступные варианты, но решает сервер.
+    const availability = this.availability.assertOrderAllowed(tenant.settings, {
+      type: dto.type,
+      paymentMethod: dto.paymentMethod,
+      scheduledAt: dto.scheduledAt,
+    });
+
     if (dto.type === 'DELIVERY' && !dto.address) {
       throw new BadRequestException('Для доставки нужен адрес');
+    }
+
+    // «Сдача с» имеет смысл только для наличных
+    if (dto.changeFrom != null) {
+      if (dto.paymentMethod !== 'CASH') {
+        throw new BadRequestException('Сдача указывается только при оплате наличными');
+      }
+      if (!availability.payments.askChangeFrom) {
+        throw new BadRequestException('Уточнение сдачи отключено');
+      }
     }
 
     // Загружаем товары корзины и проверяем доступность
@@ -122,6 +146,8 @@ export class OrdersService {
       dto.items,
       dto.promoCode,
     );
+
+    const legalVersions = await this.legal.currentVersions(tenant.id);
 
     // Клиент по телефону (профиль сохраняется между заказами).
     // Формат единый с OTP, иначе один человек создаёт несколько профилей,
@@ -215,6 +241,10 @@ export class OrdersService {
           pointsSpent,
           total,
           promoCode: dto.promoCode,
+          changeFrom: dto.changeFrom ?? null,
+          // Снимок действующих редакций: при споре видно, с какой
+          // версией оферты клиент оформлял именно этот заказ
+          legalVersions: legalVersions as object,
           paymentMethod: dto.paymentMethod,
           paymentStatus:
             dto.paymentMethod === 'KASPI_ONLINE' ? 'PENDING' : 'NOT_REQUIRED',
@@ -303,6 +333,7 @@ export class OrdersService {
           orderBy: { posterAccount: { sortOrder: 'asc' } },
         },
         customer: true,
+        tenant: { select: { settings: true } },
       },
     });
 
@@ -341,11 +372,29 @@ export class OrdersService {
               .map((p) => p.posterAccount.name)
               .join(', ')})`
           : '';
-      const payNote = {
-        CASH: 'Оплата: наличные курьеру',
-        CARD_ON_DELIVERY: 'Оплата: карта курьеру (взять терминал)',
-        KASPI_ONLINE: 'ОПЛАЧЕНО ОНЛАЙН (Kaspi)',
-      }[order.paymentMethod];
+      // Сдачу показываем только на первой части: разменивает один кассир,
+      // а видеть строку на обоих планшетах — путаница.
+      const changeNote =
+        i === 0 && order.paymentMethod === 'CASH' && order.changeFrom
+          ? ` (готовить сдачу с ${order.changeFrom} ₸)`
+          : '';
+      const payNote =
+        {
+          CASH: 'Оплата: наличные курьеру',
+          CARD_ON_DELIVERY: 'Оплата: карта курьеру (взять терминал)',
+          KASPI_ONLINE: 'ОПЛАЧЕНО ОНЛАЙН (Kaspi)',
+        }[order.paymentMethod] + changeNote;
+
+      const scheduledNote = order.scheduledAt
+        ? ` | ПРЕДЗАКАЗ на ${new Intl.DateTimeFormat('ru-RU', {
+            timeZone:
+              (order.tenant?.settings as any)?.timezone ?? 'Asia/Almaty',
+            day: '2-digit',
+            month: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          }).format(order.scheduledAt)}`
+        : '';
 
       // «Личная интеграция» этой части: подарки + списанные баллы.
       const giftIntegrationSum = items
@@ -368,7 +417,10 @@ export class OrdersService {
       if (process.env.POSTER_DRY_RUN === '1') {
         this.logger.warn(
           `DRY RUN: заказ №${order.number} часть ${i + 1}/${parts.length} → ` +
-            `${d.posterAccount.name}: ${items.map((x) => `${x.name}×${x.qty}`).join(', ')}${partNote}`,
+            `${d.posterAccount.name}: ${items.map((x) => `${x.name}×${x.qty}`).join(', ')}${partNote}` +
+            // Комментарий кассира целиком: по нему проверяем сдачу,
+            // предзаказ и пометки подарков перед боевым тестом
+            `\n  комментарий кассиру: ${payNote}.${order.comment ? ` ${order.comment}` : ''}${scheduledNote}${giftNote}${pointsNote}`,
         );
         await this.prisma.orderDispatch.update({
           where: { id: d.id },
@@ -387,6 +439,7 @@ export class OrdersService {
             comment:
               `Заказ из приложения №${order.number}. ${payNote}.` +
               (order.comment ? ` ${order.comment}` : '') +
+              scheduledNote +
               giftNote +
               pointsNote +
               partNote,
@@ -505,6 +558,112 @@ export class OrdersService {
   }
 
   /** Ручное продвижение статуса; DELIVERED начисляет кэшбэк, CANCELLED возвращает списание. */
+  /**
+   * Отмена заказа самим клиентом в отведённое окно.
+   *
+   * Окно намеренно короткое: пока кассир не принял заказ на планшете,
+   * отмена бесплатна для всех. Возврат баллов делает LoyaltyService
+   * через общий обработчик статуса.
+   */
+  async cancelByCustomer(
+    orderId: string,
+    customerId: string,
+    reason: string | undefined,
+    reasonId?: string,
+    now = new Date(),
+  ) {
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, customerId },
+      include: { tenant: { select: { settings: true } } },
+    });
+    if (!order) throw new NotFoundException('Заказ не найден');
+
+    if (order.status === 'CANCELLED') {
+      return this.prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    }
+
+    const { cancellation } = this.availability.getState(order.tenant.settings, now);
+    if (cancellation.customerWindowMinutes <= 0) {
+      throw new BadRequestException(
+        'Отмена из приложения недоступна — позвоните нам, пожалуйста',
+      );
+    }
+
+    // Принятый кассиром заказ клиент уже не отменяет сам: еда могла
+    // уйти в работу, и списание должен разбирать оператор.
+    if (order.status !== 'NEW') {
+      throw new BadRequestException(
+        'Заказ уже принят — отмену нужно согласовать с оператором',
+      );
+    }
+
+    const deadline = new Date(
+      order.createdAt.getTime() + cancellation.customerWindowMinutes * 60_000,
+    );
+    if (now > deadline) {
+      throw new BadRequestException(
+        `Отменить можно в течение ${cancellation.customerWindowMinutes} минут после оформления`,
+      );
+    }
+
+    // Причина из справочника — иначе отчёт по отменам не сгруппировать
+    const label = reasonId
+      ? await this.cancelReasons.resolve(order.tenantId, reasonId, true)
+      : null;
+
+    await this.prisma.order.update({
+      where: { id: order.id },
+      data: {
+        cancelReasonId: reasonId ?? null,
+        cancelReason: reason?.slice(0, 300) || label || 'Отменён клиентом',
+        cancelledBy: 'CUSTOMER',
+        cancelledAt: now,
+      },
+    });
+    return this.setStatus(order.id, 'CANCELLED', order.tenantId);
+  }
+
+  /**
+   * Отмена оператором из ленты заказов.
+   *
+   * Отдельный метод, а не смена статуса на CANCELLED: без причины из
+   * справочника отчёт по отменам превращается в число без разбивки, ради
+   * которой он и делался. Окно отмены на оператора не распространяется —
+   * он отменяет и принятый, и готовящийся заказ.
+   */
+  async cancelByOperator(
+    orderId: string,
+    tenantId: string,
+    reasonId: string,
+    comment?: string,
+    now = new Date(),
+  ) {
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, tenantId },
+    });
+    if (!order) throw new NotFoundException('Заказ не найден');
+    if (order.status === 'CANCELLED') {
+      return this.prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    }
+
+    // Оператору доступны все причины, включая внутренние
+    // («нет курьеров», «нет позиции») — их клиент выбирать не должен.
+    const label = await this.cancelReasons.resolve(tenantId, reasonId, false);
+
+    await this.prisma.order.update({
+      where: { id: order.id },
+      data: {
+        cancelReasonId: reasonId,
+        cancelReason: comment?.slice(0, 300) || label,
+        // Именно ADMIN, а не OPERATOR: значение уже зафиксировано схемой и
+        // отчётом по отменам, второе написание разбило бы разбивку надвое.
+        cancelledBy: 'ADMIN',
+        cancelledAt: now,
+      },
+    });
+    return this.setStatus(order.id, 'CANCELLED', tenantId);
+  }
+
   async setStatus(orderId: string, next: OrderStatus, tenantId?: string) {
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, ...(tenantId ? { tenantId } : {}) },

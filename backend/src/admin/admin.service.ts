@@ -9,12 +9,23 @@ import { ObjectStorageService } from '../storage/object-storage.service';
 import {
   PosterAccountDto,
   PromotionDto,
+  UpdateCancellationDto,
   UpdateCategoryDto,
+  UpdateOrderingDto,
+  UpdatePaymentsDto,
+  UpdatePreorderDto,
   UpdateProductDto,
+  UpdateScheduleDto,
   UpdateSettingsDto,
+  PublishLegalDto,
+  CancelReasonDto,
+  UpdateCancelReasonDto,
 } from './admin.dto';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { OrdersService } from '../orders/orders.service';
+import { AvailabilityService } from '../availability/availability.service';
+import { LegalService } from '../legal/legal.service';
+import { CancelReasonsService } from '../orders/cancel-reasons.service';
 import { OrderStatus } from '@prisma/client';
 
 /**
@@ -29,6 +40,9 @@ export class AdminService {
     private readonly storage: ObjectStorageService,
     private readonly loyalty: LoyaltyService,
     private readonly orderService: OrdersService,
+    private readonly availability: AvailabilityService,
+    private readonly legal: LegalService,
+    private readonly reasons: CancelReasonsService,
   ) {}
 
   private async tenant(slug = 'pizzburg') {
@@ -414,6 +428,11 @@ export class AdminService {
     return this.orderService.setStatus(id, status, tenant.id);
   }
 
+  async cancelOrder(id: string, reasonId: string, comment?: string) {
+    const tenant = await this.tenant();
+    return this.orderService.cancelByOperator(id, tenant.id, reasonId, comment);
+  }
+
   async promotions() {
     const tenant = await this.tenant();
     const promos = await this.prisma.promotion.findMany({
@@ -502,6 +521,9 @@ export class AdminService {
       settings: tenant.settings,
       venues,
       posterAccounts: accounts, // без токенов
+      // Что видит клиент прямо сейчас — чтобы владелец сразу понимал
+      // последствия своих настроек, не открывая приложение
+      availabilityNow: this.availability.getState(tenant.settings),
     };
   }
 
@@ -541,6 +563,154 @@ export class AdminService {
       data: { settings: { ...current, delivery, loyalty } },
       select: { settings: true },
     });
+  }
+
+  /** Общий помощник: патч одной секции настроек тенанта */
+  private async patchSettings(section: string, patch: Record<string, unknown>) {
+    const tenant = await this.tenant();
+    const current = (tenant.settings as any) ?? {};
+    return this.prisma.tenant.update({
+      where: { id: tenant.id },
+      data: {
+        settings: {
+          ...current,
+          [section]: { ...(current[section] ?? {}), ...patch },
+        },
+      },
+      select: { settings: true },
+    });
+  }
+
+  /** Аварийный режим приёма: всё / только самовывоз / приём закрыт */
+  async updateOrdering(dto: UpdateOrderingDto) {
+    return this.patchSettings('ordering', { ...dto });
+  }
+
+  /**
+   * Профили расписания. Валидируем интервалы здесь: сломанное время
+   * закрыло бы заведение молча, и владелец узнал бы об этом от клиентов.
+   */
+  async updateSchedule(dto: UpdateScheduleDto) {
+    const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+    const seenIds = new Set<string>();
+
+    for (const profile of dto.profiles) {
+      if (seenIds.has(profile.id)) {
+        throw new BadRequestException(`Дублируется профиль «${profile.id}»`);
+      }
+      seenIds.add(profile.id);
+
+      if (profile.activeFrom && profile.activeTo && profile.activeFrom > profile.activeTo) {
+        throw new BadRequestException(
+          `Профиль «${profile.name}»: дата начала позже даты окончания`,
+        );
+      }
+
+      for (const [day, intervals] of Object.entries(profile.hours ?? {})) {
+        if (!days.includes(day)) {
+          throw new BadRequestException(`Профиль «${profile.name}»: неизвестный день ${day}`);
+        }
+        if (!Array.isArray(intervals)) {
+          throw new BadRequestException(`Профиль «${profile.name}»: интервалы дня ${day} должны быть списком`);
+        }
+        for (const interval of intervals) {
+          if (!Array.isArray(interval) || interval.length !== 2) {
+            throw new BadRequestException(
+              `Профиль «${profile.name}», ${day}: интервал задаётся парой времён`,
+            );
+          }
+          const [from, to] = interval;
+          if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(from) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(to)) {
+            throw new BadRequestException(
+              `Профиль «${profile.name}», ${day}: время в формате ЧЧ:ММ`,
+            );
+          }
+          if (from >= to) {
+            throw new BadRequestException(
+              `Профиль «${profile.name}», ${day}: «${from}» не раньше «${to}». ` +
+                'Смену через полночь пока задавайте двумя интервалами.',
+            );
+          }
+        }
+      }
+    }
+
+    const tenant = await this.tenant();
+    const current = (tenant.settings as any) ?? {};
+    return this.prisma.tenant.update({
+      where: { id: tenant.id },
+      data: {
+        settings: {
+          ...current,
+          ...(dto.timezone ? { timezone: dto.timezone } : {}),
+          schedule: { profiles: dto.profiles },
+        },
+      },
+      select: { settings: true },
+    });
+  }
+
+  async updatePreorder(dto: UpdatePreorderDto) {
+    return this.patchSettings('preorder', { ...dto });
+  }
+
+  async updatePayments(dto: UpdatePaymentsDto) {
+    if (
+      dto.cash === false &&
+      dto.cardOnDelivery === false &&
+      dto.kaspiOnline !== true
+    ) {
+      throw new BadRequestException(
+        'Нельзя выключить все способы оплаты — заказ станет невозможно оформить',
+      );
+    }
+    return this.patchSettings('payments', { ...dto });
+  }
+
+  async updateCancellation(dto: UpdateCancellationDto) {
+    return this.patchSettings('cancellation', { ...dto });
+  }
+
+  // ─── Юридические документы и причины отмены ───────────────────
+
+  async legalDocuments() {
+    const tenant = await this.tenant();
+    const [current, offer, privacy, requisites] = await Promise.all([
+      this.legal.current(tenant.id),
+      this.legal.history(tenant.id, 'OFFER'),
+      this.legal.history(tenant.id, 'PRIVACY'),
+      this.legal.history(tenant.id, 'REQUISITES'),
+    ]);
+    return { current, history: { OFFER: offer, PRIVACY: privacy, REQUISITES: requisites } };
+  }
+
+  async publishLegal(dto: PublishLegalDto) {
+    const tenant = await this.tenant();
+    return this.legal.publish(tenant.id, dto.type as any, dto.title, dto.content);
+  }
+
+  async cancelReasons() {
+    const tenant = await this.tenant();
+    return this.reasons.listAll(tenant.id);
+  }
+
+  async createCancelReason(dto: CancelReasonDto) {
+    const tenant = await this.tenant();
+    return this.reasons.create(tenant.id, dto);
+  }
+
+  async updateCancelReason(id: string, dto: UpdateCancelReasonDto) {
+    return this.reasons.update(id, dto);
+  }
+
+  /** Отчёт по отменам за период (по умолчанию — последние 30 дней) */
+  async cancellationReport(fromStr?: string, toStr?: string) {
+    const tenant = await this.tenant();
+    const to = toStr ? new Date(toStr) : new Date();
+    const from = fromStr
+      ? new Date(fromStr)
+      : new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
+    return this.reasons.report(tenant.id, from, to);
   }
 
   async addPosterAccount(dto: PosterAccountDto) {

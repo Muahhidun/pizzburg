@@ -129,6 +129,18 @@ export interface AdminOrder {
   parts: OrderPart[];
 }
 
+/**
+ * Причина отмены из справочника. `availableToCustomer` отделяет причины,
+ * которые видит клиент, от внутренних («нет курьеров», «нет позиции»).
+ */
+export interface AdminCancelReason {
+  id: string;
+  label: string;
+  isActive: boolean;
+  availableToCustomer: boolean;
+  sortOrder: number;
+}
+
 export interface OrdersResponse {
   date: string;
   total: number;
@@ -150,9 +162,54 @@ export interface Promotion {
   giftProductName: string;
 }
 
+export type OrderingMode = 'ALL' | 'PICKUP_ONLY' | 'CLOSED';
+export type WeekdayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+
+export interface ScheduleProfile {
+  id: string;
+  name: string;
+  activeFrom?: string | null;
+  activeTo?: string | null;
+  hours: Partial<Record<WeekdayKey, [string, string][]>>;
+}
+
+export interface PreorderSettings {
+  enabled: boolean;
+  deliveryLeadMinutes: number;
+  pickupLeadMinutes: number;
+  slotStepMinutes: number;
+  displayPaddingMinutes: number;
+  closeAsapBeforeMinutes: number;
+  maxDaysAhead: number;
+}
+
+export interface PaymentSettings {
+  cash: boolean;
+  cardOnDelivery: boolean;
+  kaspiOnline: boolean;
+  askChangeFrom: boolean;
+}
+
+/** Что клиент видит прямо сейчас — считает сервер */
+export interface AvailabilityNow {
+  timezone: string;
+  mode: OrderingMode;
+  isOpenNow: boolean;
+  deliveryAvailable: boolean;
+  pickupAvailable: boolean;
+  asapAvailable: boolean;
+  message: string | null;
+  scheduleProfile: string | null;
+  todayHours: [string, string][];
+  preorder: PreorderSettings;
+  payments: PaymentSettings;
+  cancellation: { customerWindowMinutes: number };
+}
+
 export interface Settings {
   tenant: { id: string; slug: string; name: string };
   settings: {
+    timezone?: string;
     delivery?: { minOrder: number; fee: number; freeFrom: number };
     loyalty?: {
       cashbackPct?: number;
@@ -160,6 +217,15 @@ export interface Settings {
       allowPointsWithPromotions?: boolean;
       earnOnPromotionalOrders?: boolean;
     };
+    ordering?: {
+      mode?: OrderingMode;
+      closedMessage?: string;
+      pickupOnlyMessage?: string;
+    };
+    schedule?: { profiles?: ScheduleProfile[] };
+    preorder?: Partial<PreorderSettings>;
+    payments?: Partial<PaymentSettings>;
+    cancellation?: { customerWindowMinutes?: number };
   };
   venues: { id: string; name: string; address: string }[];
   posterAccounts: {
@@ -168,7 +234,18 @@ export interface Settings {
     sortOrder: number;
     isActive: boolean;
   }[];
+  availabilityNow: AvailabilityNow;
 }
+
+export const WEEKDAY_LABELS: { key: WeekdayKey; label: string }[] = [
+  { key: 'mon', label: 'Понедельник' },
+  { key: 'tue', label: 'Вторник' },
+  { key: 'wed', label: 'Среда' },
+  { key: 'thu', label: 'Четверг' },
+  { key: 'fri', label: 'Пятница' },
+  { key: 'sat', label: 'Суббота' },
+  { key: 'sun', label: 'Воскресенье' },
+];
 
 export const formatTenge = (v: number) => `${v.toLocaleString('ru-RU').replace(/,/g, ' ')} ₸`;
 

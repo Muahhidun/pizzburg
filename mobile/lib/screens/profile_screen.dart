@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/push_notifications.dart';
 import '../state/auth.dart';
+import 'legal_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -117,6 +118,8 @@ class ProfileScreen extends StatelessWidget {
               );
             }),
             const SizedBox(height: 12),
+            const _LegalLinksCard(),
+            const SizedBox(height: 12),
             OutlinedButton(
               onPressed: auth.logout,
               child: const Text('Выйти из профиля'),
@@ -131,6 +134,43 @@ class ProfileScreen extends StatelessWidget {
     final date = DateTime.tryParse(value?.toString() ?? '')?.toLocal();
     if (date == null) return '';
     return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
+  }
+}
+
+/// Ссылки на документы. Нужны не только клиенту: Apple и Google требуют,
+/// чтобы политика конфиденциальности открывалась из самого приложения.
+class _LegalLinksCard extends StatelessWidget {
+  const _LegalLinksCard();
+
+  static const _types = [
+    ('OFFER', 'Публичная оферта'),
+    ('PRIVACY', 'Политика конфиденциальности'),
+    ('REQUISITES', 'Реквизиты'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        children: [
+          for (final (type, label) in _types)
+            ListTile(
+              title: Text(label),
+              trailing: const Icon(Icons.chevron_right, size: 20),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => LegalDocumentScreen(type: type, title: label),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 

@@ -4,6 +4,7 @@ import { PromotionsModule } from '../promotions/promotions.module';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { StatusPollerService } from './status-poller.service';
+import { CancelReasonsService } from './cancel-reasons.service';
 import { AuthModule } from '../auth/auth.module';
 import { LoyaltyModule } from '../loyalty/loyalty.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -17,7 +18,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     NotificationsModule,
   ],
   controllers: [OrdersController],
-  providers: [OrdersService, StatusPollerService],
-  exports: [OrdersService],
+  providers: [OrdersService, StatusPollerService, CancelReasonsService],
+  exports: [OrdersService, CancelReasonsService],
 })
 export class OrdersModule {}

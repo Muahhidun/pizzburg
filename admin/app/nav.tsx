@@ -11,6 +11,8 @@ const links = [
   { href: '/stoplist', label: 'Стоп-листы' },
   { href: '/customers', label: 'Клиенты' },
   { href: '/promotions', label: 'Акции' },
+  { href: '/operations', label: 'Режим работы' },
+  { href: '/legal', label: 'Документы' },
   { href: '/settings', label: 'Настройки' },
 ];
 

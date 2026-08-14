@@ -23,6 +23,22 @@ class AuthState extends ChangeNotifier {
       (_profile?['loyaltyTransactions'] as List?) ?? const [];
   List<dynamic> get orders => (_profile?['orders'] as List?) ?? const [];
 
+  /// Типы документов, которых клиент ещё не принял. Список считает сервер:
+  /// приложение не должно само сравнивать номера версий, иначе новая
+  /// редакция оферты тихо разойдётся со старой сборкой.
+  List<String> get pendingLegal =>
+      ((_profile?['legal']?['pending'] as List?) ?? const [])
+          .map((d) => d['type']?.toString() ?? '')
+          .where((t) => t.isNotEmpty)
+          .toList();
+
+  bool get needsLegalConsent => isAuthenticated && pendingLegal.isNotEmpty;
+
+  Future<void> acceptLegal() async {
+    await api.acceptLegal();
+    await refresh();
+  }
+
   Future<void> restore() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString(_tokenKey);

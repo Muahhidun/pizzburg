@@ -140,4 +140,77 @@ void main() {
     expect(preview.allowPointsWithPromotions, isTrue);
     expect(preview.earnOnPromotionalOrders, isTrue);
   });
+
+  test('приложение читает режим приёма заказов', () {
+    final preview = CartPreview.fromJson({
+      'subtotal': 6400,
+      'gifts': <dynamic>[],
+      'appliedPromotions': <dynamic>[],
+      'delivery': {'fee': 0, 'minOrder': 0, 'available': false},
+      'availability': {
+        'mode': 'PICKUP_ONLY',
+        'isOpenNow': true,
+        'deliveryAvailable': false,
+        'pickupAvailable': true,
+        'asapAvailable': true,
+        'message': 'Доставка временно недоступна',
+        'preorderEnabled': true,
+        'todayHours': [
+          ['10:00', '22:00'],
+        ],
+        'payments': {'cash': true, 'cardOnDelivery': false, 'askChangeFrom': true},
+        'cancelWindowMinutes': 15,
+      },
+    });
+
+    expect(preview.availability.mode, 'PICKUP_ONLY');
+    expect(preview.availability.deliveryAvailable, isFalse);
+    expect(preview.availability.cardOnDeliveryEnabled, isFalse);
+    expect(preview.availability.askChangeFrom, isTrue);
+    expect(preview.availability.cancelWindowMinutes, 15);
+    expect(preview.availability.todayHours.first, ['10:00', '22:00']);
+  });
+
+  test('без блока доступности приложение не ломается', () {
+    final preview = CartPreview.fromJson({
+      'subtotal': 1000,
+      'gifts': <dynamic>[],
+      'appliedPromotions': <dynamic>[],
+      'delivery': {'fee': 0, 'minOrder': 0, 'available': true},
+    });
+
+    expect(preview.availability.mode, 'ALL');
+    expect(preview.availability.deliveryAvailable, isTrue);
+    expect(preview.availability.cashEnabled, isTrue);
+  });
+
+  test('документ отдаёт человеческое название даже без заголовка', () {
+    final doc = LegalDocument.fromJson({
+      'type': 'PRIVACY',
+      'version': 2,
+      'title': '',
+      'content': 'текст',
+    });
+
+    expect(doc.displayTitle, 'Политика конфиденциальности');
+    expect(doc.version, 2);
+  });
+
+  test('заголовок из ответа важнее подстановки по типу', () {
+    final doc = LegalDocument.fromJson({
+      'type': 'OFFER',
+      'version': 1,
+      'title': 'Договор оферты PizzBurg',
+      'content': 'текст',
+    });
+
+    expect(doc.displayTitle, 'Договор оферты PizzBurg');
+  });
+
+  test('причина отмены читается из справочника', () {
+    final reason = CancelReason.fromJson({'id': 'r1', 'label': 'Передумал'});
+
+    expect(reason.id, 'r1');
+    expect(reason.label, 'Передумал');
+  });
 }
