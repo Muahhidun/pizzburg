@@ -92,8 +92,11 @@ export class CartController {
       })),
       appliedPromotions: promo.applied,
       subtotal,
-      // клиент платит subtotal; скидка — справочно (уйдёт «Личной интеграцией»)
-      promoDiscount: promo.discount,
+      // Подарки не уменьшают сумму — клиент просто не платит за позицию.
+      // Денежная скидка уменьшает, поэтому идёт отдельным полем.
+      promoDiscount: promo.giftValue,
+      moneyDiscount: promo.moneyDiscount,
+      freeDelivery: promo.freeDelivery,
       loyalty: {
         ...loyaltyPolicy,
       },

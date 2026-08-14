@@ -1,7 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Promotion, Storefront, api } from '@/lib/api';
+import { Promotion, Storefront, api,
+  PromotionKind,
+  PROMOTION_KINDS,
+} from '@/lib/api';
 
 export default function PromotionsPage() {
   const [promos, setPromos] = useState<Promotion[] | null>(null);
@@ -109,6 +112,13 @@ function PromoForm({
   onSaved: () => void;
 }) {
   const [name, setName] = useState('');
+  const [kind, setKind] = useState<PromotionKind>('GIFT_FOR_QTY');
+  const [minOrderSum, setMinOrderSum] = useState('');
+  const [discountValue, setDiscountValue] = useState('');
+  const [maxDiscount, setMaxDiscount] = useState('');
+  const [firstOrderOnly, setFirstOrderOnly] = useState(false);
+  const [perCustomerLimit, setPerCustomerLimit] = useState('');
+  const [orderType, setOrderType] = useState('');
   const [conditionCategoryId, setConditionCategoryId] = useState(
     storefront.categories[0]?.id ?? '',
   );
@@ -131,18 +141,33 @@ function PromoForm({
         .slice(0, 8)
     : [];
   const gift = allProducts.find((p) => p.id === giftProductId);
+  // Какие поля обязательны — зависит от типа. Те же правила проверяет
+  // сервер: форма лишь не даёт отправить заведомо неполную акцию.
+  const needsGift = kind === 'GIFT_FOR_QTY' || kind === 'GIFT_FOR_SUM';
+  const needsValue = kind === 'PERCENT_OFF' || kind === 'FIXED_OFF';
+
   const quantitiesValid =
-    /^\d+$/.test(conditionQty) &&
-    Number(conditionQty) >= 1 &&
-    Number(conditionQty) <= 100 &&
-    /^\d+$/.test(giftQty) &&
-    Number(giftQty) >= 1 &&
-    Number(giftQty) <= 100;
+    (kind !== 'GIFT_FOR_QTY' ||
+      (/^\d+$/.test(conditionQty) &&
+        Number(conditionQty) >= 1 &&
+        Number(conditionQty) <= 100)) &&
+    (!needsGift ||
+      (/^\d+$/.test(giftQty) &&
+        Number(giftQty) >= 1 &&
+        Number(giftQty) <= 100));
+
+  const percentValid =
+    kind !== 'PERCENT_OFF' ||
+    (Number(discountValue) > 0 && Number(discountValue) <= 100);
+
   const formValid =
     name.trim().length > 0 &&
     name.trim().length <= 120 &&
-    conditionCategoryId.length > 0 &&
-    giftProductId.length > 0 &&
+    (kind !== 'GIFT_FOR_QTY' || conditionCategoryId.length > 0) &&
+    (kind !== 'GIFT_FOR_SUM' || Number(minOrderSum) > 0) &&
+    (!needsGift || giftProductId.length > 0) &&
+    (!needsValue || Number(discountValue) > 0) &&
+    percentValid &&
     quantitiesValid;
 
   function selectGift(productId: string) {
@@ -156,12 +181,26 @@ function PromoForm({
     try {
       await api.post('/admin/promotions', {
         name,
+        kind,
         code: code || null,
-        conditionCategoryId,
-        conditionQty: Number(conditionQty),
-        giftProductId,
-        giftQty: Number(giftQty),
-        repeatPerCart,
+        // Поля отправляем только те, что имеют смысл для типа: иначе
+        // у скидочной акции остаётся «категория условия», которую никто
+        // не читает, но которая сбивает с толку в списке.
+        ...(kind === 'GIFT_FOR_QTY'
+          ? { conditionCategoryId, conditionQty: Number(conditionQty) }
+          : {}),
+        ...(needsGift ? { giftProductId, giftQty: Number(giftQty) } : {}),
+        ...(kind === 'GIFT_FOR_SUM' || minOrderSum
+          ? { minOrderSum: Number(minOrderSum) }
+          : {}),
+        ...(needsValue ? { discountValue: Number(discountValue) } : {}),
+        ...(kind === 'PERCENT_OFF' && maxDiscount
+          ? { maxDiscount: Number(maxDiscount) }
+          : {}),
+        ...(kind === 'GIFT_FOR_QTY' ? { repeatPerCart } : {}),
+        firstOrderOnly,
+        ...(perCustomerLimit ? { perCustomerLimit: Number(perCustomerLimit) } : {}),
+        ...(orderType ? { orderType } : {}),
       });
       onSaved();
     } finally {
@@ -191,6 +230,66 @@ function PromoForm({
           />
         </label>
 
+        <label className="mb-3 block">
+          <span className="mb-1 block text-sm font-medium">Тип акции</span>
+          <select
+            value={kind}
+            onChange={(e) => setKind(e.target.value as PromotionKind)}
+            className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
+          >
+            {PROMOTION_KINDS.map((k) => (
+              <option key={k.value} value={k.value}>
+                {k.label}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block text-xs text-neutral-500">
+            {PROMOTION_KINDS.find((k) => k.value === kind)?.hint}
+          </span>
+        </label>
+
+        {kind === 'GIFT_FOR_SUM' && (
+          <label className="mb-3 block">
+            <span className="mb-1 block text-sm font-medium">Сумма заказа от, ₸</span>
+            <input
+              value={minOrderSum}
+              onChange={(e) => setMinOrderSum(e.target.value.replace(/\D/g, ''))}
+              inputMode="numeric"
+              placeholder="5000"
+              className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
+            />
+          </label>
+        )}
+
+        {needsValue && (
+          <div className="mb-3 grid grid-cols-2 gap-2">
+            <label>
+              <span className="mb-1 block text-sm font-medium">
+                {kind === 'PERCENT_OFF' ? 'Скидка, %' : 'Скидка, ₸'}
+              </span>
+              <input
+                value={discountValue}
+                onChange={(e) => setDiscountValue(e.target.value.replace(/\D/g, ''))}
+                inputMode="numeric"
+                className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
+              />
+            </label>
+            {kind === 'PERCENT_OFF' && (
+              <label>
+                <span className="mb-1 block text-sm font-medium">Не больше, ₸</span>
+                <input
+                  value={maxDiscount}
+                  onChange={(e) => setMaxDiscount(e.target.value.replace(/\D/g, ''))}
+                  inputMode="numeric"
+                  placeholder="без потолка"
+                  className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
+                />
+              </label>
+            )}
+          </div>
+        )}
+
+        {kind === 'GIFT_FOR_QTY' && (
         <div className="mb-3 grid grid-cols-[1fr_90px] gap-2">
           <label>
             <span className="mb-1 block text-sm font-medium">Условие: категория</span>
@@ -219,7 +318,9 @@ function PromoForm({
             />
           </label>
         </div>
+        )}
 
+        {needsGift && (
         <div className="mb-3 block">
           <span className="mb-1 block text-sm font-medium">Подарок</span>
           {gift ? (
@@ -282,8 +383,10 @@ function PromoForm({
             </>
           )}
         </div>
+        )}
 
         <div className="mb-3 grid grid-cols-2 gap-2">
+          {needsGift && (
           <label>
             <span className="mb-1 block text-sm font-medium">Подарков, шт</span>
             <input
@@ -296,6 +399,7 @@ function PromoForm({
               className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
             />
           </label>
+          )}
           <label>
             <span className="mb-1 block text-sm font-medium">Промокод</span>
             <input
@@ -315,13 +419,52 @@ function PromoForm({
           </label>
         </div>
 
-        <label className="mb-4 flex items-center gap-2 text-sm">
+        {kind === 'GIFT_FOR_QTY' && (
+        <label className="mb-3 flex items-center gap-2 text-sm">
           <input
             type="checkbox"
             checked={repeatPerCart}
             onChange={(e) => setRepeatPerCart(e.target.checked)}
           />
           Повторять в рамках одного заказа (4 пиццы → 2 подарка)
+        </label>
+        )}
+
+        <div className="mb-3 grid grid-cols-2 gap-2">
+          <label>
+            <span className="mb-1 block text-sm font-medium">Способ получения</span>
+            <select
+              value={orderType}
+              onChange={(e) => setOrderType(e.target.value)}
+              className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
+            >
+              <option value="">любой</option>
+              <option value="DELIVERY">только доставка</option>
+              <option value="PICKUP">только самовывоз</option>
+            </select>
+          </label>
+          <label>
+            <span className="mb-1 block text-sm font-medium">Раз на клиента</span>
+            <input
+              value={perCustomerLimit}
+              onChange={(e) =>
+                setPerCustomerLimit(e.target.value.replace(/\D/g, ''))
+              }
+              inputMode="numeric"
+              placeholder="без лимита"
+              className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
+            />
+          </label>
+        </div>
+
+        <label className="mb-4 flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={firstOrderOnly}
+            onChange={(e) => setFirstOrderOnly(e.target.checked)}
+          />
+          Только первый заказ клиента
+          <span className="text-xs text-neutral-500">(нужен вход в профиль)</span>
         </label>
 
         <div className="flex gap-2">

@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'api/api_client.dart';
 import 'state/cart.dart';
-import 'screens/menu_screen.dart';
+import 'screens/app_shell.dart';
 import 'state/auth.dart';
 import 'services/push_notifications.dart';
 import 'screens/order_screen.dart';
 import 'screens/legal_screen.dart';
 import 'api/models.dart';
+import 'theme/app_theme.dart';
+import 'utils/haptics.dart';
 
 final _navigatorKey = GlobalKey<NavigatorState>();
 final _messengerKey = GlobalKey<ScaffoldMessengerState>();
@@ -21,6 +23,7 @@ Future<void> main() async {
   final push = PushNotificationsService(api);
   auth.afterLogin = push.syncAfterLogin;
   auth.beforeLogout = push.unregisterBeforeLogout;
+  await Haptics.restore();
   await auth.restore();
   push.onForegroundMessage = (title, body) {
     _messengerKey.currentState
@@ -77,16 +80,24 @@ class PizzBurgApp extends StatelessWidget {
         scaffoldMessengerKey: _messengerKey,
         title: 'PizzBurg',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFFE53935),
-            brightness: Brightness.light,
+        // Направление «Сигнал» из design_handoff_pizzburg_app.
+        // accent и benefit — параметры темы: платформа мультитенантная,
+        // следующее заведение придёт со своими цветами.
+        theme: AppTheme.build(),
+        // Макет мобильный (390 pt по хендоффу). «Адаптивный» не означает
+        // «растянуть телефонный экран на 1600 px»: миниатюра 76 px рядом
+        // со строкой во всю ширину монитора выглядит сломанной. На широком
+        // экране прижимаем контент к телефонной колонке по центру.
+        builder: (context, child) => ColoredBox(
+          color: const Color(0xFFF2F2F3),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: child ?? const SizedBox.shrink(),
+            ),
           ),
-          scaffoldBackgroundColor: const Color(0xFFF6F6F6),
-          fontFamily: 'Inter',
         ),
-        home: const _LegalGate(child: MenuScreen()),
+        home: const _LegalGate(child: AppShell()),
       ),
     );
   }

@@ -3,6 +3,7 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
   IsISO8601,
   IsObject,
@@ -17,7 +18,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { OrderStatus } from '@prisma/client';
+import { OrderStatus, PromotionKind } from '@prisma/client';
 
 export class UpdateCategoryDto {
   @IsOptional() @IsString() @Length(1, 80) name?: string;
@@ -56,11 +57,32 @@ export class PromotionDto {
   @MaxLength(40)
   @Matches(/^[a-zA-Z0-9_-]+$/)
   code?: string | null;
-  @IsString() conditionCategoryId: string;
-  @IsInt() @Min(1) @Max(100) conditionQty: number;
-  @IsString() giftProductId: string;
+  /// Тип определяет, какие поля обязательны — проверка в сервисе
+  @IsOptional()
+  @IsIn([
+    'GIFT_FOR_QTY',
+    'GIFT_FOR_SUM',
+    'PERCENT_OFF',
+    'FIXED_OFF',
+    'FREE_DELIVERY',
+  ])
+  kind?: PromotionKind;
+
+  @IsOptional() @IsString() conditionCategoryId?: string | null;
+  @IsOptional() @IsInt() @Min(1) @Max(100) conditionQty?: number;
+  @IsOptional() @IsInt() @Min(1) minOrderSum?: number | null;
+
+  @IsOptional() @IsString() giftProductId?: string | null;
   @IsOptional() @IsInt() @Min(1) @Max(100) giftQty?: number;
+  /// Проценты для PERCENT_OFF, тенге для FIXED_OFF
+  @IsOptional() @IsInt() @Min(1) discountValue?: number;
+  @IsOptional() @IsInt() @Min(1) maxDiscount?: number | null;
+
   @IsOptional() @IsBoolean() repeatPerCart?: boolean;
+  @IsOptional() @IsBoolean() firstOrderOnly?: boolean;
+  @IsOptional() @IsInt() @Min(1) perCustomerLimit?: number | null;
+  @IsOptional() @IsInt() @Min(1) totalLimit?: number | null;
+  @IsOptional() @IsIn(['DELIVERY', 'PICKUP']) orderType?: string | null;
   @IsOptional() @IsBoolean() isActive?: boolean;
   @IsOptional() @IsISO8601() activeFrom?: string | null;
   @IsOptional() @IsISO8601() activeTo?: string | null;

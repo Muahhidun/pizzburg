@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Promotion, PromotionKind } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface CartItemInput {
@@ -15,24 +16,65 @@ export interface GiftLine {
   promotionName: string;
 }
 
+export interface PromoContext {
+  /// Сумма товаров до скидок, ₸
+  subtotal: number;
+  orderType?: 'DELIVERY' | 'PICKUP';
+  customerId?: string;
+  /// Заказ первый у этого клиента
+  isFirstOrder?: boolean;
+}
+
+export interface PromoResult {
+  gifts: GiftLine[];
+  /// Стоимость подарков — не вычитается из суммы, клиент их просто не платит
+  giftValue: number;
+  /// Денежная скидка, ₸ — её нужно вычесть из суммы к оплате
+  moneyDiscount: number;
+  freeDelivery: boolean;
+  applied: string[];
+  /// Что именно сработало — нужно для записи в PromotionUse
+  appliedPromotions: { id: string; name: string; discount: number }[];
+}
+
+const EMPTY: PromoResult = {
+  gifts: [],
+  giftValue: 0,
+  moneyDiscount: 0,
+  freeDelivery: false,
+  applied: [],
+  appliedPromotions: [],
+};
+
 /**
- * Промо-движок приложения. Правила living в нашей БД (повторяют акции
- * Poster). Визуализация выгоды — в корзине (подарок появляется сам),
- * сходимость — через «Личную интеграцию» при отправке заказа.
+ * Промо-движок приложения. Правила живут в нашей БД.
+ *
+ * Два вида выгоды принципиально разные и не смешиваются:
+ * — **подарок** не уменьшает сумму заказа, клиент просто не платит за
+ *   позицию; в Poster она уходит полной ценой и гасится «Личной
+ *   интеграцией»;
+ * — **денежная скидка** уменьшает сумму к оплате и точно так же уходит
+ *   в Poster предоплатой, иначе смена не сойдётся.
+ *
+ * Ограничения («первый заказ», «раз на клиента», лимит применений)
+ * проверяются по таблице PromotionUse: сама акция истории не хранит.
  */
 @Injectable()
 export class PromotionsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Считает подарки для корзины. promoCode передаётся, если клиент ввёл
-   * код; акции с code=null применяются автоматически.
+   * Считает выгоду для корзины.
+   *
+   * `promoCode` передаётся, если клиент ввёл код; акции с `code = null`
+   * применяются автоматически.
    */
   async evaluate(
     tenantId: string,
     items: CartItemInput[],
     promoCode?: string,
-  ): Promise<{ gifts: GiftLine[]; discount: number; applied: string[] }> {
+    context: PromoContext = { subtotal: 0 },
+  ): Promise<PromoResult> {
     const now = new Date();
     const promos = await this.prisma.promotion.findMany({
       where: {
@@ -46,7 +88,7 @@ export class PromotionsService {
         (!p.activeFrom || p.activeFrom <= now) &&
         (!p.activeTo || p.activeTo >= now),
     );
-    if (active.length === 0) return { gifts: [], discount: 0, applied: [] };
+    if (active.length === 0) return { ...EMPTY };
 
     const products = await this.prisma.product.findMany({
       where: { id: { in: items.map((i) => i.productId) } },
@@ -54,52 +96,238 @@ export class PromotionsService {
     });
     const catById = new Map(products.map((p) => [p.id, p.appCategoryId]));
 
-    const gifts: GiftLine[] = [];
-    const applied: string[] = [];
-    let discount = 0;
+    const result: PromoResult = {
+      gifts: [],
+      giftValue: 0,
+      moneyDiscount: 0,
+      freeDelivery: false,
+      applied: [],
+      appliedPromotions: [],
+    };
 
     for (const promo of active) {
-      const qtyInCategory = items.reduce(
-        (sum, i) =>
-          catById.get(i.productId) === promo.conditionCategoryId
-            ? sum + i.qty
-            : sum,
-        0,
-      );
-      const times = promo.repeatPerCart
-        ? Math.floor(qtyInCategory / promo.conditionQty)
-        : qtyInCategory >= promo.conditionQty
-          ? 1
-          : 0;
-      if (times === 0) continue;
+      if (!(await this.isAllowed(promo, context))) continue;
 
-      const gift = await this.prisma.product.findUnique({
-        where: { id: promo.giftProductId },
-        include: { category: true, posterAccount: true },
-      });
-      // подарок должен быть доступен в кассе, иначе акцию пропускаем
+      const before = result.moneyDiscount + result.giftValue;
+      switch (promo.kind) {
+        case 'GIFT_FOR_QTY':
+          await this.applyGiftForQty(promo, items, catById, result);
+          break;
+        case 'GIFT_FOR_SUM':
+          await this.applyGiftForSum(promo, context, result);
+          break;
+        case 'PERCENT_OFF':
+        case 'FIXED_OFF':
+          this.applyMoneyDiscount(promo, context, result);
+          break;
+        case 'FREE_DELIVERY':
+          if (context.orderType === 'PICKUP') break;
+          result.freeDelivery = true;
+          this.markApplied(promo, 0, result);
+          break;
+      }
+      const gained = result.moneyDiscount + result.giftValue - before;
+      // Акция, которая ничего не дала, не должна светиться в списке
+      // применённых и тратить лимит клиента.
       if (
-        !gift ||
-        !gift.isActive ||
-        !gift.category.isActive ||
-        !gift.posterAccount.isActive
-      )
-        continue;
-
-      const qty = times * promo.giftQty;
-      const price = gift.priceOverride ?? gift.price;
-      gifts.push({
-        productId: gift.id,
-        name: gift.displayName ?? gift.name,
-        price,
-        qty,
-        promotionId: promo.id,
-        promotionName: promo.name,
-      });
-      discount += price * qty;
-      applied.push(promo.name);
+        gained === 0 &&
+        promo.kind !== 'FREE_DELIVERY' &&
+        result.appliedPromotions.at(-1)?.id === promo.id
+      ) {
+        result.appliedPromotions.pop();
+        result.applied.pop();
+      }
     }
 
-    return { gifts, discount, applied };
+    return result;
+  }
+
+  /** Ограничения акции: тип заказа, порог суммы, лимиты применений */
+  private async isAllowed(
+    promo: Promotion,
+    context: PromoContext,
+  ): Promise<boolean> {
+    if (promo.orderType && context.orderType && promo.orderType !== context.orderType) {
+      return false;
+    }
+    if (promo.minOrderSum != null && context.subtotal < promo.minOrderSum) {
+      return false;
+    }
+    // «Только первый заказ» без входа проверить нельзя: гость каждый раз
+    // выглядел бы новым клиентом, и акция раздавалась бы бесконечно.
+    if (promo.firstOrderOnly) {
+      if (!context.customerId || !context.isFirstOrder) return false;
+    }
+    if (promo.totalLimit != null) {
+      const total = await this.prisma.promotionUse.count({
+        where: { promotionId: promo.id },
+      });
+      if (total >= promo.totalLimit) return false;
+    }
+    if (promo.perCustomerLimit != null) {
+      if (!context.customerId) return false;
+      const mine = await this.prisma.promotionUse.count({
+        where: { promotionId: promo.id, customerId: context.customerId },
+      });
+      if (mine >= promo.perCustomerLimit) return false;
+    }
+    return true;
+  }
+
+  private markApplied(promo: Promotion, discount: number, result: PromoResult) {
+    result.applied.push(promo.name);
+    result.appliedPromotions.push({
+      id: promo.id,
+      name: promo.name,
+      discount,
+    });
+  }
+
+  private async applyGiftForQty(
+    promo: Promotion,
+    items: CartItemInput[],
+    catById: Map<string, string | null>,
+    result: PromoResult,
+  ) {
+    if (!promo.conditionCategoryId) return;
+    const qtyInCategory = items.reduce(
+      (sum, i) =>
+        catById.get(i.productId) === promo.conditionCategoryId
+          ? sum + i.qty
+          : sum,
+      0,
+    );
+    const times = promo.repeatPerCart
+      ? Math.floor(qtyInCategory / promo.conditionQty)
+      : qtyInCategory >= promo.conditionQty
+        ? 1
+        : 0;
+    if (times === 0) return;
+    await this.addGift(promo, times * promo.giftQty, result);
+  }
+
+  private async applyGiftForSum(
+    promo: Promotion,
+    context: PromoContext,
+    result: PromoResult,
+  ) {
+    // Порог уже проверен в isAllowed через minOrderSum
+    if (promo.minOrderSum == null) return;
+    await this.addGift(promo, promo.giftQty, result);
+  }
+
+  private async addGift(
+    promo: Promotion,
+    qty: number,
+    result: PromoResult,
+  ) {
+    if (!promo.giftProductId || qty <= 0) return;
+    const gift = await this.prisma.product.findUnique({
+      where: { id: promo.giftProductId },
+      include: { category: true, posterAccount: true },
+    });
+    // Подарок должен быть доступен в кассе, иначе акцию пропускаем:
+    // обещать позицию, которой нет, хуже, чем не обещать вовсе.
+    if (
+      !gift ||
+      !gift.isActive ||
+      !gift.category.isActive ||
+      !gift.posterAccount.isActive
+    ) {
+      return;
+    }
+
+    const price = gift.priceOverride ?? gift.price;
+    result.gifts.push({
+      productId: gift.id,
+      name: gift.displayName ?? gift.name,
+      price,
+      qty,
+      promotionId: promo.id,
+      promotionName: promo.name,
+    });
+    result.giftValue += price * qty;
+    this.markApplied(promo, price * qty, result);
+  }
+
+  private applyMoneyDiscount(
+    promo: Promotion,
+    context: PromoContext,
+    result: PromoResult,
+  ) {
+    if (promo.discountValue <= 0) return;
+
+    let discount =
+      promo.kind === 'PERCENT_OFF'
+        ? Math.floor((context.subtotal * promo.discountValue) / 100)
+        : promo.discountValue;
+
+    // Потолок процента: без него «−50%» на крупном заказе уносит выручку.
+    if (promo.maxDiscount != null) {
+      discount = Math.min(discount, promo.maxDiscount);
+    }
+    // Скидка не может превысить сумму товаров — иначе заказ уходит в минус
+    // и «Личная интеграция» в Poster перестаёт сходиться.
+    const room = context.subtotal - result.moneyDiscount;
+    discount = Math.max(0, Math.min(discount, room));
+    if (discount === 0) return;
+
+    result.moneyDiscount += discount;
+    this.markApplied(promo, discount, result);
+  }
+
+  /**
+   * Записывает применения акций к заказу.
+   *
+   * Ключ (promotionId, orderId) уникален: повторная отправка заказа не
+   * должна удваивать счётчик и съедать лимит клиента.
+   */
+  async recordUses(
+    tenantId: string,
+    orderId: string,
+    customerId: string | null,
+    applied: { id: string; discount: number }[],
+  ) {
+    if (applied.length === 0) return;
+    await this.prisma.promotionUse.createMany({
+      data: applied.map((a) => ({
+        tenantId,
+        promotionId: a.id,
+        orderId,
+        customerId,
+        discount: a.discount,
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  /** Сколько раз сработала каждая акция и сколько это стоило */
+  async report(tenantId: string, from: Date, to: Date) {
+    const uses = await this.prisma.promotionUse.findMany({
+      where: { tenantId, createdAt: { gte: from, lt: to } },
+      include: { promotion: { select: { name: true, kind: true } } },
+    });
+    const byPromo = new Map<
+      string,
+      { name: string; kind: PromotionKind; count: number; discount: number }
+    >();
+    for (const use of uses) {
+      const row = byPromo.get(use.promotionId) ?? {
+        name: use.promotion.name,
+        kind: use.promotion.kind,
+        count: 0,
+        discount: 0,
+      };
+      row.count += 1;
+      row.discount += use.discount;
+      byPromo.set(use.promotionId, row);
+    }
+    return {
+      from,
+      to,
+      total: uses.length,
+      totalDiscount: uses.reduce((s, u) => s + u.discount, 0),
+      byPromotion: [...byPromo.values()].sort((a, b) => b.count - a.count),
+    };
   }
 }

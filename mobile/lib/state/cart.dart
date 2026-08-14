@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../api/models.dart';
 
 /// Позиция корзины: товар + выбранные модификаторы.
@@ -29,6 +30,33 @@ class CartLine {
   };
 }
 
+/// Последний оформленный заказ, запомненный на устройстве.
+///
+/// Гость не входит в профиль, значит `/auth/me` о его заказе не знает — и
+/// после оформления вернуться к статусу было бы невозможно. Поэтому id
+/// заказа сохраняется локально: главный экран показывает по нему активный
+/// заказ, пока тот не завершится.
+abstract final class LastPlacedOrder {
+  static const _key = 'pizzburg_last_order';
+
+  static Future<void> remember(String id, int number, int total) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_key, [id, '$number', '$total']);
+  }
+
+  static Future<(String id, int number, int total)?> restore() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getStringList(_key);
+    if (raw == null || raw.length != 3) return null;
+    return (raw[0], int.tryParse(raw[1]) ?? 0, int.tryParse(raw[2]) ?? 0);
+  }
+
+  static Future<void> forget() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_key);
+  }
+}
+
 class Cart extends ChangeNotifier {
   final List<CartLine> _lines = [];
 
@@ -46,6 +74,49 @@ class Cart extends ChangeNotifier {
       _lines.add(line);
     }
     notifyListeners();
+  }
+
+  /// Наполняет корзину из повтора прошлого заказа.
+  ///
+  /// Товары и модификаторы берутся из **текущего** меню, а не из снимка
+  /// заказа: цены могли измениться, и человек платит сегодняшнюю. Позиция,
+  /// которой сегодня нет, просто не попадёт в корзину — о ней сервер
+  /// сообщил отдельным списком, и её нужно показать, а не проглотить.
+  ///
+  /// Корзина перед наполнением очищается: «повторить» означает именно
+  /// прошлый заказ, а не «дописать его к тому, что уже набрано».
+  int fillFromRepeat(RepeatResult repeat, MenuResponse menu) {
+    final products = <String, Product>{
+      for (final category in menu.categories)
+        for (final product in category.products) product.id: product,
+    };
+
+    _lines.clear();
+    var added = 0;
+    for (final item in repeat.items) {
+      final product = products[item.productId];
+      if (product == null) continue;
+
+      // Модификаторы сопоставляем по id: набор в тех.карте мог поменяться,
+      // и исчезнувшую добавку молча пропускаем.
+      final options = <ModifierOption>[];
+      for (final group in product.modifierGroups) {
+        for (final option in group.options) {
+          if (item.modifierIds.contains(option.id)) options.add(option);
+        }
+      }
+
+      final line = CartLine(product: product, modifiers: options, qty: item.qty);
+      final existing = _lines.indexWhere((l) => l.key == line.key);
+      if (existing >= 0) {
+        _lines[existing].qty += item.qty;
+      } else {
+        _lines.add(line);
+      }
+      added += item.qty;
+    }
+    notifyListeners();
+    return added;
   }
 
   void increment(CartLine line) {
@@ -69,10 +140,24 @@ class Cart extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Сколько штук этого товара в корзине (для бейджа на карточке)
+  /// Сколько штук этого товара в корзине — во всех конфигурациях сразу.
+  /// В каталоге показывается один счётчик на товар, а не на строку.
   int qtyOf(Product product) => _lines
       .where((l) => l.product.id == product.id)
       .fold(0, (sum, l) => sum + l.qty);
+
+  /// Убрать одну штуку прямо из каталога.
+  ///
+  /// Уменьшаем последнюю строку с этим товаром: если у товара несколько
+  /// конфигураций, гадать, какую из них имел в виду человек, бессмысленно —
+  /// разбирать состав он пойдёт в корзину.
+  void decrementProduct(Product product) {
+    final index = _lines.lastIndexWhere((l) => l.product.id == product.id);
+    if (index < 0) return;
+    _lines[index].qty--;
+    if (_lines[index].qty <= 0) _lines.removeAt(index);
+    notifyListeners();
+  }
 
   List<Map<String, dynamic>> toApiItems() =>
       _lines.map((l) => l.toApiJson()).toList();

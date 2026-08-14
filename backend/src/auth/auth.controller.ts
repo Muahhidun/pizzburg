@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   Req,
   UseGuards,
@@ -16,6 +17,7 @@ import { CustomerAuthGuard } from './customer-auth.guard';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { LegalService } from '../legal/legal.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AddressesService } from './addresses.service';
 
 class RequestOtpDto {
   @IsString()
@@ -35,6 +37,26 @@ class VerifyOtpDto {
   @IsString()
   @Matches(/^\d{4,6}$/, { message: 'Код должен состоять из цифр' })
   code: string;
+}
+
+class RenameAddressDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  label?: string;
+}
+
+class UpdateProfileDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  name?: string;
+
+  /** ISO-дата; пустая строка означает «убрать» */
+  @IsOptional()
+  @IsString()
+  @Matches(/^(\d{4}-\d{2}-\d{2}.*)?$/, { message: 'Дата в формате ГГГГ-ММ-ДД' })
+  birthday?: string;
 }
 
 class PushTokenDto {
@@ -59,6 +81,7 @@ export class AuthController {
     private readonly loyalty: LoyaltyService,
     private readonly legal: LegalService,
     private readonly notifications: NotificationsService,
+    private readonly addresses: AddressesService,
   ) {}
 
   @Post(':tenantSlug/request-otp')
@@ -81,6 +104,45 @@ export class AuthController {
   @Post(':tenantSlug/verify')
   verify(@Param('tenantSlug') tenantSlug: string, @Body() dto: VerifyOtpDto) {
     return this.auth.verifyOtp(tenantSlug, dto.phone, dto.code);
+  }
+
+  /** Сохранённые адреса клиента — самые свежие сверху */
+  @Get('addresses')
+  @UseGuards(CustomerAuthGuard)
+  listAddresses(@Req() req: any) {
+    return this.addresses.list(req.customer.sub);
+  }
+
+  @Delete('addresses/:id')
+  @UseGuards(CustomerAuthGuard)
+  removeAddress(@Req() req: any, @Param('id') id: string) {
+    return this.addresses.remove(req.customer.sub, id);
+  }
+
+  @Patch('addresses/:id')
+  @UseGuards(CustomerAuthGuard)
+  renameAddress(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() dto: RenameAddressDto,
+  ) {
+    return this.addresses.rename(req.customer.sub, id, dto.label ?? null);
+  }
+
+  /** Профиль редактирует сам клиент: имя и дата рождения */
+  @Patch('me')
+  @UseGuards(CustomerAuthGuard)
+  async updateProfile(@Req() req: any, @Body() dto: UpdateProfileDto) {
+    return this.prisma.customer.update({
+      where: { id: req.customer.sub },
+      data: {
+        ...(dto.name !== undefined ? { name: dto.name.trim() || null } : {}),
+        ...(dto.birthday !== undefined
+          ? { birthday: dto.birthday ? new Date(dto.birthday) : null }
+          : {}),
+      },
+      select: { id: true, name: true, birthday: true },
+    });
   }
 
   /** Обязательные документы, которых клиент ещё не принял */

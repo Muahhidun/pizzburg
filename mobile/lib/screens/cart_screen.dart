@@ -2,13 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../state/auth.dart';
 import '../state/cart.dart';
+import '../theme/app_theme.dart';
+import '../theme/tokens.dart';
+import '../utils/haptics.dart';
+import '../widgets/motion.dart';
 import 'checkout_screen.dart';
 
-/// Корзина. Суммы и подарки по акциям считает сервер (/cart/preview) —
-/// клиент ничего не выдумывает, поэтому расчёт всегда совпадёт с заказом.
+/// Корзина по прототипу «Сигнал».
+///
+/// Порядок блоков не случайный: сначала состав, потом выгода (подарок,
+/// промокод, баллы), в конце итог. Человек сначала проверяет, что заказал,
+/// и только потом занимается экономией.
 class CartScreen extends StatefulWidget {
-  const CartScreen({super.key});
+  /// Внутри таб-бара у корзины нет кнопки «назад»: она не открыта поверх
+  /// каталога, а является отдельной вкладкой.
+  final bool embedded;
+
+  const CartScreen({super.key, this.embedded = false});
 
   @override
   State<CartScreen> createState() => _CartScreenState();
@@ -18,11 +30,22 @@ class _CartScreenState extends State<CartScreen> {
   CartPreview? _preview;
   bool _loading = true;
   String? _error;
+  int _points = 0;
+  final _promo = TextEditingController();
+  String? _promoApplied;
+  String? _promoError;
+  final _pointsHaptic = SteppedHaptic();
 
   @override
   void initState() {
     super.initState();
     _refresh();
+  }
+
+  @override
+  void dispose() {
+    _promo.dispose();
+    super.dispose();
   }
 
   Future<void> _refresh() async {
@@ -38,14 +61,17 @@ class _CartScreenState extends State<CartScreen> {
     try {
       final preview = await context.read<ApiClient>().previewCart(
         cart.toApiItems(),
+        promoCode: _promoApplied,
       );
-      if (mounted) {
-        setState(() {
-          _preview = preview;
-          _loading = false;
-          _error = null;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _preview = preview;
+        _loading = false;
+        _error = null;
+        // Состав изменился — списание сбрасываем: иначе оно может
+        // превысить новую сумму заказа.
+        _points = _points.clamp(0, _maxPoints(preview));
+      });
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -56,80 +82,208 @@ class _CartScreenState extends State<CartScreen> {
     }
   }
 
+  int _maxPoints(CartPreview preview) {
+    final balance = context.read<AuthState>().pointsBalance;
+    return balance < preview.subtotal ? balance : preview.subtotal;
+  }
+
+  Future<void> _applyPromo() async {
+    final code = _promo.text.trim().toUpperCase();
+    if (code.isEmpty) return;
+    setState(() {
+      _promoApplied = code;
+      _promoError = null;
+    });
+    await _refresh();
+    if (!mounted) return;
+    final applied = _preview?.appliedPromotions.isNotEmpty ?? false;
+    if (applied) {
+      Haptics.success();
+    } else {
+      await Haptics.warning();
+      if (mounted) {
+        setState(() {
+          _promoError = 'Такого промокода нет';
+          _promoApplied = null;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final cart = context.watch<Cart>();
+    final preview = _preview;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Корзина',
-          style: TextStyle(fontWeight: FontWeight.w800),
-        ),
-        backgroundColor: Colors.white,
-        actions: [
-          if (!cart.isEmpty)
-            TextButton(
-              onPressed: () {
-                cart.clear();
-                _refresh();
-              },
-              child: const Text('Очистить'),
-            ),
-        ],
-      ),
-      body: cart.isEmpty
-          ? const Center(
-              child: Text(
-                'Корзина пуста',
-                style: TextStyle(fontSize: 16, color: Colors.black54),
-              ),
-            )
-          : ListView(
-              padding: const EdgeInsets.all(12),
-              children: [
-                ...cart.lines.map(
-                  (line) => _CartLineTile(line: line, onChanged: _refresh),
+      backgroundColor: c.surface,
+      body: SafeArea(
+        bottom: false,
+        child: cart.isEmpty
+            ? _Empty(embedded: widget.embedded)
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(
+                  Gap.screen,
+                  Gap.lg,
+                  Gap.screen,
+                  Gap.blockWide,
                 ),
-                if (_preview != null && _preview!.gifts.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  ..._preview!.gifts.map((g) => _GiftTile(gift: g)),
+                children: [
+                  Row(
+                    children: [
+                      if (!widget.embedded)
+                        Padding(
+                          padding: const EdgeInsets.only(right: Gap.md),
+                          child: PressScale(
+                            onTap: () => Navigator.pop(context),
+                            child: Container(
+                              width: 36,
+                              height: 36,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: c.fillSoft,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.arrow_back,
+                                size: 18,
+                                color: c.ink,
+                              ),
+                            ),
+                          ),
+                        ),
+                      Text(
+                        'Корзина',
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: Gap.block),
+
+                  for (final line in cart.lines)
+                    _CartRow(
+                      line: line,
+                      onAdd: () {
+                        Haptics.tap();
+                        cart.increment(line);
+                        _refresh();
+                      },
+                      onRemove: () {
+                        Haptics.tap();
+                        cart.decrement(line);
+                        _refresh();
+                      },
+                    ),
+
+                  if (preview != null) ...[
+                    for (final gift in preview.gifts)
+                      BenefitReveal(child: _GiftRow(gift: gift)),
+
+                    if (preview.gifts.isEmpty && _giftHint(preview) != null)
+                      _Hint(text: _giftHint(preview)!),
+
+                    const SizedBox(height: Gap.lg),
+                    _PromoField(
+                      controller: _promo,
+                      applied: _promoApplied,
+                      error: _promoError,
+                      onApply: _applyPromo,
+                    ),
+
+                    if (context.watch<AuthState>().isAuthenticated) ...[
+                      const SizedBox(height: Gap.lg),
+                      _PointsBlock(
+                        value: _points,
+                        max: _maxPoints(preview),
+                        balance: context.watch<AuthState>().pointsBalance,
+                        onChanged: (v) {
+                          _pointsHaptic.onValue(v);
+                          setState(() => _points = v.round());
+                        },
+                      ),
+                    ],
+
+                    const SizedBox(height: Gap.blockWide),
+                    _Totals(
+                      preview: preview,
+                      points: _points,
+                      promo: _promoApplied,
+                    ),
+                  ],
+
+                  if (_loading)
+                    const Padding(
+                      padding: EdgeInsets.only(top: Gap.block),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: Gap.block),
+                      child: Text(
+                        _error!,
+                        style: TextStyle(color: c.accent, fontSize: 12),
+                      ),
+                    ),
                 ],
-                const SizedBox(height: 16),
-                if (_loading)
-                  const Center(child: CircularProgressIndicator())
-                else if (_error != null)
-                  Text(_error!, style: const TextStyle(color: Colors.red))
-                else if (_preview != null)
-                  _Totals(preview: _preview!),
-              ],
-            ),
-      bottomNavigationBar: cart.isEmpty || _preview == null
+              ),
+      ),
+      bottomNavigationBar: cart.isEmpty || preview == null
           ? null
           : SafeArea(
               child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: SizedBox(
-                  height: 56,
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Colors.black,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    onPressed: () => Navigator.push(
+                padding: const EdgeInsets.fromLTRB(
+                  Gap.screen,
+                  0,
+                  Gap.screen,
+                  Gap.md,
+                ),
+                child: PressScale(
+                  onTap: () async {
+                    await Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => CheckoutScreen(preview: _preview!),
+                        builder: (_) => CheckoutScreen(
+                          preview: preview,
+                          initialPoints: _points,
+                        ),
                       ),
+                    );
+                    if (mounted) _refresh();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(22, 12, 12, 12),
+                    decoration: BoxDecoration(
+                      color: c.accent,
+                      borderRadius: R.pill,
                     ),
-                    child: Text(
-                      'Оформить · ${formatTenge(_preview!.subtotal)}',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        AnimatedMoney(
+                          _total(preview),
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(color: c.surface),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 22,
+                            vertical: 15,
+                          ),
+                          decoration: BoxDecoration(
+                            color: c.surface,
+                            borderRadius: R.pill,
+                          ),
+                          child: Text(
+                            'Оформить',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: c.ink,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -137,27 +291,54 @@ class _CartScreenState extends State<CartScreen> {
             ),
     );
   }
+
+  int _total(CartPreview p) =>
+      p.subtotal + p.deliveryFee - _points.clamp(0, p.subtotal);
+
+  /// «Добавьте ещё на N ₸ — подарок». Порог берём из акции на сумму;
+  /// пока бэкенд его не отдаёт отдельным полем, подсказку не выдумываем.
+  String? _giftHint(CartPreview preview) => null;
 }
 
-class _CartLineTile extends StatelessWidget {
+class _CartRow extends StatelessWidget {
   final CartLine line;
-  final VoidCallback onChanged;
+  final VoidCallback onAdd;
+  final VoidCallback onRemove;
 
-  const _CartLineTile({required this.line, required this.onChanged});
+  const _CartRow({
+    required this.line,
+    required this.onAdd,
+    required this.onRemove,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final cart = context.read<Cart>();
+    final c = context.colors;
+    final config = line.modifiers.map((m) => m.name).join(' · ');
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(vertical: Gap.md),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        border: Border(bottom: BorderSide(color: c.line)),
       ),
       child: Row(
         children: [
+          ClipRRect(
+            borderRadius: R.thumbCart,
+            child: SizedBox(
+              width: 58,
+              height: 58,
+              child: line.product.photoUrl == null ||
+                      line.product.photoUrl!.isEmpty
+                  ? ColoredBox(color: c.fillSoft)
+                  : Image.network(
+                      line.product.photoUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => ColoredBox(color: c.fillSoft),
+                    ),
+            ),
+          ),
+          const SizedBox(width: Gap.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,39 +346,57 @@ class _CartLineTile extends StatelessWidget {
                 Text(
                   line.product.name,
                   style: const TextStyle(
-                    fontSize: 15,
+                    fontSize: 13,
+                    height: 1.25,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                if (line.modifiers.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      line.modifiers.map((m) => m.name).join(' · '),
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Colors.black54,
-                      ),
+                if (config.isNotEmpty)
+                  Text(
+                    config,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      height: 1.3,
+                      color: c.muted,
                     ),
                   ),
-                const SizedBox(height: 4),
-                Text(
-                  formatTenge(line.total),
-                  style: const TextStyle(fontWeight: FontWeight.w700),
+                const SizedBox(height: 3),
+                AnimatedMoney(
+                  line.total,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleMedium?.copyWith(fontSize: 13),
                 ),
               ],
             ),
           ),
-          _QtyStepper(
-            qty: line.qty,
-            onMinus: () {
-              cart.decrement(line);
-              onChanged();
-            },
-            onPlus: () {
-              cart.increment(line);
-              onChanged();
-            },
+          const SizedBox(width: Gap.sm),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(color: c.fillSoft, borderRadius: R.pill),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                PressScale(
+                  onTap: onRemove,
+                  child: Icon(Icons.remove, size: 16, color: c.ink),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: Gap.sm),
+                  child: Text(
+                    '${line.qty}',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                PressScale(
+                  onTap: onAdd,
+                  child: Icon(Icons.add, size: 16, color: c.ink),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -205,102 +404,280 @@ class _CartLineTile extends StatelessWidget {
   }
 }
 
-class _QtyStepper extends StatelessWidget {
-  final int qty;
-  final VoidCallback onMinus;
-  final VoidCallback onPlus;
-
-  const _QtyStepper({
-    required this.qty,
-    required this.onMinus,
-    required this.onPlus,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F1F1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: onMinus,
-            icon: const Icon(Icons.remove, size: 18),
-            visualDensity: VisualDensity.compact,
-          ),
-          Text(
-            '$qty',
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-          ),
-          IconButton(
-            onPressed: onPlus,
-            icon: const Icon(Icons.add, size: 18),
-            visualDensity: VisualDensity.compact,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Подарок по акции — появляется сам, менять нельзя
-class _GiftTile extends StatelessWidget {
+/// Подарок по акции: цена 0 ₸ цветом выгоды и бейдж с условием.
+class _GiftRow extends StatelessWidget {
   final CartGift gift;
-  const _GiftTile({required this.gift});
+  const _GiftRow({required this.gift});
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(vertical: Gap.md),
       decoration: BoxDecoration(
-        color: const Color(0xFFE8F5E9),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFA5D6A7)),
+        border: Border(bottom: BorderSide(color: c.line)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.card_giftcard, color: Color(0xFF2E7D32)),
-          const SizedBox(width: 12),
+          Container(
+            width: 58,
+            height: 58,
+            decoration: BoxDecoration(
+              color: c.benefitSoft,
+              borderRadius: R.thumbCart,
+            ),
+            child: Icon(Icons.card_giftcard, size: 22, color: c.benefit),
+          ),
+          const SizedBox(width: Gap.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${gift.name} × ${gift.qty}',
+                  gift.name,
                   style: const TextStyle(
-                    fontSize: 15,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+                const SizedBox(height: 3),
                 Text(
-                  'Подарок · ${gift.promotion}',
-                  style: const TextStyle(
+                  '0 ₸',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontSize: 13,
-                    color: Color(0xFF2E7D32),
+                    color: c.benefit,
                   ),
                 ),
               ],
             ),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: c.benefitSoft,
+              borderRadius: R.pill,
+            ),
+            child: Text(
+              'Подарок',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: c.benefit,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Hint extends StatelessWidget {
+  final String text;
+  const _Hint({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Container(
+      margin: const EdgeInsets.only(top: Gap.md),
+      padding: const EdgeInsets.all(Gap.lg),
+      decoration: BoxDecoration(color: c.warnSoft, borderRadius: R.field),
+      child: Text(
+        text,
+        style: TextStyle(fontSize: 12, height: 1.4, color: c.warnText),
+      ),
+    );
+  }
+}
+
+class _PromoField extends StatelessWidget {
+  final TextEditingController controller;
+  final String? applied;
+  final String? error;
+  final VoidCallback onApply;
+
+  const _PromoField({
+    required this.controller,
+    required this.applied,
+    required this.error,
+    required this.onApply,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.only(left: Gap.lg, right: 6),
+          decoration: BoxDecoration(color: c.fillSoft, borderRadius: R.pill),
+          child: Row(
             children: [
-              const Text(
-                '0 ₸',
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(
+                    hintText: 'Промокод',
+                    border: InputBorder.none,
+                    isDense: true,
+                  ),
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              PressScale(
+                onTap: onApply,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: c.ink,
+                    borderRadius: R.pill,
+                  ),
+                  child: Text(
+                    'Применить',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: c.surface,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (applied != null)
+          Padding(
+            padding: const EdgeInsets.only(top: Gap.sm, left: Gap.xs),
+            child: Text(
+              'Промокод $applied применён',
+              style: TextStyle(fontSize: 12, color: c.benefit),
+            ),
+          ),
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: Gap.sm, left: Gap.xs),
+            child: Text(
+              error!,
+              style: TextStyle(fontSize: 12, color: c.accent),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Тёмный блок списания баллов с ползунком.
+///
+/// Ползунок, а не «списать всё»: у старого приложения была одна кнопка на
+/// весь баланс, и человек не мог оставить баллы на следующий заказ.
+class _PointsBlock extends StatelessWidget {
+  final int value;
+  final int max;
+  final int balance;
+  final ValueChanged<double> onChanged;
+
+  const _PointsBlock({
+    required this.value,
+    required this.max,
+    required this.balance,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: c.ink, borderRadius: R.block),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Списать баллы',
                 style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF2E7D32),
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: c.surface,
                 ),
               ),
               Text(
-                formatTenge(gift.fullPrice * gift.qty),
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.black38,
-                  decoration: TextDecoration.lineThrough,
+                '$balance доступно',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: c.surface.withValues(alpha: 0.6),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: Gap.md),
+          AnimatedMoney(
+            value,
+            style: Theme.of(context).textTheme.displayLarge?.copyWith(
+              fontSize: 28,
+              color: c.benefit,
+            ),
+          ),
+          SliderTheme(
+            data: SliderThemeData(
+              trackHeight: 4,
+              activeTrackColor: c.benefit,
+              inactiveTrackColor: c.surface.withValues(alpha: 0.2),
+              thumbColor: c.benefit,
+              overlayShape: SliderComponentShape.noOverlay,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 11),
+            ),
+            child: Slider(
+              value: value.toDouble().clamp(0, max.toDouble()),
+              max: max <= 0 ? 1 : max.toDouble(),
+              divisions: max < 50 ? null : (max / 50).round(),
+              onChanged: max <= 0 ? null : onChanged,
+            ),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '0',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  color: c.surface.withValues(alpha: 0.55),
+                ),
+              ),
+              Text(
+                '$max',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  color: c.surface.withValues(alpha: 0.55),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: Gap.md),
+          Row(
+            children: [
+              Expanded(
+                child: _DarkButton(
+                  label: 'Не списывать',
+                  onTap: () => onChanged(0),
+                ),
+              ),
+              const SizedBox(width: Gap.sm),
+              Expanded(
+                child: _DarkButton(
+                  label: 'Максимум',
+                  onTap: () => onChanged(max.toDouble()),
                 ),
               ),
             ],
@@ -311,58 +688,130 @@ class _GiftTile extends StatelessWidget {
   }
 }
 
-class _Totals extends StatelessWidget {
-  final CartPreview preview;
-  const _Totals({required this.preview});
+class _DarkButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _DarkButton({required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        children: [
-          _row('Товары', formatTenge(preview.subtotal)),
-          if (preview.promoDiscount > 0)
-            _row(
-              'Выгода по акции',
-              formatTenge(preview.promoDiscount),
-              color: const Color(0xFF2E7D32),
-            ),
-          if (!preview.deliveryAvailable)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                'Доставка от ${formatTenge(preview.minOrder)} — сейчас доступен самовывоз',
-                style: const TextStyle(fontSize: 13, color: Colors.orange),
-              ),
-            )
-          else if (preview.deliveryFee > 0)
-            _row('Доставка', formatTenge(preview.deliveryFee))
-          else
-            _row('Доставка', 'бесплатно', color: const Color(0xFF2E7D32)),
-        ],
+    final c = context.colors;
+    return PressScale(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 13),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: c.surface.withValues(alpha: 0.12),
+          borderRadius: R.pill,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w600,
+            color: c.surface,
+          ),
+        ),
       ),
     );
   }
+}
 
-  Widget _row(String label, String value, {Color? color}) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 3),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+class _Totals extends StatelessWidget {
+  final CartPreview preview;
+  final int points;
+  final String? promo;
+
+  const _Totals({required this.preview, required this.points, this.promo});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    TextStyle line([Color? color]) => TextStyle(
+      fontSize: 12,
+      height: 1.7,
+      fontWeight: FontWeight.w500,
+      color: color ?? c.muted,
+    );
+
+    return Column(
       children: [
-        Text(label, style: TextStyle(color: color ?? Colors.black54)),
-        Text(
-          value,
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            color: color ?? Colors.black,
-          ),
+        _row('Товары', formatTenge(preview.subtotal), line(), line()),
+        _row(
+          'Доставка',
+          preview.deliveryFee == 0
+              ? 'бесплатно'
+              : formatTenge(preview.deliveryFee),
+          line(),
+          line(),
         ),
+        if (preview.promoDiscount > 0)
+          _row(
+            'Подарок по акции',
+            formatTenge(preview.promoDiscount),
+            line(c.benefit),
+            line(c.benefit),
+          ),
+        if (points > 0)
+          _row(
+            'Баллы',
+            '−${formatTenge(points)}',
+            line(c.accent),
+            line(c.accent),
+          ),
       ],
-    ),
+    );
+  }
+
+  Widget _row(String label, String value, TextStyle l, TextStyle v) => Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [Text(label, style: l), Text(value, style: v)],
   );
+}
+
+class _Empty extends StatelessWidget {
+  final bool embedded;
+  const _Empty({required this.embedded});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(Gap.blockWide),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 92,
+              height: 92,
+              decoration: BoxDecoration(
+                color: c.accentSoft,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.shopping_bag_outlined,
+                size: 34,
+                color: c.accent,
+              ),
+            ),
+            const SizedBox(height: Gap.block),
+            Text(
+              'Пока пусто',
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontSize: 19),
+            ),
+            const SizedBox(height: Gap.sm),
+            Text(
+              'Можно повторить прошлый заказ — это быстрее всего',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

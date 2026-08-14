@@ -121,6 +121,58 @@ class ApiClient {
     return data;
   }
 
+  /// Последний заказ для блока «Тот же заказ?». null — заказов ещё не было.
+  Future<LastOrder?> fetchLastOrder() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/orders/$tenant/last'),
+      headers: _headers,
+    );
+    _ensureOk(res);
+    final body = utf8.decode(res.bodyBytes).trim();
+    if (body.isEmpty || body == 'null') return null;
+    return LastOrder.fromJson(jsonDecode(body));
+  }
+
+  /// Пересобирает корзину из прошлого заказа по текущему меню и ценам.
+  /// Возвращает и то, что перенеслось, и то, чего сегодня нет.
+  Future<RepeatResult> repeatOrder(String orderId) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/orders/by-id/$orderId/repeat'),
+      headers: _headers,
+    );
+    _ensureOk(res);
+    return RepeatResult.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
+  }
+
+  /// Сохранённые адреса клиента, самый свежий сверху.
+  /// Заводить их вручную не нужно — они накапливаются при оформлении.
+  Future<List<SavedAddress>> fetchAddresses() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/auth/addresses'),
+      headers: _headers,
+    );
+    _ensureOk(res);
+    final data = jsonDecode(utf8.decode(res.bodyBytes)) as List;
+    return data.map((a) => SavedAddress.fromJson(a)).toList();
+  }
+
+  Future<void> deleteAddress(String id) async {
+    final res = await http.delete(
+      Uri.parse('$baseUrl/auth/addresses/$id'),
+      headers: _headers,
+    );
+    _ensureOk(res);
+  }
+
+  Future<void> updateProfile({String? name, String? birthday}) async {
+    final res = await http.patch(
+      Uri.parse('$baseUrl/auth/me'),
+      headers: _headers,
+      body: jsonEncode({'name': ?name, 'birthday': ?birthday}),
+    );
+    _ensureOk(res);
+  }
+
   /// Действующие редакции документов. Нужны и экрану согласия, и профилю:
   /// Apple с Google требуют работающую ссылку на политику из приложения.
   Future<List<LegalDocument>> fetchLegalDocuments() async {

@@ -62,8 +62,33 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # Inter — в отличие от встроенного шрифта Flutter, содержит символ тенге (₸)
+  assets:
+    - assets/logo.jpg
+
+  # Шрифты направления «Сигнал» (design_handoff_pizzburg_app).
+  # Оба содержат кириллицу и символ тенге (₸) — проверено по cmap.
+  # Unbounded — дисплейный: заголовки, суммы, баланс.
+  # Golos Text — весь интерфейсный текст.
+  # Inter остаётся как запасной на время переноса экранов.
   fonts:
+    - family: Unbounded
+      fonts:
+        - asset: assets/fonts/Unbounded-400.ttf
+          weight: 400
+        - asset: assets/fonts/Unbounded-600.ttf
+          weight: 600
+        - asset: assets/fonts/Unbounded-700.ttf
+          weight: 700
+    - family: Golos Text
+      fonts:
+        - asset: assets/fonts/GolosText-400.ttf
+          weight: 400
+        - asset: assets/fonts/GolosText-500.ttf
+          weight: 500
+        - asset: assets/fonts/GolosText-600.ttf
+          weight: 600
+        - asset: assets/fonts/GolosText-700.ttf
+          weight: 700
     - family: Inter
       fonts:
         - asset: assets/fonts/Inter.ttf

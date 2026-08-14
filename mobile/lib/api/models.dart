@@ -285,6 +285,133 @@ class CreatedOrder {
   );
 }
 
+/// Прошлый заказ для блока повтора на главном экране.
+class LastOrder {
+  final String id;
+  final int number;
+  final int total;
+  final int positions;
+
+  /// Состав одной строкой: «Маргарита, Комбо Хот-Дог»
+  final String summary;
+  final String? photoUrl;
+
+  const LastOrder({
+    required this.id,
+    required this.number,
+    required this.total,
+    required this.positions,
+    required this.summary,
+    this.photoUrl,
+  });
+
+  factory LastOrder.fromJson(Map<String, dynamic> json) => LastOrder(
+    id: json['id']?.toString() ?? '',
+    number: (json['number'] as num?)?.toInt() ?? 0,
+    total: (json['total'] as num?)?.toInt() ?? 0,
+    positions: (json['positions'] as num?)?.toInt() ?? 0,
+    summary: json['summary']?.toString() ?? '',
+    photoUrl: json['photoUrl']?.toString(),
+  );
+}
+
+/// Что удалось перенести из прошлого заказа, а что — нет.
+class RepeatResult {
+  final List<RepeatItem> items;
+  final List<RepeatMissing> unavailable;
+
+  const RepeatResult({required this.items, required this.unavailable});
+
+  factory RepeatResult.fromJson(Map<String, dynamic> json) => RepeatResult(
+    items: ((json['items'] ?? []) as List)
+        .map((i) => RepeatItem.fromJson(i))
+        .toList(),
+    unavailable: ((json['unavailable'] ?? []) as List)
+        .map((u) => RepeatMissing.fromJson(u))
+        .toList(),
+  );
+}
+
+class RepeatItem {
+  final String productId;
+  final int qty;
+
+  /// Идентификаторы модификаторов Poster из прошлого заказа
+  final List<String> modifierIds;
+
+  const RepeatItem({
+    required this.productId,
+    required this.qty,
+    this.modifierIds = const [],
+  });
+
+  factory RepeatItem.fromJson(Map<String, dynamic> json) => RepeatItem(
+    productId: json['productId']?.toString() ?? '',
+    qty: (json['qty'] as num?)?.toInt() ?? 1,
+    modifierIds: ((json['modifiers'] ?? []) as List)
+        .map((m) => (m as Map)['posterId']?.toString() ?? '')
+        .where((id) => id.isNotEmpty)
+        .toList(),
+  );
+}
+
+class RepeatMissing {
+  final String name;
+  final String reason;
+
+  const RepeatMissing({required this.name, required this.reason});
+
+  factory RepeatMissing.fromJson(Map<String, dynamic> json) => RepeatMissing(
+    name: json['name']?.toString() ?? '',
+    reason: json['reason']?.toString() ?? '',
+  );
+}
+
+/// Сохранённый адрес клиента.
+class SavedAddress {
+  final String id;
+  final String street;
+  final String house;
+  final String flat;
+  final String entrance;
+  final String floor;
+  final String comment;
+  final String label;
+
+  const SavedAddress({
+    required this.id,
+    required this.street,
+    required this.house,
+    this.flat = '',
+    this.entrance = '',
+    this.floor = '',
+    this.comment = '',
+    this.label = '',
+  });
+
+  factory SavedAddress.fromJson(Map<String, dynamic> json) => SavedAddress(
+    id: json['id']?.toString() ?? '',
+    street: json['street']?.toString() ?? '',
+    house: json['house']?.toString() ?? '',
+    flat: json['flat']?.toString() ?? '',
+    entrance: json['entrance']?.toString() ?? '',
+    floor: json['floor']?.toString() ?? '',
+    comment: json['comment']?.toString() ?? '',
+    label: json['label']?.toString() ?? '',
+  );
+
+  /// Одна строка для списка выбора: «Абая 12, кв. 5, подъезд 2, этаж 3»
+  String get oneLine {
+    final parts = <String>[
+      '$street, $house',
+      if (flat.isNotEmpty) 'кв. $flat',
+      if (entrance.isNotEmpty) 'подъезд $entrance',
+      if (floor.isNotEmpty) 'этаж $floor',
+    ];
+    return parts.join(', ');
+  }
+}
+
 /// Юридический документ в действующей редакции.
 ///
 /// Номер версии носим с собой не для красоты: согласие хранится версией, и
@@ -339,12 +466,18 @@ class CancelReason {
   );
 }
 
-String formatTenge(int value) {
-  final s = value.toString();
-  final buf = StringBuffer();
-  for (var i = 0; i < s.length; i++) {
-    if (i > 0 && (s.length - i) % 3 == 0) buf.write(' ');
-    buf.write(s[i]);
+/// Деньги: целые тенге, разряды разделены НЕРАЗРЫВНЫМ пробелом.
+///
+/// Хендофф просит «тонкий пробел», но в Unbounded — а это шрифт всех сумм
+/// и баланса — нет ни U+2009, ни U+202F: вместо разделителя получился бы
+/// пустой квадрат в самом заметном тексте приложения. U+00A0 есть в обоих
+/// шрифтах и вдобавок не даёт «5 050» переноситься между строк.
+String formatTenge(int value, {bool withCurrency = true}) {
+  final digits = value.abs().toString();
+  final buffer = StringBuffer(value < 0 ? '\u2212' : '');
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) buffer.write('\u00A0');
+    buffer.write(digits[i]);
   }
-  return '${buf.toString()} ₸';
+  return withCurrency ? '${buffer.toString()}\u00A0₸' : buffer.toString();
 }

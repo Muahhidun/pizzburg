@@ -15,6 +15,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { AvailabilityService } from '../availability/availability.service';
 import { CancelReasonsService } from './cancel-reasons.service';
 import { LegalService } from '../legal/legal.service';
+import { AddressesService } from '../auth/addresses.service';
 
 interface DeliverySettings {
   minOrder: number;
@@ -48,6 +49,7 @@ export class OrdersService {
     private readonly availability: AvailabilityService,
     private readonly cancelReasons: CancelReasonsService,
     private readonly legal: LegalService,
+    private readonly addresses: AddressesService,
   ) {}
 
   async createOrder(
@@ -137,15 +139,6 @@ export class OrdersService {
       deliveryFee = subtotal >= delivery.freeFrom ? 0 : delivery.fee;
     }
 
-    const grossTotal = subtotal + deliveryFee;
-
-    // Акции: подарки клиент не оплачивает; в Poster они уйдут полной
-    // ценой и компенсируются «Личной интеграцией»
-    let promo = await this.promotions.evaluate(
-      tenant.id,
-      dto.items,
-      dto.promoCode,
-    );
 
     const legalVersions = await this.legal.currentVersions(tenant.id);
 
@@ -155,25 +148,6 @@ export class OrdersService {
     const normalizedPhone = normalizeKzPhone(dto.phone);
     const requestedPoints = dto.pointsToSpend ?? 0;
     const loyaltyPolicy = this.loyalty.policy(tenant.settings);
-    if (
-      requestedPoints > 0 &&
-      promo.applied.length > 0 &&
-      !loyaltyPolicy.allowPointsWithPromotions
-    ) {
-      if (!dto.skipPromotions) {
-        throw new BadRequestException(
-          'Баллы нельзя использовать вместе с акцией. Выберите акцию или баллы',
-        );
-      }
-      promo = { gifts: [], discount: 0, applied: [] };
-    }
-    const giftProducts =
-      promo.gifts.length > 0
-        ? await this.prisma.product.findMany({
-            where: { id: { in: promo.gifts.map((g) => g.productId) } },
-          })
-        : [];
-    const giftById = new Map(giftProducts.map((p) => [p.id, p]));
     if (
       requestedPoints > 0 &&
       (!authCustomer ||
@@ -212,12 +186,65 @@ export class OrdersService {
         data: { name: dto.name },
       });
     }
+    // Акции считаем после клиента: ограничения «первый заказ», «раз на
+    // клиента» и лимит применений без него не проверить.
+    const ordersBefore = await this.prisma.order.count({
+      where: { customerId: customer.id },
+    });
+    let promo = await this.promotions.evaluate(
+      tenant.id,
+      dto.items,
+      dto.promoCode,
+      {
+        subtotal,
+        orderType: dto.type,
+        customerId: customer.id,
+        isFirstOrder: ordersBefore === 0,
+      },
+    );
+
+    if (
+      requestedPoints > 0 &&
+      promo.applied.length > 0 &&
+      !loyaltyPolicy.allowPointsWithPromotions
+    ) {
+      if (!dto.skipPromotions) {
+        throw new BadRequestException(
+          'Баллы нельзя использовать вместе с акцией. Выберите акцию или баллы',
+        );
+      }
+      promo = {
+        gifts: [],
+        giftValue: 0,
+        moneyDiscount: 0,
+        freeDelivery: false,
+        applied: [],
+        appliedPromotions: [],
+      };
+    }
+    const giftProducts =
+      promo.gifts.length > 0
+        ? await this.prisma.product.findMany({
+            where: { id: { in: promo.gifts.map((g) => g.productId) } },
+          })
+        : [];
+    const giftById = new Map(giftProducts.map((p) => [p.id, p]));
+
+    // Бесплатная доставка по акции применяется к уже посчитанной цене
+    if (promo.freeDelivery) deliveryFee = 0;
+
+    // Денежная скидка уменьшает сумму к оплате — в отличие от подарка,
+    // за который клиент просто не платит. В Poster она уходит той же
+    // «Личной интеграцией», что и баллы, иначе смена не сойдётся.
+    const moneyDiscount = Math.min(promo.moneyDiscount, subtotal);
+    const payableBeforePoints = subtotal + deliveryFee - moneyDiscount;
+
     const pointsSpent = this.loyalty.validateSpend(
       customer.pointsBalance,
-      subtotal,
+      payableBeforePoints,
       requestedPoints,
     );
-    const total = grossTotal - pointsSpent;
+    const total = payableBeforePoints - pointsSpent;
 
     // Заказ + позиции + отправки в транзакции
     const order = await this.prisma.$transaction(async (tx) => {
@@ -237,7 +264,10 @@ export class OrdersService {
           comment: dto.comment ?? '',
           subtotal,
           deliveryFee,
-          discount: promo.discount + pointsSpent,
+          // Вся выгода клиента одной строкой: подарки, денежная скидка
+          // и баллы. Ровно эта сумма гасится «Личной интеграцией».
+          discount: promo.giftValue + moneyDiscount + pointsSpent,
+          promoDiscount: moneyDiscount,
           pointsSpent,
           total,
           promoCode: dto.promoCode,
@@ -301,6 +331,26 @@ export class OrdersService {
       return created;
     });
 
+    // Фиксируем применения акций: на них держатся лимиты «первый заказ»
+    // и «раз на клиента». Ключ (акция, заказ) уникален, поэтому повтор
+    // не съедает лимит дважды.
+    await this.promotions.recordUses(
+      tenant.id,
+      order.id,
+      customer.id,
+      promo.appliedPromotions,
+    );
+
+    // Адрес запоминаем вне транзакции: справочник для следующего заказа —
+    // удобство, и его сбой не должен отменять уже принятый заказ.
+    if (dto.type === 'DELIVERY' && dto.address && customer.id) {
+      try {
+        await this.addresses.remember(tenant.id, customer.id, dto.address);
+      } catch (error) {
+        this.logger.warn(`Не удалось запомнить адрес заказа: ${String(error)}`);
+      }
+    }
+
     // Отправка на планшеты — вне транзакции (сетевые вызовы)
     await this.dispatchToPoster(order.id);
 
@@ -338,8 +388,11 @@ export class OrdersService {
     });
 
     const parts = order.dispatches;
-    let remainingPoints = order.pointsSpent;
-    const pointsByDispatch = new Map<string, number>();
+    // Предоплата «Личной интеграцией» — это баллы И денежная скидка по
+    // акциям: и то, и другое клиент не платит наличными, но в кассе
+    // позиции стоят полную цену.
+    let remainingPrepaid = order.pointsSpent + order.promoDiscount;
+    const prepaidByDispatch = new Map<string, number>();
     for (const part of parts) {
       const payableInPart = order.items
         .filter(
@@ -354,9 +407,9 @@ export class OrdersService {
           );
           return sum + (it.price + modifierTotal) * it.qty;
         }, 0);
-      const allocated = Math.min(remainingPoints, payableInPart);
-      pointsByDispatch.set(part.id, allocated);
-      remainingPoints -= allocated;
+      const allocated = Math.min(remainingPrepaid, payableInPart);
+      prepaidByDispatch.set(part.id, allocated);
+      remainingPrepaid -= allocated;
     }
     for (let i = 0; i < parts.length; i++) {
       const d = parts[i];
@@ -400,15 +453,23 @@ export class OrdersService {
       const giftIntegrationSum = items
         .filter((it) => it.isGift)
         .reduce((s, it) => s + it.price * it.qty, 0);
-      const pointsIntegrationSum = pointsByDispatch.get(d.id) ?? 0;
-      const integrationSum = giftIntegrationSum + pointsIntegrationSum;
+      const prepaidIntegrationSum = prepaidByDispatch.get(d.id) ?? 0;
+      const integrationSum = giftIntegrationSum + prepaidIntegrationSum;
       const giftNote = items
         .filter((it) => it.isGift)
         .map((it) => ` | ПОДАРОК ПО АКЦИИ: ${it.name} ×${it.qty} (оплачен интеграцией)`)
         .join('');
+      // Кассиру важно видеть, чем закрыта разница: баллами клиента или
+      // скидкой по акции — это разные разговоры при спорах.
       const pointsNote =
-        pointsIntegrationSum > 0
-          ? ` | БАЛЛЫ ПРИЛОЖЕНИЯ: ${pointsIntegrationSum} ₸ (оплачено интеграцией)`
+        prepaidIntegrationSum > 0
+          ? ` | ${
+              order.promoDiscount > 0 && order.pointsSpent > 0
+                ? 'БАЛЛЫ И СКИДКА'
+                : order.promoDiscount > 0
+                  ? 'СКИДКА ПО АКЦИИ'
+                  : 'БАЛЛЫ ПРИЛОЖЕНИЯ'
+            }: ${prepaidIntegrationSum} ₸ (оплачено интеграцией)`
           : '';
 
       const addr = order.address as any;
@@ -696,6 +757,98 @@ export class OrdersService {
     await this.loyalty.onStatusChanged(order.id, next);
     await this.notifications.sendOrderStatus(order.id, next);
     return this.prisma.order.findUniqueOrThrow({ where: { id: updated.id } });
+  }
+
+  /**
+   * Последний заказ клиента для блока «Тот же заказ?».
+   *
+   * Отменённые не предлагаем: человек их отменил, повторять незачем.
+   */
+  async lastOrder(tenantId: string, customerId: string) {
+    const order = await this.prisma.order.findFirst({
+      where: { tenantId, customerId, status: { not: 'CANCELLED' } },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        items: {
+          where: { isGift: false },
+          include: {
+            product: {
+              select: { displayPhotoUrl: true, photoUrl: true },
+            },
+          },
+        },
+      },
+    });
+    if (!order) return null;
+
+    const items = order.items;
+    return {
+      id: order.id,
+      number: order.number,
+      createdAt: order.createdAt,
+      total: order.total,
+      type: order.type,
+      positions: items.reduce((sum, i) => sum + i.qty, 0),
+      // Состав одной строкой — как в хендоффе: «Маргарита, Комбо Хот-Дог»
+      summary: items.map((i) => i.name).join(', '),
+      photoUrl:
+        items[0]?.product?.displayPhotoUrl ?? items[0]?.product?.photoUrl ?? null,
+    };
+  }
+
+  /**
+   * Собирает корзину из прошлого заказа.
+   *
+   * Позиции пересобираются по **текущему** меню, а не по снимку заказа:
+   * цены могли измениться, и человек платит сегодняшнюю. Подарки по акциям
+   * не переносятся — их заново выдаст промо-движок, если условие снова
+   * выполнено; иначе клиент увидел бы подарок, на который не заработал.
+   */
+  async repeatOrder(orderId: string, tenantId: string, customerId: string) {
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, tenantId, customerId },
+      include: { items: { where: { isGift: false } } },
+    });
+    if (!order) throw new NotFoundException('Заказ не найден');
+
+    const ids = order.items
+      .map((i) => i.productId)
+      .filter((id): id is string => id !== null);
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: ids }, tenantId },
+      include: { category: true, posterAccount: true },
+    });
+    const byId = new Map(products.map((p) => [p.id, p]));
+
+    const items: {
+      productId: string;
+      qty: number;
+      modifiers: unknown;
+    }[] = [];
+    const unavailable: { name: string; reason: string }[] = [];
+
+    for (const item of order.items) {
+      const product = item.productId ? byId.get(item.productId) : undefined;
+      if (!product || !product.isVisible) {
+        unavailable.push({ name: item.name, reason: 'больше нет в меню' });
+        continue;
+      }
+      if (!product.isActive || !product.category.isActive) {
+        unavailable.push({ name: item.name, reason: 'сегодня закончилось' });
+        continue;
+      }
+      if (!product.posterAccount.isActive) {
+        unavailable.push({ name: item.name, reason: 'отдел не работает' });
+        continue;
+      }
+      items.push({
+        productId: product.id,
+        qty: item.qty,
+        modifiers: item.modifiers,
+      });
+    }
+
+    return { items, unavailable };
   }
 
   async getOrder(orderId: string) {

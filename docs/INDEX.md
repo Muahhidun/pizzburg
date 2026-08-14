@@ -30,6 +30,8 @@
 | `FOODPICASSO_MIGRATION.md` | Экспорт и перенос клиентской базы из старой платформы |
 | `FEATURE_PARITY.md` | Сравнение функций со SmartPicasso/FoodPicasso |
 | `SMARTPICASSO_AUDIT.md` | Аудит экранов и функций старой админки |
+| `DESIGN_SYSTEM.md` | Перенос дизайна «Сигнал» в Flutter, токены, движение, хаптика |
+| `DESIGN_BRIEF.md` | ТЗ, по которому сделан дизайн-пакет |
 | `ADMIN_SPEC.md` | Требования к нашей админке |
 | `LOYALTY.md` | Правила баллов и кэшбэка приложения |
 | `POSTER_INTEGRATION.md` | Интеграция, разделение заказов и сверка Poster |

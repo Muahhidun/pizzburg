@@ -215,8 +215,38 @@ model Customer {
   orders      Order[]
   loyaltyTxns LoyaltyTransaction[]
   pushDevices PushDevice[]
+  addresses   CustomerAddress[]
 
   @@unique([tenantId, phone])
+}
+
+/// Адрес клиента для повторных заказов.
+///
+/// Копия адреса всё равно остаётся в `Order.address`: справочник можно
+/// отредактировать или удалить, а заказ должен помнить, куда его везли.
+model CustomerAddress {
+  id         String   @id @default(cuid())
+  tenantId   String
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  street String
+  house  String
+  /// Пустая строка, а не NULL: поле входит в ключ дубликата, а в Postgres
+  /// NULL != NULL — с nullable-колонкой уникальность просто не сработала бы.
+  flat     String  @default("")
+  entrance String?
+  floor    String?
+  comment  String?
+  /// «Дом», «Работа» — необязательная подпись от клиента
+  label    String?
+
+  lastUsedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  /// Один и тот же адрес не должен накапливаться дублями при каждом заказе
+  @@unique([customerId, street, house, flat])
+  @@index([customerId, lastUsedAt])
 }
 
 enum LegalDocumentType {
@@ -341,7 +371,11 @@ model Order {
   comment       String        @default("")
   subtotal      Int // ₸ до скидок
   deliveryFee   Int           @default(0)
-  discount      Int           @default(0) // промокод + списанные баллы
+  discount      Int           @default(0) // вся выгода: подарки + скидка + баллы
+  /// Денежная скидка по акциям, ₸. Отдельным полем, а не внутри discount:
+  /// при отправке в Poster её нужно прибавить к «Личной интеграции», и
+  /// вычислить её обратно из общей суммы выгоды нельзя.
+  promoDiscount Int           @default(0)
   pointsSpent   Int           @default(0)
   pointsEarned  Int           @default(0)
   total         Int
@@ -438,21 +472,84 @@ model LoyaltyTransaction {
 /// Акция уровня приложения. Первый поддержанный тип — «N товаров из
 /// категории → товар в подарок» (2+1). Скидка при отправке в Poster
 /// уходит «Личной интеграцией» (payment.sum), позиции — полными ценами.
+/// Что акция делает. Тип определяет, какие поля условия и эффекта читаются.
+enum PromotionKind {
+  /// N товаров из категории → подарок (классическая «2+1»)
+  GIFT_FOR_QTY
+  /// Сумма заказа не меньше minOrderSum → подарок
+  GIFT_FOR_SUM
+  /// Скидка процентом на заказ
+  PERCENT_OFF
+  /// Скидка фиксированной суммой
+  FIXED_OFF
+  /// Бесплатная доставка
+  FREE_DELIVERY
+}
+
 model Promotion {
-  id                  String    @id @default(cuid())
-  tenantId            String
-  name                String // «2+1 Пицца»
-  code                String? // промокод; null = применяется автоматически
-  isActive            Boolean   @default(true)
-  conditionCategoryId String // витринная категория условия (AppCategory)
-  conditionQty        Int       @default(2) // сколько штук нужно
-  giftProductId       String // подарочный товар (Product)
-  giftQty             Int       @default(1)
-  repeatPerCart       Boolean   @default(true) // «много раз в рамках чека»
-  activeFrom          DateTime?
-  activeTo            DateTime?
+  id       String        @id @default(cuid())
+  tenantId String
+  name     String // «2+1 Пицца»
+  kind     PromotionKind @default(GIFT_FOR_QTY)
+  code     String? // промокод; null = применяется автоматически
+  isActive Boolean       @default(true)
+
+  // --- условия ---
+  /// Витринная категория (AppCategory) для GIFT_FOR_QTY
+  conditionCategoryId String?
+  conditionQty        Int     @default(2)
+  /// Минимальная сумма товаров, ₸. Для GIFT_FOR_SUM обязательна,
+  /// остальным типам служит дополнительным порогом.
+  minOrderSum         Int?
+
+  // --- эффект ---
+  giftProductId String?
+  giftQty       Int     @default(1)
+  /// Проценты для PERCENT_OFF, тенге для FIXED_OFF
+  discountValue Int     @default(0)
+  /// Потолок скидки в ₸ для процента: без него «−50%» на крупном заказе
+  /// уносит выручку смены.
+  maxDiscount   Int?
+
+  // --- ограничения ---
+  repeatPerCart Boolean @default(true) // «много раз в рамках чека»
+  /// Только первый заказ клиента
+  firstOrderOnly Boolean @default(false)
+  /// Сколько раз одному клиенту; null = без ограничения
+  perCustomerLimit Int?
+  /// Сколько раз всего; null = без ограничения
+  totalLimit       Int?
+  /// 'DELIVERY' | 'PICKUP'; null = любой способ получения
+  orderType        String?
+
+  activeFrom DateTime?
+  activeTo   DateTime?
+
+  uses PromotionUse[]
 
   @@index([tenantId])
+}
+
+/// Факт применения акции к заказу.
+///
+/// Без этой таблицы ограничения «первый заказ» и «раз на клиента»
+/// проверить нечем: акции не хранят историю, а по заказам скидку уже не
+/// разложить обратно на акции.
+model PromotionUse {
+  id          String    @id @default(cuid())
+  tenantId    String
+  promotionId String
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  customerId  String?
+  orderId     String
+  /// Сколько дала эта акция в ₸ — для отчёта об эффективности
+  discount    Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  /// Повторная отправка заказа не должна удваивать счётчик применений
+  @@unique([promotionId, orderId])
+  @@index([promotionId, customerId])
+  @@index([tenantId, createdAt])
 }
 
 enum PromoType {
@@ -461,6 +558,9 @@ enum PromoType {
   GIFT // подарочная позиция (2+1 и т.п.)
 }
 
+/// УСТАРЕЛО. Резервная схема промокодов, которую движок никогда не читал:
+/// все правила живут в Promotion. Не удаляем здесь, чтобы не тянуть DROP
+/// таблицы в деплой боевой базы — снос отдельной миграцией.
 model PromoCode {
   id         String    @id @default(cuid())
   tenantId   String

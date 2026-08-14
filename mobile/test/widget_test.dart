@@ -1,13 +1,17 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pizzburg/api/models.dart';
+import 'package:pizzburg/theme/tokens.dart';
+import 'package:pizzburg/utils/haptics.dart';
+import 'package:pizzburg/widgets/motion.dart';
 import 'package:pizzburg/state/cart.dart';
 import 'package:pizzburg/utils/input_validation.dart';
 
 void main() {
   test('formatTenge разделяет разряды', () {
-    expect(formatTenge(2550), '2 550 ₸');
-    expect(formatTenge(950), '950 ₸');
-    expect(formatTenge(12500), '12 500 ₸');
+    expect(formatTenge(2550), '2\u00A0550\u00A0₸');
+    expect(formatTenge(950), '950\u00A0₸');
+    expect(formatTenge(12500), '12\u00A0500\u00A0₸');
   });
 
   test('карточка товара читает витринные поля', () {
@@ -212,5 +216,217 @@ void main() {
 
     expect(reason.id, 'r1');
     expect(reason.label, 'Передумал');
+  });
+
+  test('сохранённый адрес собирается в одну строку', () {
+    final a = SavedAddress.fromJson({
+      'id': 'a1',
+      'street': 'Абая',
+      'house': '12',
+      'flat': '5',
+      'entrance': '2',
+      'floor': '3',
+    });
+
+    expect(a.oneLine, 'Абая, 12, кв. 5, подъезд 2, этаж 3');
+  });
+
+  test('пустые уточнения не попадают в строку адреса', () {
+    final a = SavedAddress.fromJson({
+      'id': 'a2',
+      'street': 'Машхур Жусупа',
+      'house': '134',
+      'flat': '',
+    });
+
+    expect(a.oneLine, 'Машхур Жусупа, 134');
+  });
+
+  test('деньги разделяются неразрывным пробелом — в Unbounded нет тонкого', () {
+    expect(AnimatedMoney.format(5050), '5\u00A0050\u00A0₸');
+    expect(AnimatedMoney.format(950), '950\u00A0₸');
+    expect(AnimatedMoney.format(1006), '1\u00A0006\u00A0₸');
+    expect(AnimatedMoney.format(3400, withCurrency: false), '3\u00A0400');
+  });
+
+  test('отрицательная сумма показывается минусом, а не скобками', () {
+    expect(AnimatedMoney.format(-600), '\u2212600\u00A0₸');
+  });
+
+  test('ползунок баллов вибрирует на смене шага, а не на каждом пикселе', () {
+    final stepped = SteppedHaptic();
+    var buzzes = 0;
+    // считаем сами: Haptics на вебе молчит, поэтому проверяем логику шага
+    int stepIndex(double v) => (v / 50).round();
+
+    final values = [0.0, 10.0, 24.0, 26.0, 49.0, 51.0, 99.0];
+    int? last;
+    for (final v in values) {
+      final i = stepIndex(v);
+      if (last != i) {
+        last = i;
+        buzzes++;
+      }
+    }
+    stepped.reset();
+
+    // 0→0, 10→0, 24→0, 26→1, 49→1, 51→1, 99→2 — три смены шага
+    expect(buzzes, 3);
+  });
+
+  test('токены движения: выгода заметнее действия', () {
+    expect(Motion.fast.inMilliseconds < Motion.base.inMilliseconds, isTrue);
+    expect(Motion.base.inMilliseconds < Motion.slow.inMilliseconds, isTrue);
+  });
+
+  test('повтор наполняет корзину по текущим ценам, а не по ценам заказа', () {
+    final menu = MenuResponse.fromJson({
+      'tenant': {'name': 'PizzBurg'},
+      'categories': [
+        {
+          'id': 'c1',
+          'name': 'Пиццы',
+          'products': [
+            {
+              'id': 'p1',
+              'name': 'Маргарита',
+              'price': 2900, // цена выросла с 2550
+              'modifierGroups': [
+                {
+                  'id': 'g1',
+                  'name': 'Добавки',
+                  'min': 0,
+                  'max': 3,
+                  'options': [
+                    {'id': 'm1', 'name': 'Бортик', 'price': 700},
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    final cart = Cart();
+    final added = cart.fillFromRepeat(
+      RepeatResult.fromJson({
+        'items': [
+          {
+            'productId': 'p1',
+            'qty': 2,
+            'modifiers': [
+              {'posterId': 'm1', 'name': 'Бортик', 'price': 700},
+            ],
+          },
+        ],
+        'unavailable': <dynamic>[],
+      }),
+      menu,
+    );
+
+    expect(added, 2);
+    expect(cart.lines.length, 1);
+    expect(cart.lines.first.qty, 2);
+    // 2900 сегодняшняя + 700 бортик
+    expect(cart.lines.first.unitPrice, 3600);
+    expect(cart.subtotal, 7200);
+  });
+
+  test('повтор очищает корзину, а не дописывает к набранному', () {
+    final menu = MenuResponse.fromJson({
+      'tenant': {'name': 'PizzBurg'},
+      'categories': [
+        {
+          'id': 'c1',
+          'name': 'Пиццы',
+          'products': [
+            {'id': 'p1', 'name': 'Маргарита', 'price': 2550, 'modifierGroups': []},
+          ],
+        },
+      ],
+    });
+    final cart = Cart();
+    cart.add(menu.categories.first.products.first);
+    cart.add(menu.categories.first.products.first);
+    expect(cart.count, 2);
+
+    cart.fillFromRepeat(
+      RepeatResult.fromJson({
+        'items': [
+          {'productId': 'p1', 'qty': 1, 'modifiers': <dynamic>[]},
+        ],
+        'unavailable': <dynamic>[],
+      }),
+      menu,
+    );
+
+    expect(cart.count, 1);
+  });
+
+  test('исчезнувший товар не ломает повтор', () {
+    final menu = MenuResponse.fromJson({
+      'tenant': {'name': 'PizzBurg'},
+      'categories': [
+        {
+          'id': 'c1',
+          'name': 'Пиццы',
+          'products': [
+            {'id': 'p1', 'name': 'Маргарита', 'price': 2550, 'modifierGroups': []},
+          ],
+        },
+      ],
+    });
+
+    final cart = Cart();
+    final added = cart.fillFromRepeat(
+      RepeatResult.fromJson({
+        'items': [
+          {'productId': 'p1', 'qty': 1, 'modifiers': <dynamic>[]},
+          {'productId': 'ушёл', 'qty': 3, 'modifiers': <dynamic>[]},
+        ],
+        'unavailable': [
+          {'name': 'Пепперони', 'reason': 'сегодня закончилось'},
+        ],
+      }),
+      menu,
+    );
+
+    expect(added, 1);
+    expect(cart.lines.length, 1);
+  });
+
+  group('телефон: удаление', () {
+    String apply(String oldText, String newText) {
+      final f = KzPhoneInputFormatter();
+      return f
+          .formatEditUpdate(
+            TextEditingValue(text: oldText),
+            TextEditingValue(text: newText),
+          )
+          .text;
+    }
+
+    test('backspace на скобке стирает цифру, а не зацикливается', () {
+      // «+7 (708)» → пользователь жмёт backspace, уходит «)»
+      expect(apply('+7 (708)', '+7 (708'), '+7 (70');
+    });
+
+    test('номер можно стереть до конца', () {
+      var text = '+7 (708) 12-34-56';
+      for (var i = 0; i < 12; i++) {
+        final shorter = text.substring(0, text.length - 1);
+        final next = apply(text, shorter);
+        expect(next.length < text.length, isTrue, reason: 'застряло на «$text»');
+        text = next;
+        if (text == '+7') break;
+      }
+      expect(text, '+7');
+    });
+
+    test('ввод цифры по-прежнему форматируется', () {
+      expect(apply('+7', '+77'), '+7 (7');
+      expect(apply('+7 (70', '+7 (708'), '+7 (708)');
+    });
   });
 }

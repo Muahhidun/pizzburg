@@ -72,6 +72,29 @@ export class OrdersController {
     );
   }
 
+  /** Последний заказ для блока «Тот же заказ?» на главном экране */
+  @Get(':tenantSlug/last')
+  @UseGuards(CustomerAuthGuard)
+  async lastOrder(@Param('tenantSlug') tenantSlug: string, @Req() req: any) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { slug: tenantSlug },
+      select: { id: true },
+    });
+    if (!tenant) throw new NotFoundException('Unknown tenant');
+    return this.orders.lastOrder(tenant.id, req.customer.sub);
+  }
+
+  /** Собрать корзину из прошлого заказа по текущему меню и ценам */
+  @Post('by-id/:orderId/repeat')
+  @UseGuards(CustomerAuthGuard)
+  async repeat(@Param('orderId') orderId: string, @Req() req: any) {
+    return this.orders.repeatOrder(
+      orderId,
+      req.customer.tenantId,
+      req.customer.sub,
+    );
+  }
+
   /** Причины отмены, доступные клиенту */
   @Get(':tenantSlug/cancel-reasons')
   async cancelReasons(@Param('tenantSlug') tenantSlug: string) {

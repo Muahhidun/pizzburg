@@ -3,19 +3,23 @@ import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
 import '../state/cart.dart';
-import '../widgets/product_card.dart';
-import 'product_screen.dart';
-import 'cart_screen.dart';
 import '../state/auth.dart';
-import 'profile_screen.dart';
-import 'checkout_screen.dart';
+import '../theme/app_theme.dart';
+import '../theme/tokens.dart';
+import '../utils/haptics.dart';
+import '../widgets/motion.dart';
+import '../widgets/repeat_order_card.dart';
+import 'cart_screen.dart';
+import 'catalog_header.dart';
+import 'catalog_parts.dart';
+import 'order_screen.dart';
+import 'product_screen.dart';
 
-/// Каталог: липкая лента категорий + список товаров.
+/// Каталог — главный экран.
 ///
-/// Список плоский, с ФИКСИРОВАННЫМИ высотами строк — поэтому позицию
-/// любой категории можно вычислить точно и прокрутить к ней, а при
-/// ручной прокрутке — подсветить нужный чип. GlobalKey + ensureVisible
-/// здесь не работают: элементы вне экрана не построены.
+/// Категории работают якорями непрерывного скролла, а не фильтром: так
+/// человек видит всё меню и может листать, а чипсы лишь подсказывают, где
+/// он сейчас. Хендофф прямо рекомендует этот вариант.
 class MenuScreen extends StatefulWidget {
   const MenuScreen({super.key});
 
@@ -23,41 +27,72 @@ class MenuScreen extends StatefulWidget {
   State<MenuScreen> createState() => _MenuScreenState();
 }
 
-const _headerHeight = 60.0;
-const _productRowHeight = 258.0;
+/// Всё, что нужно каталогу за один заход
+class _CatalogData {
+  final MenuResponse menu;
+  final Availability availability;
+  final LastOrder? lastOrder;
+  final List<SavedAddress> addresses;
+
+  /// Заказ, который прямо сейчас готовится или едет
+  final Map<String, dynamic>? activeOrder;
+
+  const _CatalogData({
+    required this.menu,
+    required this.availability,
+    this.lastOrder,
+    this.addresses = const [],
+    this.activeOrder,
+  });
+}
+
+const _activeStatuses = {'NEW', 'ACCEPTED', 'COOKING', 'READY', 'ON_WAY'};
+
+const _stageLabels = {
+  'NEW': 'Отправлен на кухню',
+  'ACCEPTED': 'Принят кухней',
+  'COOKING': 'Готовим ваш заказ',
+  'READY': 'Готов',
+  'ON_WAY': 'Курьер в пути',
+};
 
 sealed class _Row {
-  final String categoryId;
-  _Row(this.categoryId);
+  const _Row();
 }
 
 class _HeaderRow extends _Row {
+  final String categoryId;
   final String title;
-  _HeaderRow(super.categoryId, this.title);
+  const _HeaderRow(this.categoryId, this.title);
 }
 
-class _ProductsRow extends _Row {
-  final List<Product> products;
-  _ProductsRow(super.categoryId, this.products);
+class _ProductRowItem extends _Row {
+  final String categoryId;
+  final Product product;
+  const _ProductRowItem(this.categoryId, this.product);
 }
+
+const _categoryTitleHeight = 58.0;
+const _productRowHeight = 101.0;
 
 class _MenuScreenState extends State<MenuScreen> {
-  late Future<MenuResponse> _future;
+  late Future<_CatalogData> _future;
   final _listController = ScrollController();
   final _chipsController = ScrollController();
 
   final List<_Row> _rows = [];
-  List<MenuCategory> _categories = [];
-
-  /// categoryId → смещение заголовка от начала списка
   final Map<String, double> _offsets = {};
+  List<MenuCategory> _categories = [];
   String? _activeCategory;
   bool _programmaticScroll = false;
+  String _mode = 'DELIVERY';
+  int _attempt = 1;
+  MenuResponse? _menu;
 
   @override
   void initState() {
     super.initState();
-    _future = context.read<ApiClient>().fetchMenu();
+    _future = _load();
     _listController.addListener(_onScroll);
   }
 
@@ -68,34 +103,84 @@ class _MenuScreenState extends State<MenuScreen> {
     super.dispose();
   }
 
+  Future<_CatalogData> _load() async {
+    final api = context.read<ApiClient>();
+    final authed = context.read<AuthState>().isAuthenticated;
+
+    // Меню и режим — обязательные; повтор и адреса нужны только вошедшим
+    // и не должны ронять экран, если не пришли.
+    final menu = await api.fetchMenu();
+    final availability = await api.fetchAvailability();
+    LastOrder? last;
+    List<SavedAddress> addresses = const [];
+    if (authed) {
+      try {
+        last = await api.fetchLastOrder();
+        addresses = await api.fetchAddresses();
+      } catch (_) {
+        // блок повтора просто не покажем
+      }
+    }
+    // Активный заказ ищем и для гостя: id последнего заказа сохранён на
+    // устройстве, иначе после оформления вернуться к статусу было бы нельзя.
+    Map<String, dynamic>? active;
+    final remembered = await LastPlacedOrder.restore();
+    if (remembered != null) {
+      try {
+        final status = await api.orderStatus(remembered.$1);
+        if (_activeStatuses.contains(status['status']?.toString())) {
+          active = status;
+        } else {
+          await LastPlacedOrder.forget();
+        }
+      } catch (_) {
+        // заказ мог быть удалён — блок просто не покажем
+      }
+    }
+
+    _menu = menu;
+    if (!availability.deliveryAvailable) _mode = 'PICKUP';
+    return _CatalogData(
+      menu: menu,
+      availability: availability,
+      lastOrder: last,
+      addresses: addresses,
+      activeOrder: active,
+    );
+  }
+
+  void _retry() {
+    setState(() {
+      _attempt++;
+      _rows.clear();
+      _offsets.clear();
+      _future = _load();
+    });
+  }
+
   void _buildRows(MenuResponse menu) {
-    if (_rows.isNotEmpty) return; // строим один раз
+    if (_rows.isNotEmpty) return;
     _categories = menu.categories;
     var offset = 0.0;
-    for (final c in menu.categories) {
-      _offsets[c.id] = offset;
-      _rows.add(_HeaderRow(c.id, c.name));
-      offset += _headerHeight;
-      for (var i = 0; i < c.products.length; i += 2) {
-        _rows.add(
-          _ProductsRow(
-            c.id,
-            c.products.sublist(i, (i + 2).clamp(0, c.products.length)),
-          ),
-        );
+    for (final category in menu.categories) {
+      _offsets[category.id] = offset;
+      _rows.add(_HeaderRow(category.id, category.name));
+      offset += _categoryTitleHeight;
+      for (final product in category.products) {
+        _rows.add(_ProductRowItem(category.id, product));
         offset += _productRowHeight;
       }
     }
-    _activeCategory = menu.categories.first.id;
+    _activeCategory = menu.categories.isEmpty ? null : menu.categories.first.id;
   }
 
   void _onScroll() {
     if (_programmaticScroll || _categories.isEmpty) return;
     final offset = _listController.offset + 1;
-    String current = _categories.first.id;
-    for (final c in _categories) {
-      if ((_offsets[c.id] ?? 0) <= offset) {
-        current = c.id;
+    var current = _categories.first.id;
+    for (final category in _categories) {
+      if ((_offsets[category.id] ?? 0) <= offset) {
+        current = category.id;
       } else {
         break;
       }
@@ -109,21 +194,16 @@ class _MenuScreenState extends State<MenuScreen> {
   void _scrollChipsTo(String categoryId) {
     final index = _categories.indexWhere((c) => c.id == categoryId);
     if (index < 0 || !_chipsController.hasClients) return;
-    final target = (index * 110.0 - 60).clamp(
-      0.0,
-      _chipsController.position.maxScrollExtent,
-    );
     _chipsController.animateTo(
-      target,
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
+      (index * 110.0 - 60).clamp(0.0, _chipsController.position.maxScrollExtent),
+      duration: Motion.base,
+      curve: Motion.change,
     );
   }
 
   Future<void> _jumpToCategory(String categoryId) async {
     final offset = _offsets[categoryId];
     if (offset == null || !_listController.hasClients) return;
-
     setState(() {
       _activeCategory = categoryId;
       _programmaticScroll = true;
@@ -131,293 +211,280 @@ class _MenuScreenState extends State<MenuScreen> {
     _scrollChipsTo(categoryId);
     await _listController.animateTo(
       offset.clamp(0.0, _listController.position.maxScrollExtent),
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeOutCubic,
+      duration: Motion.page,
+      curve: Motion.enter,
     );
     _programmaticScroll = false;
   }
 
+  /// Подпись справа в шапке.
+  ///
+  /// Времени доставки бэкенд пока не считает, а выдуманные «35 мин» — прямой
+  /// путь к скандалу: человек оформит предзаказ на через час и предъявит
+  /// цифру из шапки. Поэтому показываем то, что знаем точно, — режим
+  /// получения и часы работы, а не обещание срока.
+  String _eta(Availability a) {
+    if (!a.isOpenNow) return 'закрыто';
+    if (_mode == 'PICKUP') return 'самовывоз';
+    if (!a.deliveryAvailable) return 'только самовывоз';
+    final hours = a.todayHours;
+    if (hours.isNotEmpty && hours.first.length == 2) {
+      return 'до ${hours.first[1]}';
+    }
+    return 'доставка';
+  }
+
+  String _addressLabel(_CatalogData data) {
+    if (_mode == 'PICKUP') return 'Ауэзова 47б, MaxiMall';
+    if (data.addresses.isEmpty) return 'Укажите адрес';
+    final a = data.addresses.first;
+    return '${a.street}, ${a.house}';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Scaffold(
-      body: SafeArea(
-        child: FutureBuilder<MenuResponse>(
-          future: _future,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snapshot.hasError) {
-              return _ErrorView(
+      backgroundColor: colors.surface,
+      body: FutureBuilder<_CatalogData>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const SafeArea(top: false, child: CatalogSkeleton());
+          }
+          if (snapshot.hasError) {
+            return SafeArea(
+              child: CatalogError(
                 message: snapshot.error.toString(),
-                onRetry: () => setState(
-                  () => _future = context.read<ApiClient>().fetchMenu(),
-                ),
-              );
-            }
+                attempt: _attempt,
+                onRetry: _retry,
+              ),
+            );
+          }
 
-            final menu = snapshot.data!;
-            _buildRows(menu);
+          final data = snapshot.data!;
+          _buildRows(data.menu);
 
-            return Column(
+          // top: false — хедер сам заходит под статус-бар и красит его
+          return SafeArea(
+            top: false,
+            bottom: false,
+            child: Stack(
               children: [
-                _TopBar(title: menu.tenantName),
-                _CategoryChips(
-                  categories: _categories,
-                  activeId: _activeCategory,
-                  controller: _chipsController,
-                  onTap: _jumpToCategory,
-                ),
-                Expanded(
-                  child: ListView.builder(
-                    controller: _listController,
-                    itemCount: _rows.length,
-                    itemExtent: null,
-                    itemBuilder: (context, index) {
-                      final row = _rows[index];
-                      if (row is _HeaderRow) {
-                        return SizedBox(
-                          height: _headerHeight,
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                            child: Text(
-                              row.title,
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                        );
-                      }
-                      final products = (row as _ProductsRow).products;
-                      return SizedBox(
-                        height: _productRowHeight,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 4,
-                          ),
-                          child: Row(
-                            children: [
-                              for (final p in products)
-                                Expanded(
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4,
-                                    ),
-                                    child: ProductCard(
-                                      product: p,
-                                      onTap: () => Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              ProductScreen(product: p),
-                                        ),
+                CustomScrollView(
+                  controller: _listController,
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: CatalogHeader(
+                        addressLabel: _addressLabel(data),
+                        etaLabel: _eta(data.availability),
+                        mode: _mode,
+                        availability: data.availability,
+                        onModeChanged: (m) => setState(() => _mode = m),
+                        activeOrderBlock: data.activeOrder == null
+                            ? null
+                            : _ActiveOrderCard(
+                                order: data.activeOrder!,
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => OrderScreen(
+                                      order: CreatedOrder(
+                                        id: data.activeOrder!['id'].toString(),
+                                        number:
+                                            (data.activeOrder!['number'] as num)
+                                                .toInt(),
+                                        total:
+                                            (data.activeOrder!['total'] as num?)
+                                                    ?.toInt() ??
+                                                0,
+                                        pointsSpent: 0,
                                       ),
                                     ),
                                   ),
                                 ),
-                              if (products.length == 1)
-                                const Expanded(child: SizedBox()),
-                            ],
-                          ),
+                              ),
+                        // Блок повтора прячем, когда заведение закрыто:
+                        // предлагать действие, которое сейчас не выполнить,
+                        // хуже, чем не предлагать.
+                        repeatBlock:
+                            data.lastOrder != null && data.availability.isOpenNow
+                                ? RepeatOrderCard(
+                                    order: data.lastOrder!,
+                                    menu: _menu,
+                                    onDark: true,
+                                    onRepeated: _openCart,
+                                  )
+                                : null,
+                      ),
+                    ),
+                    // Переключатель на белом фоне, как в прототипе: внутри
+                    // тёмного хедера выбранная половина сливалась с фоном.
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          Gap.screen,
+                          Gap.block,
+                          Gap.screen,
+                          0,
                         ),
-                      );
-                    },
+                        child: ModeSwitch(
+                          mode: _mode,
+                          deliveryAvailable:
+                              data.availability.deliveryAvailable,
+                          onChanged: (m) => setState(() => _mode = m),
+                        ),
+                      ),
+                    ),
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: Gap.lg),
+                        child: CategoryChips(
+                          categories: _categories,
+                          activeId: _activeCategory,
+                          controller: _chipsController,
+                          onTap: _jumpToCategory,
+                        ),
+                      ),
+                    ),
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(
+                        Gap.screen,
+                        Gap.sm,
+                        Gap.screen,
+                        120,
+                      ),
+                      sliver: SliverList.builder(
+                        itemCount: _rows.length,
+                        itemBuilder: (context, index) {
+                          final row = _rows[index];
+                          if (row is _HeaderRow) {
+                            return SizedBox(
+                              height: _categoryTitleHeight,
+                              child: Align(
+                                alignment: Alignment.bottomLeft,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(bottom: Gap.md),
+                                  child: Text(
+                                    row.title,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.headlineMedium,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+                          final product = (row as _ProductRowItem).product;
+                          return StaggeredEntrance(
+                            index: index,
+                            child: SizedBox(
+                              height: _productRowHeight,
+                              child: Consumer<Cart>(
+                                builder: (context, cart, _) => ProductRow(
+                                inCart: cart.qtyOf(product),
+                                onRemove: () =>
+                                    cart.decrementProduct(product),
+                                product: product,
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => ProductScreen(product: product),
+                                  ),
+                                ),
+                                onAdd: () {
+                                  // Товар с выбором нельзя добавить одним
+                                  // тапом: сначала нужно собрать состав.
+                                  if (product.hasChoices) {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            ProductScreen(product: product),
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  context.read<Cart>().add(product);
+                                },
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                Positioned(
+                  left: Gap.screen,
+                  right: Gap.screen,
+                  bottom: MediaQuery.of(context).padding.bottom + Gap.lg,
+                  child: Consumer<Cart>(
+                    builder: (_, cart, _) => FloatingCart(
+                      total: cart.subtotal,
+                      count: cart.count,
+                      onTap: _openCart,
+                    ),
                   ),
                 ),
               ],
-            );
-          },
-        ),
-      ),
-      bottomNavigationBar: const _CartBar(),
-    );
-  }
-}
-
-class _TopBar extends StatelessWidget {
-  final String title;
-  const _TopBar({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    final auth = context.watch<AuthState>();
-    return Container(
-      width: double.infinity,
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-      child: Row(
-        children: [
-          const SizedBox(width: 42),
-          Expanded(
-            child: Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-            ),
-          ),
-          IconButton(
-            tooltip: auth.isAuthenticated
-                ? '${auth.pointsBalance} баллов'
-                : 'Войти',
-            onPressed: () async {
-              if (!auth.isAuthenticated) {
-                final ok = await showDialog<bool>(
-                  context: context,
-                  builder: (_) => const LoyaltyLoginDialog(),
-                );
-                if (ok != true || !context.mounted) return;
-              }
-              if (context.mounted) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const ProfileScreen()),
-                );
-              }
-            },
-            icon: Icon(
-              auth.isAuthenticated
-                  ? Icons.account_circle
-                  : Icons.person_outline,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CategoryChips extends StatelessWidget {
-  final List<MenuCategory> categories;
-  final String? activeId;
-  final ScrollController controller;
-  final ValueChanged<String> onTap;
-
-  const _CategoryChips({
-    required this.categories,
-    required this.activeId,
-    required this.controller,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 56,
-      color: Colors.white,
-      child: ListView.separated(
-        controller: controller,
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        itemCount: categories.length,
-        separatorBuilder: (context, index) => const SizedBox(width: 8),
-        itemBuilder: (context, i) {
-          final c = categories[i];
-          final active = c.id == activeId;
-          return GestureDetector(
-            onTap: () => onTap(c.id),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: active ? Colors.black : const Color(0xFFF1F1F1),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                c.name,
-                style: TextStyle(
-                  color: active ? Colors.white : Colors.black87,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
             ),
           );
         },
       ),
     );
   }
-}
 
-/// Нижняя плашка корзины — появляется, когда что-то добавили
-class _CartBar extends StatelessWidget {
-  const _CartBar();
-
-  @override
-  Widget build(BuildContext context) {
-    final cart = context.watch<Cart>();
-    if (cart.isEmpty) return const SizedBox.shrink();
-
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-        child: SizedBox(
-          height: 56,
-          child: FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.black,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-            ),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const CartScreen()),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Корзина · ${cart.count}',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  formatTenge(cart.subtotal),
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+  void _openCart() {
+    Haptics.tap();
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CartScreen()),
     );
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-  const _ErrorView({required this.message, required this.onRetry});
+/// Активный заказ в шапке каталога: статус, номер и сумма одним тапом.
+class _ActiveOrderCard extends StatelessWidget {
+  final Map<String, dynamic> order;
+  final VoidCallback onTap;
+
+  const _ActiveOrderCard({required this.order, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+    final c = context.colors;
+    final status = order['status']?.toString() ?? 'NEW';
+    return PressScale(
+      onTap: onTap,
+      scale: 0.985,
+      child: Container(
+        padding: const EdgeInsets.all(Gap.lg),
+        decoration: BoxDecoration(
+          color: c.surface,
+          borderRadius: const BorderRadius.all(Radius.circular(24)),
+        ),
+        child: Row(
           children: [
-            const Text(
-              'Не удалось загрузить меню',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _stageLabels[status] ?? status,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '№ ${order['number']} · ${formatTenge((order['total'] as num?)?.toInt() ?? 0)}',
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.black54),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(onPressed: onRetry, child: const Text('Повторить')),
+            Icon(Icons.chevron_right, size: 20, color: c.muted),
           ],
         ),
       ),

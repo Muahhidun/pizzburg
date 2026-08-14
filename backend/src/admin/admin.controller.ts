@@ -208,6 +208,11 @@ export class AdminController {
     return this.admin.updateCancelReason(id, dto);
   }
 
+  @Get('reports/promotions')
+  promotionReport(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.admin.promotionReport(from, to);
+  }
+
   @Get('reports/cancellations')
   cancellationReport(@Query('from') from?: string, @Query('to') to?: string) {
     return this.admin.cancellationReport(from, to);

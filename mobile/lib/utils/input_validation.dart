@@ -12,16 +12,19 @@ class KzPhoneInputFormatter extends TextInputFormatter {
   ) {
     if (newValue.text.isEmpty) return newValue;
 
-    var digits = newValue.text.replaceAll(RegExp(r'\D'), '');
-    final hasFormattedPrefix = newValue.text.trimLeft().startsWith('+7');
+    var digits = _significantDigits(newValue.text);
 
-    if (hasFormattedPrefix && digits.startsWith('7')) {
-      digits = digits.substring(1);
-    } else if (digits.length > 10 &&
-        (digits.startsWith('7') || digits.startsWith('8'))) {
-      digits = digits.substring(1);
+    // Удаление символа форматирования не должно быть холостым.
+    //
+    // На «+7 (708)» backspace стирает скобку, форматтер тут же дорисовывает
+    // её обратно — текст не меняется, и номер становится невозможно
+    // исправить. Поэтому если после удаления набор цифр не изменился,
+    // убираем последнюю цифру: пользователь хотел стереть именно её.
+    final deleting = newValue.text.length < oldValue.text.length;
+    if (deleting && digits == _significantDigits(oldValue.text)) {
+      if (digits.isEmpty) return newValue;
+      digits = digits.substring(0, digits.length - 1);
     }
-    if (digits.length > 10) digits = digits.substring(0, 10);
 
     final out = StringBuffer('+7');
     if (digits.isNotEmpty) {
@@ -51,6 +54,19 @@ class KzPhoneInputFormatter extends TextInputFormatter {
       selection: TextSelection.collapsed(offset: text.length),
     );
   }
+
+  /// Цифры номера без кода страны: «+7 (708) 12» → «70812»
+  static String _significantDigits(String raw) {
+    var digits = raw.replaceAll(RegExp(r'\D'), '');
+    final hasFormattedPrefix = raw.trimLeft().startsWith('+7');
+    if (hasFormattedPrefix && digits.startsWith('7')) {
+      digits = digits.substring(1);
+    } else if (digits.length > 10 &&
+        (digits.startsWith('7') || digits.startsWith('8'))) {
+      digits = digits.substring(1);
+    }
+    return digits.length > 10 ? digits.substring(0, 10) : digits;
+  }
 }
 
 final nameInputFormatters = <TextInputFormatter>[
@@ -78,8 +94,10 @@ final entranceInputFormatters = <TextInputFormatter>[
   LengthLimitingTextInputFormatter(3),
 ];
 
+// Минус убран: на цифровой клавиатуре iOS его всё равно нет, а этаж «−1»
+// пишут как «0» или «цоколь» в комментарии.
 final floorInputFormatters = <TextInputFormatter>[
-  FilteringTextInputFormatter.allow(RegExp(r'[0-9-]')),
+  FilteringTextInputFormatter.digitsOnly,
   LengthLimitingTextInputFormatter(3),
 ];
 

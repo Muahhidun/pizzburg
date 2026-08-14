@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700;800&family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7e3;font-family:'Golos Text',system-ui,sans-serif}
+a{color:#E6007E}a:hover{color:#b80065}
+.app *{box-sizing:border-box}
+.scroll{overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.scroll::-webkit-scrollbar{display:none}
+.hs{overflow-x:auto;scrollbar-width:none}
+.hs::-webkit-scrollbar{display:none}
+.tap{cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent}
+input[type=range]{-webkit-appearance:none;appearance:none;height:4px;border-radius:999px;background:rgba(255,255,255,.2);outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:999px;background:#E6007E;border:none;cursor:pointer}
+input[type=text]{font-family:'Golos Text',sans-serif}
+</style>
+</helmet>
+
+<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;gap:18px;padding:28px 16px 40px">
+  <div style="display:flex;align-items:baseline;gap:12px;width:390px;max-width:100%">
+    <div style="font:700 15px/1 'Unbounded',sans-serif;letter-spacing:-.02em">PizzBurg</div>
+    <div style="font:400 11.5px/1.4 'Golos Text',sans-serif;color:rgba(0,0,0,.5)">кликабельный прототип направления 1c в фирменных цветах</div>
+  </div>
+
+  <div class="app" style="--acc:{{ acc }};--ben:{{ ben }};width:390px;height:844px;border-radius:38px;overflow:hidden;position:relative;background:#fff;box-shadow:0 8px 40px rgba(0,0,0,.18);border:1px solid rgba(0,0,0,.12);flex:none">
+    <div style="position:absolute;inset:0;display:flex;flex-direction:column;color:#0E0D10">
+      <div style="flex:none;height:44px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 24px 6px;font:600 13px/1 'Golos Text',sans-serif;background:{{ sbBg }};color:{{ sbFg }}">
+        <span>21:04</span><span style="letter-spacing:1px">▮▮▮</span>
+      </div>
+
+      <sc-if value="{{ showCatalog }}" hint-placeholder-val="{{ true }}">
+        <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+          <div style="flex:none;background:#0E0D10;color:#fff;padding:10px 22px 26px;border-radius:0 0 30px 30px">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div style="font:500 12px/1.35 'Golos Text',sans-serif;opacity:.7">Доставим на<br><span style="font-weight:600;opacity:1;font-size:13.5px">Сатпаева, 38А ▾</span></div>
+              <div style="padding:8px 13px;border-radius:999px;background:rgba(255,255,255,.14);font:600 12px/1 'Golos Text',sans-serif">{{ etaText }}</div>
+            </div>
+            <sc-if value="{{ closed }}">
+              <div style="margin-top:18px;padding:16px;border-radius:22px;background:rgba(247,148,29,.14);border:1px solid rgba(247,148,29,.4)">
+                <div style="font:700 15px/1.25 'Unbounded',sans-serif;color:#F7941D">Доставка закрыта</div>
+                <div style="font:400 12px/1.5 'Golos Text',sans-serif;opacity:.8;margin-top:7px">Кухня принимает заказы до 23:00. Сейчас — самовывоз до 23:50 или предзаказ на завтра.</div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ showRepeat }}" hint-placeholder-val="{{ true }}">
+              <div>
+                <div style="font:700 27px/1.1 'Unbounded',sans-serif;margin-top:20px;letter-spacing:-.03em">Тот же<br>заказ?</div>
+                <div style="display:flex;align-items:center;gap:12px;margin-top:16px;padding:12px 14px;background:#fff;border-radius:24px;color:#0E0D10">
+                  <img src="assets/pizza-4syra.jpg" alt="" style="width:44px;height:44px;border-radius:15px;object-fit:cover;flex:none">
+                  <div style="flex:1;min-width:0">
+                    <div style="font:500 11.5px/1.35 'Golos Text',sans-serif">Четыре сыра 30 см, Гриль бургер, Фри ×2</div>
+                    <div style="font:700 13.5px/1 'Unbounded',sans-serif;margin-top:6px">5 050 ₸</div>
+                  </div>
+                  <div class="tap" onClick="{{ onRepeat }}" style="flex:none;padding:11px 15px;border-radius:999px;background:var(--acc,#E6007E);color:#fff;font:600 12px/1 'Golos Text',sans-serif">Повторить</div>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+
+          <div style="flex:none;display:flex;gap:7px;padding:18px 22px 14px">
+            <div class="tap" onClick="{{ onDelivery }}" style="{{ modeDeliveryStyle }}">Доставка</div>
+            <div class="tap" onClick="{{ onPickup }}" style="{{ modePickupStyle }}">Самовывоз</div>
+          </div>
+
+          <div class="hs" style="flex:none;display:flex;gap:8px;padding:0 22px 14px">
+            <sc-for list="{{ cats }}" as="c" hint-placeholder-count="3">
+              <div class="tap" onClick="{{ c.onPick }}" style="{{ c.style }}">{{ c.name }}</div>
+            </sc-for>
+          </div>
+
+          <div class="scroll" style="flex:1;padding:0 22px 22px">
+            <sc-for list="{{ items }}" as="it" hint-placeholder-count="4">
+              <div style="{{ it.rowStyle }}">
+                <img src="{{ it.img }}" alt="" style="{{ it.imgStyle }}">
+                <div class="tap" onClick="{{ it.onOpen }}" style="flex:1;min-width:0">
+                  <div style="font:600 14.5px/1.2 'Golos Text',sans-serif">{{ it.name }}</div>
+                  <div style="font:400 11px/1.45 'Golos Text',sans-serif;color:#8B8792;margin-top:5px">{{ it.desc }}</div>
+                </div>
+                <div style="flex:none;text-align:right">
+                  <div style="font:700 14px/1 'Unbounded',sans-serif">{{ it.priceText }}</div>
+                  <div class="tap" onClick="{{ it.onAdd }}" style="{{ it.addStyle }}">{{ it.addLabel }}</div>
+                </div>
+              </div>
+            </sc-for>
+            <div style="height:8px"></div>
+          </div>
+
+          <sc-if value="{{ cartHasItems }}">
+            <div class="tap" onClick="{{ goCart }}" style="flex:none;margin:0 22px 10px;padding:8px 8px 8px 20px;border-radius:999px;background:var(--acc,#E6007E);color:#fff;display:flex;align-items:center;gap:12px">
+              <div style="flex:1;font:700 16px/1 'Unbounded',sans-serif">{{ cartTotalText }}</div>
+              <div style="padding:13px 18px;border-radius:999px;background:#fff;color:#0E0D10;font:600 12.5px/1 'Golos Text',sans-serif">Корзина · {{ cartCount }}</div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showLoading }}">
+        <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+          <div style="flex:none;background:#0E0D10;padding:10px 22px 26px;border-radius:0 0 30px 30px">
+            <div style="width:130px;height:13px;border-radius:7px;background:rgba(255,255,255,.15)"></div>
+            <div style="width:190px;height:44px;border-radius:12px;background:rgba(255,255,255,.1);margin-top:20px"></div>
+            <div style="height:68px;border-radius:24px;background:rgba(255,255,255,.08);margin-top:18px"></div>
+          </div>
+          <div style="flex:none;display:flex;gap:7px;padding:18px 22px 14px">
+            <div style="flex:1;height:40px;border-radius:999px;background:rgba(14,13,16,.07)"></div>
+            <div style="flex:1;height:40px;border-radius:999px;background:rgba(14,13,16,.05)"></div>
+          </div>
+          <div style="flex:none;display:flex;gap:8px;padding:0 22px 14px">
+            <div style="width:78px;height:34px;border-radius:999px;background:rgba(14,13,16,.07)"></div>
+            <div style="width:88px;height:34px;border-radius:999px;background:rgba(14,13,16,.05)"></div>
+            <div style="width:82px;height:34px;border-radius:999px;background:rgba(14,13,16,.05)"></div>
+          </div>
+          <div style="flex:1;padding:0 22px">
+            <div style="display:flex;gap:14px;padding:12px 0;border-bottom:1px solid rgba(14,13,16,.07)"><div style="width:80px;height:80px;border-radius:22px;background:rgba(14,13,16,.07)"></div><div style="flex:1;padding-top:6px"><div style="width:60%;height:14px;border-radius:7px;background:rgba(14,13,16,.08)"></div><div style="width:90%;height:10px;border-radius:5px;background:rgba(14,13,16,.05);margin-top:10px"></div></div></div>
+            <div style="display:flex;gap:14px;padding:12px 0;border-bottom:1px solid rgba(14,13,16,.07)"><div style="width:80px;height:80px;border-radius:22px;background:rgba(14,13,16,.07)"></div><div style="flex:1;padding-top:6px"><div style="width:50%;height:14px;border-radius:7px;background:rgba(14,13,16,.08)"></div><div style="width:80%;height:10px;border-radius:5px;background:rgba(14,13,16,.05);margin-top:10px"></div></div></div>
+            <div style="display:flex;gap:14px;padding:12px 0"><div style="width:80px;height:80px;border-radius:22px;background:rgba(14,13,16,.07)"></div><div style="flex:1;padding-top:6px"><div style="width:64%;height:14px;border-radius:7px;background:rgba(14,13,16,.08)"></div><div style="width:86%;height:10px;border-radius:5px;background:rgba(14,13,16,.05);margin-top:10px"></div></div></div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showError }}">
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 34px;text-align:center">
+          <div style="width:92px;height:92px;border-radius:999px;background:rgba(247,148,29,.08);display:flex;align-items:center;justify-content:center">
+            <div style="width:34px;height:34px;border-radius:999px;border:3px solid var(--acc,#E6007E)"></div>
+          </div>
+          <div style="font:700 20px/1.2 'Unbounded',sans-serif;margin-top:24px;letter-spacing:-.02em">Меню не загрузилось</div>
+          <div style="font:400 13px/1.55 'Golos Text',sans-serif;color:#8B8792;margin-top:12px">Не получается связаться с сервером. Проверьте интернет — корзина сохранена.</div>
+          <div class="tap" onClick="{{ onRetry }}" style="width:100%;margin-top:22px;padding:16px 0;border-radius:999px;background:var(--acc,#E6007E);color:#fff;font:600 13.5px/1 'Golos Text',sans-serif">Повторить</div>
+          <div class="tap" onClick="{{ onRetry }}" style="width:100%;margin-top:9px;padding:16px 0;border-radius:999px;background:rgba(14,13,16,.05);font:600 13.5px/1 'Golos Text',sans-serif">Позвонить в заведение</div>
+          <div style="font:500 11px/1 'Golos Text',sans-serif;color:#8B8792;margin-top:16px">Попытка 2 · код 503</div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showProduct }}">
+        <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+          <div class="scroll" style="flex:1;padding:0 22px">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0 14px">
+              <div class="tap" onClick="{{ goBack }}" style="width:36px;height:36px;border-radius:999px;background:rgba(14,13,16,.06);display:flex;align-items:center;justify-content:center;font:500 16px/1">←</div>
+              <div style="padding:8px 13px;border-radius:999px;background:rgba(14,13,16,.06);font:500 11.5px/1 'Golos Text',sans-serif;color:#8B8792">{{ pWeight }}</div>
+            </div>
+            <img src="{{ pImg }}" alt="" style="width:100%;height:200px;object-fit:cover;display:block;border-radius:26px;{{ pImgFilter }}">
+            <div style="font:700 24px/1.15 'Unbounded',sans-serif;margin-top:18px;letter-spacing:-.03em">{{ pName }}</div>
+            <div style="font:400 12.5px/1.55 'Golos Text',sans-serif;color:#8B8792;margin-top:9px">{{ pDesc }}</div>
+
+            <sc-if value="{{ pStop }}">
+              <div style="margin-top:20px;padding:18px;border-radius:26px;background:rgba(14,13,16,.04)">
+                <div style="font:700 16px/1.25 'Unbounded',sans-serif;letter-spacing:-.02em">Сегодня закончилась</div>
+                <div style="font:400 12px/1.5 'Golos Text',sans-serif;color:#8B8792;margin-top:8px">Вернём в меню, когда привезут продукты. Можем написать, как только появится.</div>
+                <div class="tap" onClick="{{ goBack }}" style="margin-top:14px;text-align:center;padding:14px 0;border-radius:999px;background:#0E0D10;color:#fff;font:600 12.5px/1 'Golos Text',sans-serif">Сообщить о поступлении</div>
+              </div>
+              <div style="font:600 13px/1 'Golos Text',sans-serif;margin-top:22px">Похожее в наличии</div>
+              <div style="display:flex;gap:10px;margin-top:12px">
+                <sc-for list="{{ alts }}" as="a" hint-placeholder-count="2">
+                  <div class="tap" onClick="{{ a.onOpen }}" style="flex:1;border-radius:22px;background:rgba(14,13,16,.04);overflow:hidden">
+                    <img src="{{ a.img }}" alt="" style="width:100%;height:72px;object-fit:cover;display:block">
+                    <div style="padding:10px 12px 12px">
+                      <div style="font:600 12px/1.25 'Golos Text',sans-serif">{{ a.name }}</div>
+                      <div style="font:700 12.5px/1 'Unbounded',sans-serif;margin-top:7px">{{ a.priceText }}</div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ pAvailable }}">
+              <div>
+                <sc-if value="{{ pHasSizes }}">
+                  <div style="display:flex;gap:7px;margin-top:18px">
+                    <sc-for list="{{ pSizes }}" as="s" hint-placeholder-count="3">
+                      <div class="tap" onClick="{{ s.onPick }}" style="{{ s.style }}">{{ s.label }}</div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+                <div style="font:600 13.5px/1 'Golos Text',sans-serif;margin-top:22px">Добавки</div>
+                <div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:12px">
+                  <sc-for list="{{ pAddons }}" as="a" hint-placeholder-count="4">
+                    <div class="tap" onClick="{{ a.onToggle }}" style="{{ a.style }}">{{ a.label }}</div>
+                  </sc-for>
+                </div>
+                <div style="height:16px"></div>
+              </div>
+            </sc-if>
+          </div>
+          <sc-if value="{{ pAvailable }}">
+            <div style="flex:none;padding:14px 22px 24px">
+              <div class="tap" onClick="{{ onAddProduct }}" style="display:flex;align-items:center;gap:12px;padding:8px 8px 8px 22px;border-radius:999px;background:#0E0D10;color:#fff">
+                <div style="flex:1;font:700 18px/1 'Unbounded',sans-serif">{{ pPriceText }}</div>
+                <div style="padding:15px 22px;border-radius:999px;background:var(--acc,#E6007E);color:#fff;font:600 13px/1 'Golos Text',sans-serif">В корзину</div>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showCart }}">
+        <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+          <div style="flex:none;padding:8px 22px 16px;font:700 24px/1.1 'Unbounded',sans-serif;letter-spacing:-.03em">Корзина</div>
+          <sc-if value="{{ cartEmpty }}">
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 32px;text-align:center">
+              <div style="width:92px;height:92px;border-radius:999px;background:rgba(247,148,29,.08);display:flex;align-items:center;justify-content:center">
+                <div style="width:36px;height:29px;border:2.5px solid var(--acc,#E6007E);border-radius:0 0 13px 13px"></div>
+              </div>
+              <div style="font:700 19px/1.2 'Unbounded',sans-serif;margin-top:24px;letter-spacing:-.02em">Пока пусто</div>
+              <div style="font:400 13px/1.5 'Golos Text',sans-serif;color:#8B8792;margin-top:11px">Можно повторить прошлый заказ — это быстрее всего</div>
+              <div style="width:100%;margin-top:20px;padding:14px;border-radius:26px;border:1.5px solid rgba(14,13,16,.1);display:flex;align-items:center;gap:12px;text-align:left">
+                <img src="assets/pizza-4syra.jpg" alt="" style="width:42px;height:42px;border-radius:15px;object-fit:cover">
+                <div style="flex:1"><div style="font:500 11.5px/1.35 'Golos Text',sans-serif">Четыре сыра 30 см, Гриль бургер, Фри ×2</div><div style="font:700 12.5px/1 'Unbounded',sans-serif;margin-top:6px">5 050 ₸</div></div>
+              </div>
+              <div class="tap" onClick="{{ onRepeat }}" style="width:100%;margin-top:11px;padding:16px 0;border-radius:999px;background:var(--acc,#E6007E);color:#fff;font:600 13.5px/1 'Golos Text',sans-serif">Повторить заказ</div>
+              <div class="tap" onClick="{{ goCatalog }}" style="width:100%;margin-top:9px;padding:16px 0;border-radius:999px;background:rgba(14,13,16,.05);font:600 13.5px/1 'Golos Text',sans-serif">Открыть меню</div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ cartHasItems }}">
+            <div class="scroll" style="flex:1;padding:0 22px">
+              <sc-for list="{{ lines }}" as="l" hint-placeholder-count="3">
+                <div style="display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid rgba(14,13,16,.08)">
+                  <img src="{{ l.img }}" alt="" style="width:58px;height:58px;border-radius:20px;object-fit:cover;flex:none">
+                  <div style="flex:1;min-width:0">
+                    <div style="font:600 13px/1.25 'Golos Text',sans-serif">{{ l.name }}</div>
+                    <div style="font:400 10.5px/1.3 'Golos Text',sans-serif;color:#8B8792;margin-top:4px">{{ l.sub }}</div>
+                    <div style="font:700 13px/1 'Unbounded',sans-serif;margin-top:7px;color:{{ l.priceColor }}">{{ l.priceText }}</div>
+                  </div>
+                  <div style="{{ l.qtyStyle }}">
+                    <span class="tap" onClick="{{ l.onDec }}" style="font:500 15px/1;padding:2px 3px">−</span>
+                    <span style="font:600 12.5px/1;min-width:10px;text-align:center">{{ l.qty }}</span>
+                    <span class="tap" onClick="{{ l.onInc }}" style="font:500 15px/1;padding:2px 3px">+</span>
+                  </div>
+                </div>
+              </sc-for>
+
+              <sc-if value="{{ giftEarned }}">
+                <div style="display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid rgba(14,13,16,.08)">
+                  <img src="assets/side-syrnye.jpg" alt="" style="width:58px;height:58px;border-radius:20px;object-fit:cover;flex:none">
+                  <div style="flex:1">
+                    <div style="font:600 13px/1.25 'Golos Text',sans-serif">Сырные палочки</div>
+                    <div style="display:flex;gap:8px;align-items:center;margin-top:7px">
+                      <span style="font:700 13px/1 'Unbounded',sans-serif;color:var(--ben,#F7941D)">0 ₸</span>
+                      <span style="padding:4px 9px;border-radius:999px;background:rgba(247,148,29,.14);color:var(--ben,#F7941D);font:600 10px/1 'Golos Text',sans-serif">Подарок за 5 000 ₸</span>
+                    </div>
+                  </div>
+                </div>
+              </sc-if>
+              <sc-if value="{{ giftHint }}">
+                <div style="margin-top:12px;padding:13px 16px;border-radius:18px;background:rgba(247,148,29,.1);font:500 11.5px/1.45 'Golos Text',sans-serif;color:#A96410">Добавьте ещё на {{ giftLeftText }} — сырные палочки в подарок</div>
+              </sc-if>
+
+              <div style="display:flex;align-items:center;gap:8px;margin-top:14px;padding:6px 6px 6px 18px;border-radius:999px;background:rgba(14,13,16,.05)">
+                <input type="text" value="{{ promo }}" onChange="{{ onPromo }}" placeholder="Промокод" style="flex:1;min-width:0;border:none;background:transparent;outline:none;font:500 12.5px/1 'Golos Text',sans-serif;color:#0E0D10">
+                <div class="tap" onClick="{{ onApplyPromo }}" style="padding:11px 18px;border-radius:999px;background:#0E0D10;color:#fff;font:600 12px/1 'Golos Text',sans-serif">Применить</div>
+              </div>
+              <sc-if value="{{ promoOk }}">
+                <div style="margin-top:8px;font:500 11.5px/1.4 'Golos Text',sans-serif;color:var(--ben,#F7941D)">Промокод PB10 применён — минус 10% на блюда</div>
+              </sc-if>
+              <sc-if value="{{ promoBad }}">
+                <div style="margin-top:8px;font:500 11.5px/1.4 'Golos Text',sans-serif;color:var(--acc,#E6007E)">Такого промокода нет. Рабочий пример: PB10</div>
+              </sc-if>
+
+              <div style="margin-top:14px;padding:20px;border-radius:28px;background:#0E0D10;color:#fff">
+                <div style="display:flex;align-items:baseline;justify-content:space-between">
+                  <span style="font:600 12.5px/1 'Golos Text',sans-serif">Списать баллы</span>
+                  <span style="font:500 11px/1 'Golos Text',sans-serif;opacity:.6">{{ pointsAvailText }} доступно</span>
+                </div>
+                <div style="font:700 28px/1 'Unbounded',sans-serif;margin-top:12px;color:var(--ben,#F7941D)">{{ pointsUsedText }}</div>
+                <input type="range" min="0" max="{{ pointsMax }}" step="50" value="{{ points }}" onInput="{{ onPoints }}" style="width:100%;margin-top:16px;display:block">
+                <div style="display:flex;justify-content:space-between;font:500 10.5px/1 'Golos Text',sans-serif;opacity:.55;margin-top:8px"><span>0</span><span>{{ pointsMaxText }}</span></div>
+                <div style="display:flex;gap:7px;margin-top:14px">
+                  <div class="tap" onClick="{{ onPointsNone }}" style="flex:1;text-align:center;padding:10px 0;border-radius:999px;background:rgba(255,255,255,.12);font:600 11.5px/1 'Golos Text',sans-serif">Не списывать</div>
+                  <div class="tap" onClick="{{ onPointsMax }}" style="flex:1;text-align:center;padding:10px 0;border-radius:999px;background:rgba(255,255,255,.12);font:600 11.5px/1 'Golos Text',sans-serif">Максимум</div>
+                </div>
+              </div>
+              <div style="height:14px"></div>
+            </div>
+            <div style="flex:none;padding:14px 22px 24px">
+              <div style="display:flex;justify-content:space-between;font:500 12px/1.7 'Golos Text',sans-serif;color:#8B8792"><span>Товары · {{ cartCount }}</span><span>{{ subtotalText }}</span></div>
+              <div style="display:flex;justify-content:space-between;font:500 12px/1.7 'Golos Text',sans-serif;color:#8B8792"><span>Доставка</span><span>{{ deliveryText }}</span></div>
+              <sc-if value="{{ promoOk }}">
+                <div style="display:flex;justify-content:space-between;font:500 12px/1.7 'Golos Text',sans-serif;color:var(--ben,#F7941D)"><span>Промокод PB10</span><span>{{ promoText }}</span></div>
+              </sc-if>
+              <sc-if value="{{ pointsUsed }}">
+                <div style="display:flex;justify-content:space-between;font:500 12px/1.7 'Golos Text',sans-serif;color:var(--acc,#E6007E)"><span>Баллы</span><span>{{ pointsMinusText }}</span></div>
+              </sc-if>
+              <div class="tap" onClick="{{ goCheckout }}" style="display:flex;align-items:center;gap:12px;margin-top:10px;padding:8px 8px 8px 22px;border-radius:999px;background:var(--acc,#E6007E);color:#fff">
+                <div style="flex:1;font:700 18px/1 'Unbounded',sans-serif">{{ totalText }}</div>
+                <div style="padding:15px 20px;border-radius:999px;background:#fff;color:#0E0D10;font:600 13px/1 'Golos Text',sans-serif">Оформить</div>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showCheckout }}">
+        <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+          <div style="flex:none;padding:8px 22px 14px;display:flex;align-items:center;gap:14px">
+            <div class="tap" onClick="{{ goCart }}" style="width:36px;height:36px;border-radius:999px;background:rgba(14,13,16,.06);display:flex;align-items:center;justify-content:center;font:500 16px/1">←</div>
+            <div style="font:700 22px/1.1 'Unbounded',sans-serif;letter-spacing:-.03em">Оформление</div>
+          </div>
+          <div class="scroll" style="flex:1;padding:0 22px">
+            <div style="padding:16px;border-radius:28px;border:1.5px solid rgba(14,13,16,.1)">
+              <div style="font:600 12px/1 'Golos Text',sans-serif;color:#8B8792">{{ addrTitle }}</div>
+              <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">
+                <sc-for list="{{ addresses }}" as="a" hint-placeholder-count="2">
+                  <div class="tap" onClick="{{ a.onPick }}" style="{{ a.style }}">
+                    <div style="{{ a.dotStyle }}"></div>
+                    <div style="flex:1">
+                      <div style="font:600 12.5px/1.2 'Golos Text',sans-serif">{{ a.title }}</div>
+                      <div style="font:400 10.5px/1.35 'Golos Text',sans-serif;color:#8B8792;margin-top:4px">{{ a.sub }}</div>
+                    </div>
+                  </div>
+                </sc-for>
+                <div class="tap" onClick="{{ onNewAddr }}" style="padding:11px 14px;font:600 12.5px/1 'Golos Text',sans-serif;color:var(--acc,#E6007E)">+ Новый адрес</div>
+              </div>
+            </div>
+
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <div style="flex:1;padding:14px 16px;border-radius:22px;border:1.5px solid rgba(14,13,16,.1)"><div style="font:400 10.5px/1 'Golos Text',sans-serif;color:#8B8792">Имя</div><div style="font:600 13px/1 'Golos Text',sans-serif;margin-top:7px">Ержан</div></div>
+              <div style="flex:1.3;padding:14px 16px;border-radius:22px;border:1.5px solid rgba(14,13,16,.1)"><div style="font:400 10.5px/1 'Golos Text',sans-serif;color:#8B8792">Телефон</div><div style="font:600 13px/1 'Golos Text',sans-serif;margin-top:7px">+7 705 123 45 67</div></div>
+            </div>
+
+            <div style="font:600 13.5px/1 'Golos Text',sans-serif;margin-top:22px">Время</div>
+            <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:11px">
+              <sc-for list="{{ slots }}" as="s" hint-placeholder-count="4">
+                <div class="tap" onClick="{{ s.onPick }}" style="{{ s.style }}">{{ s.label }}</div>
+              </sc-for>
+            </div>
+
+            <div style="font:600 13.5px/1 'Golos Text',sans-serif;margin-top:22px">Оплата</div>
+            <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:11px">
+              <sc-for list="{{ pays }}" as="p" hint-placeholder-count="3">
+                <div class="tap" onClick="{{ p.onPick }}" style="{{ p.style }}">{{ p.label }}</div>
+              </sc-for>
+            </div>
+            <sc-if value="{{ isCash }}">
+              <div style="margin-top:11px;padding:14px 16px;border-radius:20px;background:rgba(14,13,16,.04)">
+                <div style="font:500 11.5px/1 'Golos Text',sans-serif;color:#8B8792">Подготовить сдачу с</div>
+                <div style="display:flex;gap:7px;margin-top:10px">
+                  <sc-for list="{{ changeOpts }}" as="c" hint-placeholder-count="3">
+                    <div class="tap" onClick="{{ c.onPick }}" style="{{ c.style }}">{{ c.label }}</div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+
+            <div style="margin-top:12px;padding:14px 16px;border-radius:20px;border:1.5px solid rgba(14,13,16,.1)">
+              <input type="text" value="{{ comment }}" onChange="{{ onComment }}" placeholder="Комментарий курьеру" style="width:100%;border:none;background:transparent;outline:none;font:500 12.5px/1.3 'Golos Text',sans-serif;color:#0E0D10">
+            </div>
+            <div style="height:14px"></div>
+          </div>
+          <div style="flex:none;padding:12px 22px 24px">
+            <div style="font:400 9.5px/1.45 'Golos Text',sans-serif;color:#8B8792">Нажимая кнопку, вы соглашаетесь с офертой и политикой обработки данных</div>
+            <div class="tap" onClick="{{ onPlaceOrder }}" style="display:flex;align-items:center;gap:12px;margin-top:11px;padding:8px 8px 8px 22px;border-radius:999px;background:var(--acc,#E6007E);color:#fff">
+              <div style="flex:1;font:700 18px/1 'Unbounded',sans-serif">{{ totalText }}</div>
+              <div style="padding:15px 22px;border-radius:999px;background:var(--ben,#F7941D);color:#0E0D10;font:600 13px/1 'Golos Text',sans-serif">Заказать</div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showStatus }}">
+        <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:#0E0D10;color:#fff">
+          <div class="scroll" style="flex:1;padding:14px 22px 0">
+            <div style="font:500 11.5px/1 'Golos Text',sans-serif;opacity:.6">Заказ № 10482</div>
+            <div style="font:700 30px/1.05 'Unbounded',sans-serif;margin-top:12px;letter-spacing:-.04em">{{ stageTitle }}</div>
+            <div style="display:inline-block;margin-top:16px;padding:10px 16px;border-radius:999px;background:var(--ben,#F7941D);color:#0E0D10;font:700 14px/1 'Unbounded',sans-serif">{{ etaTime }}</div>
+            <div style="display:flex;flex-direction:column;gap:16px;margin-top:28px">
+              <sc-for list="{{ stages }}" as="s" hint-placeholder-count="5">
+                <div style="{{ s.rowStyle }}">
+                  <div style="{{ s.dotStyle }}">{{ s.mark }}</div>
+                  <span style="{{ s.labelStyle }}">{{ s.label }}</span>
+                  <span style="font:500 11.5px/1 'Golos Text',sans-serif;opacity:.55">{{ s.time }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="flex:none;padding:14px 22px 24px">
+            <div style="padding:16px;border-radius:24px;background:rgba(255,255,255,.1)">
+              <div style="display:flex;justify-content:space-between;font:500 12px/1.7 'Golos Text',sans-serif;opacity:.8"><span>{{ cartCount }} позиции</span><span>{{ addrShort }}</span></div>
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:8px"><span style="font:500 12px/1 'Golos Text',sans-serif;opacity:.8">{{ payLabel }}</span><span style="font:700 17px/1 'Unbounded',sans-serif">{{ totalText }}</span></div>
+            </div>
+            <sc-if value="{{ canCancel }}">
+              <div class="tap" onClick="{{ onCancel }}" style="margin-top:10px;text-align:center;padding:15px 0;border-radius:999px;border:1.5px solid rgba(255,255,255,.3);font:600 13px/1 'Golos Text',sans-serif">Отменить заказ</div>
+            </sc-if>
+            <sc-if value="{{ cancelLocked }}">
+              <div style="margin-top:10px;text-align:center;padding:15px 0;border-radius:999px;background:rgba(255,255,255,.07);font:500 12px/1 'Golos Text',sans-serif;opacity:.6">Отмена недоступна — заказ уже у курьера</div>
+            </sc-if>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showCancel }}">
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end">
+          <div style="padding:24px 22px 24px;border-radius:30px 30px 0 0;background:#fff;box-shadow:0 -8px 40px rgba(0,0,0,.15)">
+            <div style="font:700 20px/1.2 'Unbounded',sans-serif;letter-spacing:-.02em">Почему отменяете?</div>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+              <sc-for list="{{ reasons }}" as="r" hint-placeholder-count="4">
+                <div class="tap" onClick="{{ r.onPick }}" style="{{ r.style }}">{{ r.label }}</div>
+              </sc-for>
+            </div>
+            <div class="tap" onClick="{{ onConfirmCancel }}" style="margin-top:16px;text-align:center;padding:16px 0;border-radius:999px;background:var(--acc,#E6007E);color:#fff;font:600 13.5px/1 'Golos Text',sans-serif">Отменить заказ</div>
+            <div class="tap" onClick="{{ onCloseCancel }}" style="margin-top:9px;text-align:center;padding:16px 0;border-radius:999px;background:rgba(14,13,16,.05);font:600 13.5px/1 'Golos Text',sans-serif">Оставить заказ</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showOrders }}">
+        <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+          <div style="flex:none;padding:8px 22px 16px;font:700 24px/1.1 'Unbounded',sans-serif;letter-spacing:-.03em">Заказы</div>
+          <div class="scroll" style="flex:1;padding:0 22px">
+            <sc-if value="{{ hasActive }}">
+              <div class="tap" onClick="{{ goStatus }}" style="padding:18px;border-radius:28px;background:#0E0D10;color:#fff">
+                <div style="display:flex;align-items:baseline;justify-content:space-between"><span style="font:500 11.5px/1 'Golos Text',sans-serif;opacity:.6">Активный · № 10482</span><span style="font:600 11.5px/1 'Golos Text',sans-serif;color:var(--ben,#F7941D)">{{ etaTime }}</span></div>
+                <div style="font:700 19px/1.15 'Unbounded',sans-serif;margin-top:10px;letter-spacing:-.02em">{{ stageTitle }}</div>
+                <div style="font:500 12px/1 'Golos Text',sans-serif;opacity:.7;margin-top:10px">{{ cartCount }} позиции · {{ totalText }}</div>
+              </div>
+            </sc-if>
+            <div style="margin-top:14px">
+              <sc-for list="{{ history }}" as="h" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid rgba(14,13,16,.08)">
+                  <div style="flex:1"><div style="font:600 13px/1 'Golos Text',sans-serif">{{ h.date }}</div><div style="font:400 11px/1.35 'Golos Text',sans-serif;color:#8B8792;margin-top:5px">{{ h.items }}</div></div>
+                  <span style="font:700 13.5px/1 'Unbounded',sans-serif">{{ h.sum }}</span>
+                  <div class="tap" onClick="{{ h.onRepeat }}" style="padding:9px 13px;border-radius:999px;background:rgba(14,13,16,.06);font:600 11px/1 'Golos Text',sans-serif">Повтор</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showProfile }}">
+        <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+          <div class="scroll" style="flex:1;padding:8px 22px 0">
+            <div style="font:700 24px/1.1 'Unbounded',sans-serif;letter-spacing:-.03em">Ержан</div>
+            <div style="font:500 12px/1 'Golos Text',sans-serif;color:#8B8792;margin-top:8px">+7 705 123 45 67</div>
+
+            <div style="margin-top:18px;padding:22px;border-radius:30px;background:var(--ben,#F7941D)">
+              <div style="font:600 12px/1 'Golos Text',sans-serif;opacity:.65">Баллы</div>
+              <div style="font:700 40px/1 'Unbounded',sans-serif;margin-top:10px;letter-spacing:-.04em">{{ pointsBalanceText }}</div>
+              <div style="font:500 11.5px/1.4 'Golos Text',sans-serif;opacity:.7;margin-top:10px">1 балл = 1 ₸, списывайте любой суммой</div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding-top:14px;border-top:1.5px solid rgba(14,13,16,.16)">
+                <span style="font:500 12px/1 'Golos Text',sans-serif">Кэшбэк 7%</span>
+                <span style="font:600 12px/1 'Golos Text',sans-serif">Уровень 2 из 4</span>
+              </div>
+            </div>
+            <div style="margin-top:10px;padding:15px 18px;border-radius:22px;background:rgba(247,148,29,.06);font:500 11.5px/1.45 'Golos Text',sans-serif;color:var(--acc,#E6007E)">Ещё 12 000 ₸ заказов — и кэшбэк станет 10%</div>
+
+            <div style="font:600 13.5px/1 'Golos Text',sans-serif;margin-top:22px">Заказы</div>
+            <sc-for list="{{ history }}" as="h" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid rgba(14,13,16,.08)">
+                <div style="flex:1"><div style="font:600 12.5px/1 'Golos Text',sans-serif">{{ h.date }}</div><div style="font:400 10.5px/1.35 'Golos Text',sans-serif;color:#8B8792;margin-top:5px">{{ h.items }}</div></div>
+                <span style="font:700 13px/1 'Unbounded',sans-serif">{{ h.sum }}</span>
+                <div class="tap" onClick="{{ h.onRepeat }}" style="padding:9px 13px;border-radius:999px;background:rgba(14,13,16,.06);font:600 11px/1 'Golos Text',sans-serif">Повтор</div>
+              </div>
+            </sc-for>
+
+            <div style="font:600 13.5px/1 'Golos Text',sans-serif;margin-top:20px">История баллов</div>
+            <div style="margin-top:6px">
+              <sc-for list="{{ pointsLog }}" as="p" hint-placeholder-count="3">
+                <div style="display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid rgba(14,13,16,.08);font:500 12px/1 'Golos Text',sans-serif">
+                  <span>{{ p.label }}</span><span style="{{ p.amtStyle }}">{{ p.amt }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="height:16px"></div>
+          </div>
+        </div>
+      </sc-if>
+
+      <div style="flex:none;display:flex;background:#fff;border-top:1px solid rgba(14,13,16,.08);padding:10px 0 18px">
+        <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="4">
+          <div class="tap" onClick="{{ tb.onPick }}" style="{{ tb.style }}">
+            <div style="{{ tb.iconStyle }}"></div>
+            <span style="{{ tb.labelStyle }}">{{ tb.label }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div style="width:390px;max-width:100%;display:flex;flex-direction:column;gap:9px">
+    <div style="font:600 10px/1 'Golos Text',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:rgba(0,0,0,.4)">Состояния для проверки</div>
+    <div style="display:flex;flex-wrap:wrap;gap:7px">
+      <sc-for list="{{ demos }}" as="dm" hint-placeholder-count="5">
+        <div class="tap" onClick="{{ dm.onPick }}" style="{{ dm.style }}">{{ dm.label }}</div>
+      </sc-for>
+    </div>
+    <div style="font:400 11px/1.5 'Golos Text',sans-serif;color:rgba(0,0,0,.5)">Работает: переключение доставка/самовывоз, категории, модификаторы и размеры, добавление и количество, промокод PB10, частичное списание баллов ползунком, подарок от 5 000 ₸, слоты предзаказа, сдача, оформление, живой статус заказа и отмена с причиной.</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:440,&quot;height&quot;:1100},&quot;acc&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#F7941D&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;#F7941D&quot;,&quot;#E6007E&quot;,&quot;#E53935&quot;,&quot;#0E0D10&quot;],&quot;section&quot;:&quot;Фирменные цвета&quot;},&quot;ben&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#E6007E&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;#E6007E&quot;,&quot;#F7941D&quot;,&quot;#1E8E5A&quot;],&quot;section&quot;:&quot;Фирменные цвета&quot;},&quot;repeatBlock&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Каталог&quot;}}">
+const ACC = "#F7941D", BEN = "#E6007E", INK = "#0E0D10", MUT = "#8B8792";
+
+const CATALOG = {
+  "Пиццы": [
+    { id: "p1", name: "Четыре сезона", price: 3400, w: "470 г", img: "assets/pizza-4sezona.jpg", desc: "Пепперони, шампиньоны, ветчина, перец, моцарелла" },
+    { id: "p2", name: "Четыре сыра", price: 3200, w: "470 г", img: "assets/pizza-4syra.jpg", desc: "Моцарелла, чеддер, дорблю, пармезан, сливочный соус" },
+    { id: "p3", name: "Альфредо", price: 3600, w: "480 г", img: "assets/pizza-alfredo.jpg", desc: "Курица, шампиньоны, сливочный соус, моцарелла" },
+    { id: "p4", name: "Болоньезе", price: 3450, w: "510 г", img: "assets/pizza-bolonez.jpg", desc: "Говяжий фарш, томаты, лук, моцарелла" },
+    { id: "p5", name: "Курица и грибы", price: 3300, w: "490 г", img: "assets/pizza-kuritsa-griby.jpg", desc: "Курица, шампиньоны, моцарелла, сливочный соус" },
+    { id: "p6", name: "Донерная", price: 3100, w: "520 г", img: "assets/pizza-donernaya.jpg", desc: "Курица, айран-соус, лук, томаты", stop: true }
+  ],
+  "Бургеры": [
+    { id: "b1", name: "Барбекю бургер", price: 2400, w: "320 г", img: "assets/burger-bbq.jpg", desc: "Говядина, чеддер, соус барбекю, томаты, лук, айсберг" },
+    { id: "b2", name: "Гриль бургер", price: 2300, w: "310 г", img: "assets/burger-grill.jpg", desc: "Котлета на гриле, чеддер, айсберг, огурец, соус" },
+    { id: "b3", name: "Дабл чикенбургер", price: 3200, w: "340 г", img: "assets/burger-dabl.jpg", desc: "Две куриные котлеты, чеддер, айсберг, соус «Цезарь»" },
+    { id: "b4", name: "Бургер с ветчиной", price: 1690, w: "300 г", img: "assets/burger-vetchina.jpg", desc: "Ветчина, сыр, томаты, айсберг, горчичный соус" }
+  ],
+  "Закуски": [
+    { id: "s1", name: "Картофель фри", price: 900, w: "150 г", img: "assets/side-fri.jpg", desc: "Обжаренный до золотистого, с солью" },
+    { id: "s2", name: "Картофельные дольки", price: 1100, w: "180 г", img: "assets/side-dolki.jpg", desc: "В кожуре, со специями" },
+    { id: "s3", name: "Наггетсы 6 шт", price: 1300, w: "160 г", img: "assets/side-naggetsy.jpg", desc: "Куриные, с соусом на выбор" },
+    { id: "s4", name: "Сырные палочки", price: 1200, w: "140 г", img: "assets/side-syrnye.jpg", desc: "Моцарелла в панировке, соус сальса" }
+  ]
+};
+const SIZES = [{ label: "25 см", d: -400 }, { label: "30 см", d: 0 }, { label: "35 см", d: 600 }];
+const ADDONS_PIZZA = [{ n: "Двойная моцарелла", p: 450 }, { n: "Пепперони", p: 600 }, { n: "Бортик с сыром", p: 700 }, { n: "Соус чесночный", p: 200 }];
+const ADDONS_BURGER = [{ n: "Бекон", p: 500 }, { n: "Двойной чеддер", p: 400 }, { n: "Халапеньо", p: 300 }, { n: "Соус", p: 200 }];
+const ADDONS_SIDE = [{ n: "Соус сырный", p: 200 }, { n: "Соус барбекю", p: 200 }];
+const STAGE_NAMES = ["Заказ отправлен", "Принят кухней", "Готовится", "Курьер в пути", "Доставлен"];
+const STAGE_TITLES = ["Заказ отправлен", "Принят кухней", "Готовим ваш заказ", "Курьер в пути", "Заказ доставлен"];
+const STAGE_TIMES = ["21:08", "21:09", "21:14", "21:36", ""];
+const REASONS = ["Передумал", "Оформил по ошибке", "Долго готовят", "Другая причина"];
+
+function fmt(n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, " ") + " ₸"; }
+function fmtN(n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, " "); }
+
+class Component extends DCLogic {
+  state = {
+    tab: "menu", screen: "catalog", cat: "Пиццы", mode: "delivery",
+    product: null, size: 1, addons: {},
+    cart: [], points: 0, promo: "", promoOk: false, promoBad: false,
+    addr: 0, pay: "cash", change: 10000, slot: "asap", comment: "",
+    stage: 0, active: false, cancelOpen: false, reason: 0,
+    demo: "normal"
+  };
+
+  componentWillUnmount() { clearInterval(this._t); }
+
+  pill(active, extra) {
+    const a = this.props.acc || ACC;
+    return "flex:none;padding:10px 15px;border-radius:999px;font:" + (active ? "600" : "500") + " 12.5px/1 'Golos Text',sans-serif;" +
+      (active ? "background:" + a + ";color:#fff;" : "background:rgba(14,13,16,.05);color:" + MUT + ";") + (extra || "");
+  }
+  outline(active) {
+    const a = this.props.acc || ACC;
+    return "flex:none;padding:11px 16px;border-radius:999px;font:" + (active ? "600" : "500") + " 12px/1 'Golos Text',sans-serif;" +
+      (active ? "background:" + INK + ";color:#fff;border:1.5px solid " + INK + ";" : "background:#fff;color:" + INK + ";border:1.5px solid rgba(14,13,16,.12);");
+  }
+
+  addonsFor(p) {
+    if (!p) return [];
+    if (p.id[0] === "p") return ADDONS_PIZZA;
+    if (p.id[0] === "b") return ADDONS_BURGER;
+    return ADDONS_SIDE;
+  }
+  productPrice() {
+    const p = this.state.product; if (!p) return 0;
+    let sum = p.price + (p.id[0] === "p" ? SIZES[this.state.size].d : 0);
+    this.addonsFor(p).forEach((a, i) => { if (this.state.addons[i]) sum += a.p; });
+    return sum;
+  }
+  subtotal() { return this.state.cart.reduce((s, l) => s + l.price * l.qty, 0); }
+  promoCut() { return this.state.promoOk ? Math.round(this.subtotal() * 0.1) : 0; }
+  maxPoints() { return Math.min(1006, Math.max(0, this.subtotal() - this.promoCut())); }
+  total() { return Math.max(0, this.subtotal() - this.promoCut() - Math.min(this.state.points, this.maxPoints())); }
+
+  addToCart(p, extra) {
+    const line = {
+      key: p.id + "|" + (extra || ""), id: p.id, name: p.name, img: p.img,
+      sub: extra || "", price: p.price + (extra ? 0 : 0), qty: 1
+    };
+    if (extra && extra.price) line.price = extra.price;
+    this.setState(s => {
+      const cart = s.cart.slice();
+      const i = cart.findIndex(l => l.key === line.key);
+      if (i >= 0) cart[i] = Object.assign({}, cart[i], { qty: cart[i].qty + 1 });
+      else cart.push(line);
+      return { cart: cart, points: 0 };
+    });
+  }
+  quickAdd(p) {
+    this.setState(s => {
+      const cart = s.cart.slice();
+      const i = cart.findIndex(l => l.key === p.id + "|");
+      if (i >= 0) cart[i] = Object.assign({}, cart[i], { qty: cart[i].qty + 1 });
+      else cart.push({ key: p.id + "|", id: p.id, name: p.name, img: p.img, sub: "", price: p.price, qty: 1 });
+      return { cart: cart };
+    });
+  }
+  addConfigured() {
+    const p = this.state.product; if (!p) return;
+    const chosen = this.addonsFor(p).filter((a, i) => this.state.addons[i]).map(a => a.n);
+    const sizeLabel = p.id[0] === "p" ? SIZES[this.state.size].label : "";
+    const sub = [sizeLabel].concat(chosen.length ? ["+ " + chosen.join(", ")] : []).filter(Boolean).join(" · ");
+    const price = this.productPrice();
+    const key = p.id + "|" + sub;
+    this.setState(s => {
+      const cart = s.cart.slice();
+      const i = cart.findIndex(l => l.key === key);
+      if (i >= 0) cart[i] = Object.assign({}, cart[i], { qty: cart[i].qty + 1 });
+      else cart.push({ key: key, id: p.id, name: p.name, img: p.img, sub: sub, price: price, qty: 1 });
+      return { cart: cart, screen: "cart", tab: "cart", product: null, addons: {}, size: 1 };
+    });
+  }
+  repeatOrder() {
+    this.setState({
+      cart: [
+        { key: "p2|30 см", id: "p2", name: "Четыре сыра", img: "assets/pizza-4syra.jpg", sub: "30 см", price: 3200, qty: 1 },
+        { key: "b2|", id: "b2", name: "Гриль бургер", img: "assets/burger-grill.jpg", sub: "", price: 2300, qty: 1 },
+        { key: "s1|", id: "s1", name: "Картофель фри", img: "assets/side-fri.jpg", sub: "", price: 900, qty: 2 }
+      ],
+      screen: "cart", tab: "cart", points: 0, demo: "normal"
+    });
+  }
+  bump(key, d) {
+    this.setState(s => {
+      let cart = s.cart.map(l => l.key === key ? Object.assign({}, l, { qty: l.qty + d }) : l).filter(l => l.qty > 0);
+      const mp = Math.min(1006, cart.reduce((a, l) => a + l.price * l.qty, 0));
+      return { cart: cart, points: Math.min(s.points, mp) };
+    });
+  }
+  place() {
+    clearInterval(this._t);
+    this.setState({ screen: "status", tab: "orders", active: true, stage: 0 });
+    this._t = setInterval(() => {
+      this.setState(s => s.stage >= 4 ? {} : { stage: s.stage + 1 });
+    }, 4000);
+  }
+
+  renderVals() {
+    const st = this.state;
+    const acc = this.props.acc || ACC, ben = this.props.ben || BEN;
+    const demo = st.demo;
+    const closed = demo === "closed";
+    const loading = demo === "loading";
+    const error = demo === "error";
+    const onCatalogTab = st.tab === "menu";
+    const showCatalog = onCatalogTab && st.screen === "catalog" && !loading && !error;
+    const items = (CATALOG[st.cat] || []).map(p => ({
+      name: p.name, desc: p.stop ? "Закончилась, вернём завтра" : p.desc,
+      img: p.img, priceText: fmtN(p.price),
+      rowStyle: "display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid rgba(14,13,16,.08);" + (p.stop ? "opacity:.45;" : ""),
+      imgStyle: "width:76px;height:76px;border-radius:22px;object-fit:cover;flex:none;" + (p.stop ? "filter:grayscale(1);" : ""),
+      addLabel: p.stop ? "нет" : "+",
+      addStyle: p.stop
+        ? "margin-top:8px;padding:7px 12px;border-radius:999px;background:rgba(14,13,16,.06);color:" + MUT + ";font:600 11px/1 'Golos Text',sans-serif"
+        : "margin-top:8px;padding:8px 14px;border-radius:999px;background:" + acc + ";color:#fff;font:600 13px/1 'Golos Text',sans-serif;cursor:pointer",
+      onOpen: () => this.setState({ product: p, screen: "product", size: 1, addons: {} }),
+      onAdd: p.stop ? () => this.setState({ product: p, screen: "product" }) : () => this.quickAdd(p)
+    }));
+
+    const p = st.product;
+    const pStop = !!(p && p.stop);
+    const alts = (CATALOG["Пиццы"] || []).filter(x => !x.stop).slice(0, 2).map(x => ({
+      name: x.name, img: x.img, priceText: fmt(x.price),
+      onOpen: () => this.setState({ product: x, screen: "product", size: 1, addons: {} })
+    }));
+
+    const sub = this.subtotal(), mp = this.maxPoints(), used = Math.min(st.points, mp);
+    const gift = sub >= 5000;
+    const lines = st.cart.map(l => ({
+      name: l.name, sub: l.sub, img: l.img, qty: l.qty,
+      priceText: fmt(l.price * l.qty), priceColor: INK,
+      qtyStyle: "display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:rgba(14,13,16,.05);flex:none",
+      onInc: () => this.bump(l.key, 1), onDec: () => this.bump(l.key, -1)
+    }));
+
+    const stages = STAGE_NAMES.map((n, i) => {
+      const done = i < st.stage, now = i === st.stage;
+      return {
+        label: n, time: done || now ? STAGE_TIMES[i] : "", mark: done ? "✓" : "",
+        rowStyle: "display:flex;align-items:center;gap:12px;" + (i > st.stage ? "opacity:.45;" : ""),
+        dotStyle: "flex:none;width:24px;height:24px;border-radius:999px;display:flex;align-items:center;justify-content:center;font:600 12px/1 'Golos Text',sans-serif;" +
+          (done ? "background:" + ben + ";color:" + INK + ";" : now ? "border:2px solid " + ben + ";" : "border:1.5px solid rgba(255,255,255,.45);"),
+        labelStyle: "flex:1;font:" + (now ? "700" : "500") + " 13px/1 'Golos Text',sans-serif"
+      };
+    });
+
+    const history = [
+      { date: "12 августа", items: "Четыре сыра, Гриль бургер, Фри ×2", sum: "5 050 ₸", onRepeat: () => this.repeatOrder() },
+      { date: "5 августа", items: "Гриль бургер, Наггетсы", sum: "3 700 ₸", onRepeat: () => this.repeatOrder() },
+      { date: "28 июля", items: "Комбо на двоих", sum: "7 200 ₸", onRepeat: () => this.repeatOrder() }
+    ];
+
+    const tabDefs = [["menu", "Меню"], ["cart", "Корзина"], ["orders", "Заказы"], ["profile", "Профиль"]];
+    const tabs = tabDefs.map(t => {
+      const on = st.tab === t[0];
+      const c = on ? acc : MUT;
+      let icon = "";
+      if (t[0] === "menu") icon = "display:grid;grid-template-columns:6px 6px;gap:3px;width:15px;height:15px;background:transparent;border-radius:0;box-shadow:inset 0 0 0 0;background-image:radial-gradient(" + c + " 60%,transparent 61%);background-size:9px 9px;background-repeat:repeat;";
+      if (t[0] === "menu") icon = "width:15px;height:15px;background-image:linear-gradient(" + c + "," + c + "),linear-gradient(" + c + "," + c + "),linear-gradient(" + c + "," + c + "),linear-gradient(" + c + "," + c + ");background-size:6px 6px;background-position:0 0,9px 0,0 9px,9px 9px;background-repeat:no-repeat;";
+      if (t[0] === "cart") icon = "width:15px;height:12px;border:1.7px solid " + c + ";border-radius:0 0 5px 5px;margin-top:3px;";
+      if (t[0] === "orders") icon = "width:15px;height:12px;margin-top:3px;background-image:linear-gradient(" + c + "," + c + "),linear-gradient(" + c + "," + c + "),linear-gradient(" + c + "," + c + ");background-size:15px 1.7px;background-position:0 0,0 5px,0 10px;background-repeat:no-repeat;";
+      if (t[0] === "profile") icon = "width:14px;height:14px;border:1.7px solid " + c + ";border-radius:999px;margin-top:1px;";
+      return {
+        label: t[1], iconStyle: icon,
+        labelStyle: "font:" + (on ? "600" : "500") + " 10.5px/1 'Golos Text',sans-serif;color:" + c,
+        style: "flex:1;display:flex;flex-direction:column;align-items:center;gap:6px",
+        onPick: () => this.setState({
+          tab: t[0], product: null, cancelOpen: false,
+          screen: t[0] === "menu" ? "catalog" : t[0] === "cart" ? "cart" : t[0] === "orders" ? (st.active ? "status" : "orders") : "profile"
+        })
+      };
+    });
+
+    const demoDefs = [["normal", "Обычный режим"], ["loading", "Загрузка каталога"], ["error", "Ошибка сети"], ["closed", "Заведение закрыто"], ["empty", "Пустая корзина"], ["stop", "Стоп-лист"]];
+    const demos = demoDefs.map(d => ({
+      label: d[1],
+      style: "flex:none;padding:9px 13px;border-radius:999px;font:" + (demo === d[0] ? "600" : "500") + " 11.5px/1 'Golos Text',sans-serif;cursor:pointer;" +
+        (demo === d[0] ? "background:" + INK + ";color:#fff;" : "background:#fff;color:" + INK + ";border:1px solid rgba(0,0,0,.12);"),
+      onPick: () => {
+        if (d[0] === "empty") this.setState({ demo: "normal", cart: [], points: 0, tab: "cart", screen: "cart", product: null });
+        else if (d[0] === "stop") this.setState({ demo: "normal", product: CATALOG["Пиццы"][5], screen: "product", tab: "menu" });
+        else if (d[0] === "closed") this.setState({ demo: "closed", mode: "pickup", tab: "menu", screen: "catalog" });
+        else this.setState({ demo: d[0], tab: "menu", screen: "catalog", product: null, mode: d[0] === "normal" ? "delivery" : st.mode });
+      }
+    }));
+
+    return {
+      acc: acc, ben: ben,
+      sbBg: showCatalog || loading ? INK : (st.screen === "status" && st.tab === "orders" && st.active && !st.cancelOpen ? INK : "#fff"),
+      sbFg: showCatalog || loading || (st.screen === "status" && st.active && !st.cancelOpen) ? "#fff" : INK,
+
+      showCatalog: showCatalog,
+      showLoading: onCatalogTab && loading,
+      showError: onCatalogTab && error,
+      showProduct: st.tab === "menu" && st.screen === "product" && !!p && !loading && !error,
+      showCart: st.tab === "cart",
+      showCheckout: st.tab === "checkout",
+      showStatus: st.tab === "orders" && st.screen === "status" && st.active && !st.cancelOpen,
+      showCancel: st.cancelOpen,
+      showOrders: st.tab === "orders" && (st.screen !== "status" || !st.active) && !st.cancelOpen,
+      showProfile: st.tab === "profile",
+
+      closed: closed,
+      etaText: closed ? "самовывоз" : st.mode === "pickup" ? "готово к 21:30" : "35 мин",
+      showRepeat: !closed && (this.props.repeatBlock !== false),
+      onRepeat: () => this.repeatOrder(),
+
+      modeDeliveryStyle: "flex:1;text-align:center;padding:12px 0;border-radius:999px;font:" + (st.mode === "delivery" ? "600" : "500") + " 12.5px/1 'Golos Text',sans-serif;" +
+        (closed ? "background:rgba(14,13,16,.04);color:rgba(139,135,146,.6);" : st.mode === "delivery" ? "background:" + INK + ";color:#fff;" : "background:#fff;color:" + MUT + ";border:1.5px solid rgba(14,13,16,.12);"),
+      modePickupStyle: "flex:1;text-align:center;padding:12px 0;border-radius:999px;font:" + (st.mode === "pickup" ? "600" : "500") + " 12.5px/1 'Golos Text',sans-serif;" +
+        (st.mode === "pickup" ? "background:" + INK + ";color:#fff;" : "background:#fff;color:" + MUT + ";border:1.5px solid rgba(14,13,16,.12);"),
+      onDelivery: () => { if (!closed) this.setState({ mode: "delivery" }); },
+      onPickup: () => this.setState({ mode: "pickup" }),
+
+      cats: Object.keys(CATALOG).map(c => ({
+        name: c, style: this.pill(st.cat === c), onPick: () => this.setState({ cat: c })
+      })),
+      items: items,
+
+      cartHasItems: st.cart.length > 0,
+      cartEmpty: st.cart.length === 0,
+      cartCount: st.cart.reduce((a, l) => a + l.qty, 0),
+      cartTotalText: fmt(this.total()),
+      goCart: () => this.setState({ tab: "cart", screen: "cart" }),
+      goCatalog: () => this.setState({ tab: "menu", screen: "catalog", product: null }),
+      goCheckout: () => this.setState({ tab: "checkout" }),
+      goStatus: () => this.setState({ tab: "orders", screen: "status" }),
+      goBack: () => this.setState({ screen: "catalog", product: null }),
+
+      pName: p ? p.name : "", pImg: p ? p.img : "", pDesc: p ? p.desc : "", pWeight: p ? p.w : "",
+      pImgFilter: pStop ? "filter:grayscale(1);opacity:.45" : "",
+      pStop: pStop, pAvailable: !!p && !pStop, pHasSizes: !!p && p.id[0] === "p",
+      alts: alts,
+      pSizes: SIZES.map((s, i) => ({
+        label: s.label, style: "flex:1;text-align:center;padding:12px 0;border-radius:999px;font:" + (st.size === i ? "600" : "500") + " 12px/1 'Golos Text',sans-serif;" +
+          (st.size === i ? "background:" + INK + ";color:#fff;" : "background:rgba(14,13,16,.05);color:" + MUT + ";"),
+        onPick: () => this.setState({ size: i })
+      })),
+      pAddons: this.addonsFor(p).map((a, i) => ({
+        label: a.n + " +" + a.p,
+        style: "flex:none;padding:11px 15px;border-radius:999px;font:" + (st.addons[i] ? "600" : "500") + " 12px/1 'Golos Text',sans-serif;" +
+          (st.addons[i] ? "background:" + acc + ";color:#fff;" : "background:#fff;color:" + INK + ";border:1.5px solid rgba(14,13,16,.12);"),
+        onToggle: () => this.setState(s => {
+          const nx = Object.assign({}, s.addons); nx[i] = !nx[i]; return { addons: nx };
+        })
+      })),
+      pPriceText: fmt(this.productPrice()),
+      onAddProduct: () => this.addConfigured(),
+
+      lines: lines,
+      giftEarned: gift, giftHint: !gift && st.cart.length > 0, giftLeftText: fmt(5000 - sub),
+      promo: st.promo, promoOk: st.promoOk, promoBad: st.promoBad,
+      promoText: "−" + fmt(this.promoCut()),
+      onPromo: e => this.setState({ promo: e.target.value, promoBad: false }),
+      onApplyPromo: () => {
+        const ok = st.promo.trim().toUpperCase() === "PB10";
+        this.setState({ promoOk: ok, promoBad: !ok, points: 0 });
+      },
+      points: used, pointsMax: mp, pointsUsed: used > 0,
+      pointsUsedText: fmt(used), pointsMaxText: fmtN(mp), pointsAvailText: "1 006",
+      pointsMinusText: "−" + fmt(used),
+      onPoints: e => this.setState({ points: Number(e.target.value) }),
+      onPointsMax: () => this.setState({ points: mp }),
+      onPointsNone: () => this.setState({ points: 0 }),
+      subtotalText: fmt(sub),
+      deliveryText: st.mode === "pickup" ? "самовывоз" : "бесплатно",
+      totalText: fmt(this.total()),
+
+      addrTitle: st.mode === "pickup" ? "Откуда забрать" : "Куда привезти",
+      addresses: [
+        { title: "Сатпаева, 38А", sub: "кв. 24 · подъезд 2 · этаж 5" },
+        { title: "Ауэзова, 53/2", sub: "кв. 7 · подъезд 1 · этаж 3" }
+      ].map((a, i) => ({
+        title: a.title, sub: a.sub,
+        style: "display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:18px;" + (st.addr === i ? "background:rgba(247,148,29,.1);" : "background:rgba(14,13,16,.04);"),
+        dotStyle: "flex:none;width:16px;height:16px;border-radius:999px;" + (st.addr === i ? "border:5px solid " + acc + ";" : "border:1.5px solid rgba(14,13,16,.2);"),
+        onPick: () => this.setState({ addr: i })
+      })),
+      onNewAddr: () => this.setState({ addr: 0 }),
+      slots: [["asap", "Ближайшее"], ["22:00", "22:00"], ["22:30", "22:30"], ["23:00", "23:00"]].map(s => ({
+        label: s[1], style: this.outline(st.slot === s[0]), onPick: () => this.setState({ slot: s[0] })
+      })),
+      pays: [["cash", "Наличными"], ["card", "Картой курьеру"], ["online", "Онлайн"]].map(x => ({
+        label: x[1], style: this.outline(st.pay === x[0]), onPick: () => this.setState({ pay: x[0] })
+      })),
+      isCash: st.pay === "cash",
+      changeOpts: [5000, 10000, 20000].map(v => ({
+        label: fmtN(v), style: this.outline(st.change === v), onPick: () => this.setState({ change: v })
+      })),
+      comment: st.comment,
+      onComment: e => this.setState({ comment: e.target.value }),
+      onPlaceOrder: () => this.place(),
+
+      stageTitle: STAGE_TITLES[st.stage],
+      etaTime: st.stage >= 4 ? "доставлен" : "к 21:45",
+      stages: stages,
+      addrShort: st.addr === 0 ? "Сатпаева, 38А" : "Ауэзова, 53/2",
+      payLabel: st.pay === "cash" ? "Наличными курьеру · сдача с " + fmtN(st.change) : st.pay === "card" ? "Картой курьеру" : "Оплачено онлайн",
+      canCancel: st.stage < 3, cancelLocked: st.stage === 3,
+      onCancel: () => this.setState({ cancelOpen: true }),
+      onCloseCancel: () => this.setState({ cancelOpen: false }),
+      onConfirmCancel: () => {
+        clearInterval(this._t);
+        this.setState({ cancelOpen: false, active: false, stage: 0, cart: [], points: 0, promoOk: false, promo: "", tab: "orders", screen: "orders" });
+      },
+      reasons: REASONS.map((r, i) => ({
+        label: r,
+        style: "padding:13px 16px;border-radius:18px;font:" + (st.reason === i ? "600" : "500") + " 12.5px/1 'Golos Text',sans-serif;cursor:pointer;" +
+          (st.reason === i ? "background:" + INK + ";color:#fff;" : "background:rgba(14,13,16,.05);color:" + INK + ";"),
+        onPick: () => this.setState({ reason: i })
+      })),
+
+      tabs: tabs,
+      demos: demos,
+      hasActive: st.active,
+      history: history,
+      pointsBalanceText: "1 006",
+      pointsLog: [
+        { label: "Начислено · 12 авг", amt: "+353", amtStyle: "font-weight:700;color:" + ben },
+        { label: "Списано · 5 авг", amt: "−500", amtStyle: "font-weight:700" },
+        { label: "Начислено · 5 авг", amt: "+259", amtStyle: "font-weight:700;color:" + ben }
+      ],
+      onRetry: () => this.setState({ demo: "normal" })
+    };
+  }
+}
+</script>
+</body>
+</html>

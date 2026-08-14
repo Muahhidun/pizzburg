@@ -26,7 +26,45 @@ import { OrdersService } from '../orders/orders.service';
 import { AvailabilityService } from '../availability/availability.service';
 import { LegalService } from '../legal/legal.service';
 import { CancelReasonsService } from '../orders/cancel-reasons.service';
+import { PromotionsService } from '../promotions/promotions.service';
 import { OrderStatus } from '@prisma/client';
+
+/**
+ * Период отчёта из строк «ГГГГ-ММ-ДД».
+ *
+ * Две ловушки, обе видны только на реальных данных:
+ * — запрос идёт `cancelledAt < to`, а голая дата парсится как полночь, и без
+ *   сдвига на сутки «по 14 августа» молча выкидывает все отмены за 14-е,
+ *   то есть чаще всего за сегодня, ради которого отчёт и открывают;
+ * — день считается по локальному времени, как и в `orders()`: это
+ *   календарный день заведения, а не UTC-сутки.
+ */
+export function reportRange(fromStr?: string, toStr?: string) {
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/;
+
+  const startOfDay = (value: string) => {
+    const [y, m, d] = value.split('-').map(Number);
+    const date = new Date();
+    date.setFullYear(y, m - 1, d);
+    date.setHours(0, 0, 0, 0);
+    return date;
+  };
+
+  let to: Date;
+  if (!toStr) to = new Date();
+  else if (dateOnly.test(toStr)) {
+    to = startOfDay(toStr);
+    to.setDate(to.getDate() + 1); // граница включительно по выбранный день
+  } else to = new Date(toStr);
+
+  const from = fromStr
+    ? dateOnly.test(fromStr)
+      ? startOfDay(fromStr)
+      : new Date(fromStr)
+    : new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  return { from, to };
+}
 
 /**
  * Админка владельца. Правит ТОЛЬКО витринные поля — данные, приходящие
@@ -43,6 +81,7 @@ export class AdminService {
     private readonly availability: AvailabilityService,
     private readonly legal: LegalService,
     private readonly reasons: CancelReasonsService,
+    private readonly promoEngine: PromotionsService,
   ) {}
 
   private async tenant(slug = 'pizzburg') {
@@ -440,8 +479,13 @@ export class AdminService {
       orderBy: { name: 'asc' },
     });
     // подтягиваем читаемые имена условия и подарка
-    const catIds = promos.map((p) => p.conditionCategoryId);
-    const prodIds = promos.map((p) => p.giftProductId);
+    // Поля стали необязательными: у скидочных акций категории и подарка нет
+    const catIds = promos
+      .map((p) => p.conditionCategoryId)
+      .filter((id): id is string => id !== null);
+    const prodIds = promos
+      .map((p) => p.giftProductId)
+      .filter((id): id is string => id !== null);
     const [cats, prods] = await Promise.all([
       this.prisma.appCategory.findMany({ where: { id: { in: catIds } } }),
       this.prisma.product.findMany({ where: { id: { in: prodIds } } }),
@@ -451,25 +495,56 @@ export class AdminService {
 
     return promos.map((p) => ({
       ...p,
-      conditionCategoryName: catById.get(p.conditionCategoryId) ?? '—',
-      giftProductName: prodById.get(p.giftProductId) ?? '—',
+      conditionCategoryName: p.conditionCategoryId
+        ? (catById.get(p.conditionCategoryId) ?? '—')
+        : '—',
+      giftProductName: p.giftProductId
+        ? (prodById.get(p.giftProductId) ?? '—')
+        : '—',
     }));
   }
 
   async createPromotion(dto: PromotionDto) {
     const tenant = await this.tenant();
-    const [category, gift] = await Promise.all([
-      this.prisma.appCategory.findFirst({
+    const kind = dto.kind ?? 'GIFT_FOR_QTY';
+
+    // Каждый тип требует своего набора полей. Проверяем здесь, а не в DTO:
+    // class-validator не умеет «обязательно, если kind такой-то», а
+    // акция без подарка или без процента просто ничего не делает и
+    // выглядит как поломка.
+    const needsGift = kind === 'GIFT_FOR_QTY' || kind === 'GIFT_FOR_SUM';
+    const needsValue = kind === 'PERCENT_OFF' || kind === 'FIXED_OFF';
+
+    if (kind === 'GIFT_FOR_QTY' && !dto.conditionCategoryId) {
+      throw new BadRequestException('Для «N товаров → подарок» нужна категория');
+    }
+    if (kind === 'GIFT_FOR_SUM' && !dto.minOrderSum) {
+      throw new BadRequestException('Для «сумма → подарок» нужна минимальная сумма');
+    }
+    if (needsGift && !dto.giftProductId) {
+      throw new BadRequestException('Не выбран подарочный товар');
+    }
+    if (needsValue && !dto.discountValue) {
+      throw new BadRequestException('Не указан размер скидки');
+    }
+    if (kind === 'PERCENT_OFF' && (dto.discountValue ?? 0) > 100) {
+      throw new BadRequestException('Скидка не может быть больше 100%');
+    }
+
+    if (dto.conditionCategoryId) {
+      const category = await this.prisma.appCategory.findFirst({
         where: { id: dto.conditionCategoryId, tenantId: tenant.id },
         select: { id: true },
-      }),
-      this.prisma.product.findFirst({
+      });
+      if (!category) throw new BadRequestException('Категория акции не найдена');
+    }
+    if (dto.giftProductId) {
+      const gift = await this.prisma.product.findFirst({
         where: { id: dto.giftProductId, tenantId: tenant.id },
         select: { id: true },
-      }),
-    ]);
-    if (!category) throw new BadRequestException('Категория акции не найдена');
-    if (!gift) throw new BadRequestException('Подарочный товар не найден');
+      });
+      if (!gift) throw new BadRequestException('Подарочный товар не найден');
+    }
     if (
       dto.activeFrom &&
       dto.activeTo &&
@@ -477,16 +552,25 @@ export class AdminService {
     ) {
       throw new BadRequestException('Дата окончания должна быть позже начала');
     }
+
     return this.prisma.promotion.create({
       data: {
         tenantId: tenant.id,
         name: dto.name.trim(),
+        kind,
         code: dto.code?.trim().toUpperCase() || null,
-        conditionCategoryId: dto.conditionCategoryId,
-        conditionQty: dto.conditionQty,
-        giftProductId: dto.giftProductId,
+        conditionCategoryId: dto.conditionCategoryId || null,
+        conditionQty: dto.conditionQty ?? 2,
+        minOrderSum: dto.minOrderSum ?? null,
+        giftProductId: dto.giftProductId || null,
         giftQty: dto.giftQty ?? 1,
+        discountValue: dto.discountValue ?? 0,
+        maxDiscount: dto.maxDiscount ?? null,
         repeatPerCart: dto.repeatPerCart ?? true,
+        firstOrderOnly: dto.firstOrderOnly ?? false,
+        perCustomerLimit: dto.perCustomerLimit ?? null,
+        totalLimit: dto.totalLimit ?? null,
+        orderType: dto.orderType || null,
         isActive: dto.isActive ?? true,
         activeFrom: dto.activeFrom ? new Date(dto.activeFrom) : null,
         activeTo: dto.activeTo ? new Date(dto.activeTo) : null,
@@ -704,12 +788,16 @@ export class AdminService {
   }
 
   /** Отчёт по отменам за период (по умолчанию — последние 30 дней) */
+  /** Эффективность акций: сколько раз сработала и во сколько обошлась */
+  async promotionReport(fromStr?: string, toStr?: string) {
+    const tenant = await this.tenant();
+    const { from, to } = reportRange(fromStr, toStr);
+    return this.promoEngine.report(tenant.id, from, to);
+  }
+
   async cancellationReport(fromStr?: string, toStr?: string) {
     const tenant = await this.tenant();
-    const to = toStr ? new Date(toStr) : new Date();
-    const from = fromStr
-      ? new Date(fromStr)
-      : new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const { from, to } = reportRange(fromStr, toStr);
     return this.reasons.report(tenant.id, from, to);
   }
 

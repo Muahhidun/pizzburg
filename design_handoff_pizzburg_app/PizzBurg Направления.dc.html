@@ -1,0 +1,1809 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Golos+Text:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Unbounded:wght@400;600;700;800&family=PT+Serif:wght@400;700&family=Archivo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#eceae5;font-family:system-ui,sans-serif}
+a{color:#2a78d6}a:hover{color:#1b5fae}
+.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}
+.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}
+.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}
+.dv-opts{display:flex;flex-direction:column;gap:44px;align-items:flex-start}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px}
+.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.55)}
+.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}
+.dv-next{margin:22px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}
+.dv-row{display:flex;gap:18px;align-items:flex-start}
+.spec{flex:none;width:250px;padding:20px;background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:14px;font:400 11.5px/1.6 system-ui,sans-serif;color:#33312e}
+.spec h4{margin:0 0 8px;font:700 15px/1.25 system-ui,sans-serif;color:#111}
+.spec dl{margin:14px 0 0;display:grid;grid-template-columns:auto;gap:8px}
+.spec dt{font:600 9.5px/1 ui-monospace,Menlo,monospace;letter-spacing:.06em;text-transform:uppercase;color:rgba(0,0,0,.4)}
+.spec dd{margin:2px 0 0}
+.sw{display:flex;gap:5px;margin-top:4px}
+.sw i{width:20px;height:20px;border-radius:5px;display:block;border:1px solid rgba(0,0,0,.12)}
+.ph{width:320px;height:680px;border-radius:30px;overflow:hidden;position:relative;box-shadow:0 3px 14px rgba(0,0,0,.12);border:1px solid rgba(0,0,0,.12);flex:none;background:#fff}
+.scr{position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden}
+.bd{flex:1;overflow:hidden;position:relative;display:flex;flex-direction:column}
+.sb{height:32px;flex:none;display:flex;align-items:flex-end;justify-content:space-between;padding:0 20px 3px;font:600 11px/1 system-ui;opacity:.9}
+.sb b{font-weight:700}
+.slab{font:500 10.5px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.5);text-align:center;margin-top:7px}
+.cell{display:flex;flex-direction:column}
+</style>
+</helmet>
+
+<section class="dv-turn" id="t1">
+  <div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">PizzBurg — пять направлений, по семь экранов в каждом</span></div>
+  <div class="dv-opts">
+
+    <div class="dv-opt" id="1a">
+      <div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>«Витрина» — крупные фото во всю ширину, спокойная типографика</div>
+      <div class="dv-row">
+        <div class="spec">
+          <h4>Витрина</h4>
+          Товар продаёт фотография. Один товар — одна карточка во всю ширину, снимок 16:9 без обрезки. Текста ровно столько, сколько нужно для решения: название, вес, состав, цена. Никаких баннеров: первый экран открывается блоком «Повторить заказ» и сразу переходит в меню.
+          <dl>
+            <dt>Палитра</dt><dd>Тёплая бумага и терракота<div class="sw"><i style="background:#FAF7F2"></i><i style="background:#fff"></i><i style="background:#C0562F"></i><i style="background:#17130F"></i><i style="background:#7C7469"></i></div></dd>
+            <dt>Шрифты</dt><dd>Manrope 800 — заголовки<br>Golos Text 400/500 — текст</dd>
+            <dt>Отступы</dt><dd>Сетка 4. Поля 20, между блоками 28. Фото — в край.</dd>
+            <dt>Скругления</dt><dd>Карточка 20, кнопки — пилюля, фото не скруглено</dd>
+            <dt>Состояние</dt><dd>Загрузка каталога (7-й экран), стоп-лист в списке</dd>
+          </dl>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#FAF7F2">
+            <div class="scr" style="font-family:'Golos Text',sans-serif;color:#17130F">
+              <div class="sb" style="background:#FAF7F2"><span>21:04</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:none;padding:6px 20px 14px;background:#FAF7F2">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                    <div style="display:flex;align-items:center;gap:9px">
+                      <img src="assets/logo.jpg" alt="" style="width:30px;height:30px;border-radius:999px;object-fit:cover;display:block">
+                      <div style="font:700 13px/1.2 'Golos Text',sans-serif">Сатпаева, 38А <span style="color:#7C7469;font-weight:500">▾</span></div>
+                    </div>
+                    <div style="font:500 11px/1.2 'Golos Text',sans-serif;color:#7C7469">30–40 мин</div>
+                  </div>
+                  <div style="display:flex;gap:4px;margin-top:14px;padding:3px;background:rgba(23,19,15,.06);border-radius:999px">
+                    <div style="flex:1;text-align:center;padding:8px 0;border-radius:999px;background:#fff;font:600 12.5px/1 'Golos Text',sans-serif;box-shadow:0 1px 3px rgba(0,0,0,.08)">Доставка</div>
+                    <div style="flex:1;text-align:center;padding:8px 0;border-radius:999px;font:500 12.5px/1 'Golos Text',sans-serif;color:#7C7469">Самовывоз</div>
+                  </div>
+                </div>
+
+                <div style="flex:none;margin:0 20px 16px;padding:14px;background:#fff;border-radius:20px;border:1px solid rgba(23,19,15,.07)">
+                  <div style="font:500 10.5px/1 'Golos Text',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:#7C7469">Прошлый заказ</div>
+                  <div style="font:700 14px/1.35 'Manrope',sans-serif;margin-top:6px">Четыре сыра 30 см, Гриль бургер, Фри</div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
+                    <div style="font:800 17px/1 'Manrope',sans-serif">5 050 ₸</div>
+                    <div style="padding:9px 16px;border-radius:999px;background:#C0562F;color:#fff;font:600 12.5px/1 'Golos Text',sans-serif">Повторить</div>
+                  </div>
+                </div>
+
+                <div style="flex:none;display:flex;gap:8px;padding:0 20px 14px;overflow:hidden">
+                  <div style="flex:none;padding:8px 14px;border-radius:999px;background:#17130F;color:#FAF7F2;font:600 12.5px/1 'Golos Text',sans-serif">Пиццы</div>
+                  <div style="flex:none;padding:8px 14px;border-radius:999px;background:#fff;border:1px solid rgba(23,19,15,.1);font:500 12.5px/1 'Golos Text',sans-serif">Бургеры</div>
+                  <div style="flex:none;padding:8px 14px;border-radius:999px;background:#fff;border:1px solid rgba(23,19,15,.1);font:500 12.5px/1 'Golos Text',sans-serif">Донеры</div>
+                  <div style="flex:none;padding:8px 14px;border-radius:999px;background:#fff;border:1px solid rgba(23,19,15,.1);font:500 12.5px/1 'Golos Text',sans-serif">Хот-до</div>
+                </div>
+
+                <div style="flex:1;overflow:hidden;background:#fff;border-top:1px solid rgba(23,19,15,.07)">
+                  <div style="padding:0 0 18px">
+                    <img src="assets/pizza-4syra.jpg" alt="" style="width:100%;height:180px;object-fit:cover;display:block">
+                    <div style="padding:14px 20px 0">
+                      <div style="font:800 18px/1.2 'Manrope',sans-serif">Четыре сыра</div>
+                      <div style="font:400 12px/1.45 'Golos Text',sans-serif;color:#7C7469;margin-top:5px">Моцарелла, чеддер, дорблю, пармезан, сливочный соус · 470 г</div>
+                      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
+                        <div style="font:800 18px/1 'Manrope',sans-serif">от 3 200 ₸</div>
+                        <div style="padding:11px 20px;border-radius:999px;background:#17130F;color:#fff;font:600 13px/1 'Golos Text',sans-serif">Выбрать</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div style="padding:0 0 18px;border-top:1px solid rgba(23,19,15,.07)">
+                    <div style="position:relative">
+                      <img src="assets/pizza-donernaya.jpg" alt="" style="width:100%;height:180px;object-fit:cover;display:block;filter:grayscale(1);opacity:.45">
+                      <div style="position:absolute;left:20px;top:16px;padding:6px 12px;border-radius:999px;background:rgba(23,19,15,.82);color:#FAF7F2;font:600 11px/1 'Golos Text',sans-serif">Закончилась</div>
+                    </div>
+                    <div style="padding:14px 20px 0;opacity:.5">
+                      <div style="font:800 18px/1.2 'Manrope',sans-serif">Донерная</div>
+                      <div style="font:400 12px/1.45 'Golos Text',sans-serif;color:#7C7469;margin-top:5px">Курица, айран-соус, лук, томаты · 520 г</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style="flex:none;display:flex;background:#fff;border-top:1px solid rgba(23,19,15,.09);padding:9px 0 14px">
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px">
+                    <div style="display:grid;grid-template-columns:7px 7px;gap:3px"><i style="background:#17130F;border-radius:2px;height:7px"></i><i style="background:#17130F;border-radius:2px;height:7px"></i><i style="background:#17130F;border-radius:2px;height:7px"></i><i style="background:#17130F;border-radius:2px;height:7px"></i></div>
+                    <span style="font:600 10px/1 'Golos Text',sans-serif">Меню</span>
+                  </div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;color:#7C7469">
+                    <div style="width:16px;height:13px;border:1.6px solid #7C7469;border-radius:0 0 5px 5px;margin-top:4px"></div>
+                    <span style="font:500 10px/1 'Golos Text',sans-serif">Корзина</span>
+                  </div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;color:#7C7469">
+                    <div style="display:flex;flex-direction:column;gap:2.5px;width:16px;margin-top:5px"><i style="height:1.6px;background:#7C7469"></i><i style="height:1.6px;background:#7C7469"></i><i style="height:1.6px;background:#7C7469"></i></div>
+                    <span style="font:500 10px/1 'Golos Text',sans-serif">Заказы</span>
+                  </div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;color:#7C7469">
+                    <div style="width:15px;height:15px;border:1.6px solid #7C7469;border-radius:999px;margin-top:2px"></div>
+                    <span style="font:500 10px/1 'Golos Text',sans-serif">Профиль</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">1. Каталог</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#fff">
+            <div class="scr" style="font-family:'Golos Text',sans-serif;color:#17130F">
+              <div class="sb" style="background:#fff"><span>21:05</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:1;overflow:hidden">
+                  <div style="position:relative">
+                    <img src="assets/pizza-4sezona.jpg" alt="" style="width:100%;height:230px;object-fit:cover;display:block">
+                    <div style="position:absolute;left:16px;top:14px;width:32px;height:32px;border-radius:999px;background:rgba(250,247,242,.92);display:flex;align-items:center;justify-content:center;font:600 15px/1 'Golos Text',sans-serif">←</div>
+                  </div>
+                  <div style="padding:18px 20px 0">
+                    <div style="font:800 24px/1.15 'Manrope',sans-serif">Четыре сезона</div>
+                    <div style="font:400 12.5px/1.5 'Golos Text',sans-serif;color:#7C7469;margin-top:7px">Пепперони, шампиньоны, ветчина, болгарский перец, моцарелла, томатный соус</div>
+                    <div style="font:500 11.5px/1 'Golos Text',sans-serif;color:#7C7469;margin-top:10px">30 см · 470 г · 1 240 ккал</div>
+
+                    <div style="margin-top:20px;display:flex;gap:4px;padding:3px;background:rgba(23,19,15,.06);border-radius:999px">
+                      <div style="flex:1;text-align:center;padding:9px 0;border-radius:999px;font:500 12.5px/1 'Golos Text',sans-serif;color:#7C7469">25 см</div>
+                      <div style="flex:1;text-align:center;padding:9px 0;border-radius:999px;background:#fff;font:600 12.5px/1 'Golos Text',sans-serif;box-shadow:0 1px 3px rgba(0,0,0,.08)">30 см</div>
+                      <div style="flex:1;text-align:center;padding:9px 0;border-radius:999px;font:500 12.5px/1 'Golos Text',sans-serif;color:#7C7469">35 см</div>
+                    </div>
+
+                    <div style="font:700 13px/1 'Manrope',sans-serif;margin-top:22px">Добавить в пиццу</div>
+                    <div style="display:flex;flex-direction:column;gap:0;margin-top:6px">
+                      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(23,19,15,.08)">
+                        <span style="font:500 13px/1 'Golos Text',sans-serif">Двойная моцарелла</span>
+                        <span style="display:flex;align-items:center;gap:10px"><span style="font:500 12.5px/1 'Golos Text',sans-serif;color:#7C7469">+450 ₸</span><span style="width:24px;height:24px;border-radius:999px;border:1.5px solid rgba(23,19,15,.2);display:flex;align-items:center;justify-content:center;font:500 15px/1 'Golos Text',sans-serif;color:#7C7469">+</span></span>
+                      </div>
+                      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(23,19,15,.08)">
+                        <span style="font:600 13px/1 'Golos Text',sans-serif">Пепперони</span>
+                        <span style="display:flex;align-items:center;gap:10px"><span style="font:500 12.5px/1 'Golos Text',sans-serif;color:#7C7469">+600 ₸</span><span style="width:24px;height:24px;border-radius:999px;background:#C0562F;color:#fff;display:flex;align-items:center;justify-content:center;font:600 13px/1 'Golos Text',sans-serif">✓</span></span>
+                      </div>
+                      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0">
+                        <span style="font:500 13px/1 'Golos Text',sans-serif">Соус чесночный</span>
+                        <span style="display:flex;align-items:center;gap:10px"><span style="font:500 12.5px/1 'Golos Text',sans-serif;color:#7C7469">+200 ₸</span><span style="width:24px;height:24px;border-radius:999px;border:1.5px solid rgba(23,19,15,.2);display:flex;align-items:center;justify-content:center;font:500 15px/1 'Golos Text',sans-serif;color:#7C7469">+</span></span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div style="flex:none;padding:14px 20px 20px;border-top:1px solid rgba(23,19,15,.08);background:#fff;display:flex;align-items:center;gap:14px">
+                  <div>
+                    <div style="font:800 20px/1 'Manrope',sans-serif">4 400 ₸</div>
+                    <div style="font:500 10.5px/1 'Golos Text',sans-serif;color:#7C7469;margin-top:5px">с добавками</div>
+                  </div>
+                  <div style="flex:1;text-align:center;padding:15px 0;border-radius:999px;background:#C0562F;color:#fff;font:600 14px/1 'Golos Text',sans-serif">В корзину</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">2. Карточка товара</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#FAF7F2">
+            <div class="scr" style="font-family:'Golos Text',sans-serif;color:#17130F">
+              <div class="sb" style="background:#FAF7F2"><span>21:07</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:none;padding:6px 20px 12px;font:800 22px/1.2 'Manrope',sans-serif">Корзина</div>
+                <div style="flex:1;overflow:hidden;padding:0 20px">
+                  <div style="background:#fff;border-radius:20px;border:1px solid rgba(23,19,15,.07);padding:4px 14px">
+                    <div style="display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid rgba(23,19,15,.07)">
+                      <img src="assets/pizza-4syra.jpg" alt="" style="width:52px;height:52px;border-radius:12px;object-fit:cover;flex:none">
+                      <div style="flex:1">
+                        <div style="font:600 13px/1.25 'Golos Text',sans-serif">Четыре сыра, 30 см</div>
+                        <div style="font:800 14px/1 'Manrope',sans-serif;margin-top:6px">3 200 ₸</div>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:10px;background:rgba(23,19,15,.05);border-radius:999px;padding:5px 9px">
+                        <span style="font:500 14px/1">−</span><span style="font:700 13px/1 'Manrope',sans-serif">1</span><span style="font:500 14px/1">+</span>
+                      </div>
+                    </div>
+                    <div style="display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid rgba(23,19,15,.07)">
+                      <img src="assets/side-fri.jpg" alt="" style="width:52px;height:52px;border-radius:12px;object-fit:cover;flex:none">
+                      <div style="flex:1">
+                        <div style="font:600 13px/1.25 'Golos Text',sans-serif">Картофель фри</div>
+                        <div style="font:800 14px/1 'Manrope',sans-serif;margin-top:6px">900 ₸</div>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:10px;background:rgba(23,19,15,.05);border-radius:999px;padding:5px 9px">
+                        <span style="font:500 14px/1">−</span><span style="font:700 13px/1 'Manrope',sans-serif">2</span><span style="font:500 14px/1">+</span>
+                      </div>
+                    </div>
+                    <div style="display:flex;gap:12px;align-items:center;padding:12px 0">
+                      <img src="assets/side-syrnye.jpg" alt="" style="width:52px;height:52px;border-radius:12px;object-fit:cover;flex:none">
+                      <div style="flex:1">
+                        <div style="font:600 13px/1.25 'Golos Text',sans-serif">Сырные палочки</div>
+                        <div style="display:flex;align-items:center;gap:7px;margin-top:6px"><span style="font:800 14px/1 'Manrope',sans-serif;color:#C0562F">0 ₸</span><span style="font:600 10px/1 'Golos Text',sans-serif;padding:4px 8px;border-radius:999px;background:rgba(192,86,43,.12);color:#C0562F">Подарок</span></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style="display:flex;align-items:center;gap:10px;margin-top:14px;padding:13px 16px;background:#fff;border-radius:16px;border:1px dashed rgba(23,19,15,.2)">
+                    <span style="flex:1;font:500 12.5px/1 'Golos Text',sans-serif;color:#7C7469">Промокод</span>
+                    <span style="font:600 12.5px/1 'Golos Text',sans-serif;color:#C0562F">Применить</span>
+                  </div>
+
+                  <div style="margin-top:14px;padding:16px;background:#fff;border-radius:20px;border:1px solid rgba(23,19,15,.07)">
+                    <div style="display:flex;align-items:baseline;justify-content:space-between">
+                      <div style="font:700 13px/1 'Manrope',sans-serif">Списать баллы</div>
+                      <div style="font:500 11px/1 'Golos Text',sans-serif;color:#7C7469">доступно 1 006</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:12px;margin-top:14px">
+                      <div style="flex:1;height:4px;border-radius:999px;background:rgba(23,19,15,.1);position:relative">
+                        <div style="position:absolute;left:0;top:0;bottom:0;width:60%;background:#C0562F;border-radius:999px"></div>
+                        <div style="position:absolute;left:60%;top:-8px;width:20px;height:20px;margin-left:-10px;border-radius:999px;background:#fff;border:1.5px solid #C0562F;box-shadow:0 1px 4px rgba(0,0,0,.15)"></div>
+                      </div>
+                      <div style="font:800 14px/1 'Manrope',sans-serif;min-width:52px;text-align:right">600 ₸</div>
+                    </div>
+                  </div>
+                </div>
+                <div style="flex:none;padding:16px 20px 20px;background:#fff;border-top:1px solid rgba(23,19,15,.08)">
+                  <div style="display:flex;justify-content:space-between;font:500 12px/1.6 'Golos Text',sans-serif;color:#7C7469"><span>Товары</span><span>5 000 ₸</span></div>
+                  <div style="display:flex;justify-content:space-between;font:500 12px/1.6 'Golos Text',sans-serif;color:#7C7469"><span>Доставка</span><span>бесплатно</span></div>
+                  <div style="display:flex;justify-content:space-between;font:500 12px/1.6 'Golos Text',sans-serif;color:#C0562F"><span>Баллы</span><span>−600 ₸</span></div>
+                  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:8px"><span style="font:700 14px/1 'Manrope',sans-serif">Итого</span><span style="font:800 22px/1 'Manrope',sans-serif">4 400 ₸</span></div>
+                  <div style="margin-top:14px;text-align:center;padding:16px 0;border-radius:999px;background:#C0562F;color:#fff;font:600 14px/1 'Golos Text',sans-serif">Оформить заказ</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">3. Корзина</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#FAF7F2">
+            <div class="scr" style="font-family:'Golos Text',sans-serif;color:#17130F">
+              <div class="sb" style="background:#FAF7F2"><span>21:08</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:none;padding:6px 20px 12px;font:800 22px/1.2 'Manrope',sans-serif">Оформление</div>
+                <div style="flex:1;overflow:hidden;padding:0 20px">
+                  <div style="font:600 10.5px/1 'Golos Text',sans-serif;letter-spacing:.05em;text-transform:uppercase;color:#7C7469">Адрес</div>
+                  <div style="margin-top:8px;background:#fff;border-radius:20px;border:1px solid rgba(23,19,15,.07);overflow:hidden">
+                    <div style="display:flex;align-items:center;gap:12px;padding:14px;border-bottom:1px solid rgba(23,19,15,.07)">
+                      <div style="width:18px;height:18px;border-radius:999px;border:5px solid #C0562F;flex:none"></div>
+                      <div style="flex:1"><div style="font:600 13px/1.25 'Golos Text',sans-serif">Сатпаева, 38А</div><div style="font:400 11px/1.3 'Golos Text',sans-serif;color:#7C7469;margin-top:3px">кв. 24 · подъезд 2 · этаж 5</div></div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:12px;padding:14px;border-bottom:1px solid rgba(23,19,15,.07)">
+                      <div style="width:18px;height:18px;border-radius:999px;border:1.5px solid rgba(23,19,15,.2);flex:none"></div>
+                      <div style="font:500 13px/1.25 'Golos Text',sans-serif">Ауэзова, 53/2</div>
+                    </div>
+                    <div style="padding:13px 14px;font:600 12.5px/1 'Golos Text',sans-serif;color:#C0562F">+ Новый адрес</div>
+                  </div>
+
+                  <div style="font:600 10.5px/1 'Golos Text',sans-serif;letter-spacing:.05em;text-transform:uppercase;color:#7C7469;margin-top:18px">Когда</div>
+                  <div style="display:flex;gap:8px;margin-top:8px">
+                    <div style="flex:1;text-align:center;padding:12px 0;border-radius:14px;background:#17130F;color:#fff;font:600 12.5px/1 'Golos Text',sans-serif">Ближайшее<br><span style="font-weight:500;font-size:10.5px;opacity:.7">30–40 мин</span></div>
+                    <div style="flex:1;text-align:center;padding:12px 0;border-radius:14px;background:#fff;border:1px solid rgba(23,19,15,.1);font:500 12.5px/1 'Golos Text',sans-serif">Ко времени<br><span style="font-size:10.5px;color:#7C7469">выбрать слот</span></div>
+                  </div>
+
+                  <div style="font:600 10.5px/1 'Golos Text',sans-serif;letter-spacing:.05em;text-transform:uppercase;color:#7C7469;margin-top:18px">Оплата</div>
+                  <div style="margin-top:8px;background:#fff;border-radius:20px;border:1px solid rgba(23,19,15,.07);overflow:hidden">
+                    <div style="display:flex;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid rgba(23,19,15,.07)"><div style="width:18px;height:18px;border-radius:999px;border:5px solid #C0562F;flex:none"></div><span style="flex:1;font:600 13px/1 'Golos Text',sans-serif">Наличными курьеру</span><span style="font:500 11.5px/1 'Golos Text',sans-serif;color:#7C7469">сдача с 5 000 ₸</span></div>
+                    <div style="display:flex;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid rgba(23,19,15,.07)"><div style="width:18px;height:18px;border-radius:999px;border:1.5px solid rgba(23,19,15,.2);flex:none"></div><span style="font:500 13px/1 'Golos Text',sans-serif">Картой курьеру</span></div>
+                    <div style="display:flex;align-items:center;gap:12px;padding:13px 14px"><div style="width:18px;height:18px;border-radius:999px;border:1.5px solid rgba(23,19,15,.2);flex:none"></div><span style="font:500 13px/1 'Golos Text',sans-serif">Онлайн-оплата</span></div>
+                  </div>
+                  <div style="margin-top:12px;padding:13px 16px;background:#fff;border-radius:16px;border:1px solid rgba(23,19,15,.07);font:400 12.5px/1 'Golos Text',sans-serif;color:#7C7469">Комментарий курьеру</div>
+                </div>
+                <div style="flex:none;padding:14px 20px 20px;background:#fff;border-top:1px solid rgba(23,19,15,.08)">
+                  <div style="font:400 10px/1.4 'Golos Text',sans-serif;color:#7C7469">Оформляя заказ, вы соглашаетесь с офертой и политикой обработки данных</div>
+                  <div style="margin-top:12px;text-align:center;padding:16px 0;border-radius:999px;background:#C0562F;color:#fff;font:600 14px/1 'Golos Text',sans-serif">Заказать на 4 400 ₸</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">4. Оформление</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#FAF7F2">
+            <div class="scr" style="font-family:'Golos Text',sans-serif;color:#17130F">
+              <div class="sb" style="background:#FAF7F2"><span>21:09</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:1;overflow:hidden;padding:10px 20px 0">
+                  <div style="font:500 11px/1 'Golos Text',sans-serif;color:#7C7469">Заказ № 10482</div>
+                  <div style="font:800 26px/1.15 'Manrope',sans-serif;margin-top:8px">Готовим<br>ваш заказ</div>
+                  <div style="font:500 12.5px/1 'Golos Text',sans-serif;color:#7C7469;margin-top:10px">Будет у вас к 21:45</div>
+
+                  <div style="margin-top:26px;display:flex;flex-direction:column;gap:0">
+                    <div style="display:flex;gap:14px">
+                      <div style="display:flex;flex-direction:column;align-items:center;flex:none"><div style="width:12px;height:12px;border-radius:999px;background:#C0562F"></div><div style="width:1.5px;flex:1;background:#C0562F;min-height:34px"></div></div>
+                      <div style="padding-bottom:20px"><div style="font:600 13px/1 'Golos Text',sans-serif">Заказ отправлен</div><div style="font:400 11px/1 'Golos Text',sans-serif;color:#7C7469;margin-top:5px">21:08</div></div>
+                    </div>
+                    <div style="display:flex;gap:14px">
+                      <div style="display:flex;flex-direction:column;align-items:center;flex:none"><div style="width:12px;height:12px;border-radius:999px;background:#C0562F"></div><div style="width:1.5px;flex:1;background:#C0562F;min-height:34px"></div></div>
+                      <div style="padding-bottom:20px"><div style="font:600 13px/1 'Golos Text',sans-serif">Принят пиццерией</div><div style="font:400 11px/1 'Golos Text',sans-serif;color:#7C7469;margin-top:5px">21:09</div></div>
+                    </div>
+                    <div style="display:flex;gap:14px">
+                      <div style="display:flex;flex-direction:column;align-items:center;flex:none"><div style="width:12px;height:12px;border-radius:999px;background:#C0562F;box-shadow:0 0 0 5px rgba(192,86,43,.18)"></div><div style="width:1.5px;flex:1;background:rgba(23,19,15,.12);min-height:34px"></div></div>
+                      <div style="padding-bottom:20px"><div style="font:700 13px/1 'Manrope',sans-serif">Готовится</div><div style="font:400 11px/1 'Golos Text',sans-serif;color:#7C7469;margin-top:5px">сейчас</div></div>
+                    </div>
+                    <div style="display:flex;gap:14px">
+                      <div style="display:flex;flex-direction:column;align-items:center;flex:none"><div style="width:12px;height:12px;border-radius:999px;border:1.5px solid rgba(23,19,15,.18)"></div><div style="width:1.5px;flex:1;background:rgba(23,19,15,.12);min-height:34px"></div></div>
+                      <div style="padding-bottom:20px;color:#7C7469"><div style="font:500 13px/1 'Golos Text',sans-serif">Курьер в пути</div></div>
+                    </div>
+                    <div style="display:flex;gap:14px">
+                      <div style="display:flex;flex-direction:column;align-items:center;flex:none"><div style="width:12px;height:12px;border-radius:999px;border:1.5px solid rgba(23,19,15,.18)"></div></div>
+                      <div style="color:#7C7469"><div style="font:500 13px/1 'Golos Text',sans-serif">Доставлен</div></div>
+                    </div>
+                  </div>
+                </div>
+                <div style="flex:none;padding:14px 20px 20px">
+                  <div style="background:#fff;border-radius:20px;border:1px solid rgba(23,19,15,.07);padding:14px;display:flex;align-items:center;gap:12px">
+                    <img src="assets/pizza-4syra.jpg" alt="" style="width:44px;height:44px;border-radius:10px;object-fit:cover">
+                    <div style="flex:1;font:500 12px/1.35 'Golos Text',sans-serif;color:#7C7469">3 позиции · Сатпаева, 38А</div>
+                    <div style="font:800 15px/1 'Manrope',sans-serif">4 400 ₸</div>
+                  </div>
+                  <div style="margin-top:10px;text-align:center;padding:15px 0;border-radius:999px;border:1.5px solid rgba(23,19,15,.15);font:600 13px/1 'Golos Text',sans-serif">Отменить заказ</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">5. Статус заказа</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#FAF7F2">
+            <div class="scr" style="font-family:'Golos Text',sans-serif;color:#17130F">
+              <div class="sb" style="background:#FAF7F2"><span>21:12</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:1;overflow:hidden;padding:8px 20px 0">
+                  <div style="font:800 22px/1.2 'Manrope',sans-serif">Ержан</div>
+                  <div style="font:500 12px/1 'Golos Text',sans-serif;color:#7C7469;margin-top:6px">+7 705 123 45 67</div>
+
+                  <div style="margin-top:18px;background:#17130F;color:#FAF7F2;border-radius:24px;padding:20px">
+                    <div style="font:500 11px/1 'Golos Text',sans-serif;opacity:.6">Баллы</div>
+                    <div style="font:800 34px/1 'Manrope',sans-serif;margin-top:8px">1 006</div>
+                    <div style="font:500 11.5px/1.4 'Golos Text',sans-serif;opacity:.7;margin-top:10px">1 балл = 1 ₸. Списывайте любой суммой</div>
+                    <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(250,247,242,.15);display:flex;align-items:center;justify-content:space-between">
+                      <span style="font:500 12px/1 'Golos Text',sans-serif;opacity:.7">Кэшбэк</span>
+                      <span style="font:700 13px/1 'Manrope',sans-serif">Уровень 2 · 7%</span>
+                    </div>
+                  </div>
+
+                  <div style="font:600 10.5px/1 'Golos Text',sans-serif;letter-spacing:.05em;text-transform:uppercase;color:#7C7469;margin-top:22px">История заказов</div>
+                  <div style="margin-top:8px;background:#fff;border-radius:20px;border:1px solid rgba(23,19,15,.07);overflow:hidden">
+                    <div style="display:flex;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid rgba(23,19,15,.07)">
+                      <div style="flex:1"><div style="font:600 12.5px/1 'Golos Text',sans-serif">12 августа · 3 позиции</div><div style="font:400 11px/1 'Golos Text',sans-serif;color:#7C7469;margin-top:4px">Четыре сыра, Фри ×2</div></div>
+                      <div style="font:700 13px/1 'Manrope',sans-serif">5 050 ₸</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:12px;padding:13px 14px">
+                      <div style="flex:1"><div style="font:600 12.5px/1 'Golos Text',sans-serif">5 августа · 2 позиции</div><div style="font:400 11px/1 'Golos Text',sans-serif;color:#7C7469;margin-top:4px">Гриль бургер, Наггетсы</div></div>
+                      <div style="font:700 13px/1 'Manrope',sans-serif">3 700 ₸</div>
+                    </div>
+                  </div>
+
+                  <div style="font:600 10.5px/1 'Golos Text',sans-serif;letter-spacing:.05em;text-transform:uppercase;color:#7C7469;margin-top:20px">История баллов</div>
+                  <div style="margin-top:8px;display:flex;flex-direction:column">
+                    <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(23,19,15,.07);font:500 12.5px/1 'Golos Text',sans-serif"><span>Начислено · 12 авг</span><span style="color:#C0562F;font-family:'Manrope';font-weight:700">+353</span></div>
+                    <div style="display:flex;justify-content:space-between;padding:10px 0;font:500 12.5px/1 'Golos Text',sans-serif"><span>Списано · 5 авг</span><span style="font-family:'Manrope';font-weight:700">−500</span></div>
+                  </div>
+                </div>
+                <div style="flex:none;display:flex;background:#fff;border-top:1px solid rgba(23,19,15,.09);padding:9px 0 14px">
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;color:#7C7469">
+                    <div style="display:grid;grid-template-columns:7px 7px;gap:3px"><i style="background:#7C7469;border-radius:2px;height:7px"></i><i style="background:#7C7469;border-radius:2px;height:7px"></i><i style="background:#7C7469;border-radius:2px;height:7px"></i><i style="background:#7C7469;border-radius:2px;height:7px"></i></div>
+                    <span style="font:500 10px/1 'Golos Text',sans-serif">Меню</span>
+                  </div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;color:#7C7469">
+                    <div style="width:16px;height:13px;border:1.6px solid #7C7469;border-radius:0 0 5px 5px;margin-top:4px"></div>
+                    <span style="font:500 10px/1 'Golos Text',sans-serif">Корзина</span>
+                  </div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;color:#7C7469">
+                    <div style="display:flex;flex-direction:column;gap:2.5px;width:16px;margin-top:5px"><i style="height:1.6px;background:#7C7469"></i><i style="height:1.6px;background:#7C7469"></i><i style="height:1.6px;background:#7C7469"></i></div>
+                    <span style="font:500 10px/1 'Golos Text',sans-serif">Заказы</span>
+                  </div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px">
+                    <div style="width:15px;height:15px;border:1.6px solid #17130F;border-radius:999px;margin-top:2px"></div>
+                    <span style="font:600 10px/1 'Golos Text',sans-serif">Профиль</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">6. Профиль</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#FAF7F2">
+            <div class="scr" style="font-family:'Golos Text',sans-serif;color:#17130F">
+              <div class="sb" style="background:#FAF7F2"><span>21:04</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:none;padding:6px 20px 14px">
+                  <div style="display:flex;align-items:center;gap:9px">
+                    <img src="assets/logo.jpg" alt="" style="width:30px;height:30px;border-radius:999px;object-fit:cover;display:block">
+                    <div style="width:120px;height:12px;border-radius:6px;background:rgba(23,19,15,.09)"></div>
+                  </div>
+                  <div style="margin-top:14px;height:38px;border-radius:999px;background:rgba(23,19,15,.06)"></div>
+                </div>
+                <div style="flex:none;display:flex;gap:8px;padding:0 20px 14px">
+                  <div style="flex:none;width:70px;height:32px;border-radius:999px;background:rgba(23,19,15,.09)"></div>
+                  <div style="flex:none;width:82px;height:32px;border-radius:999px;background:rgba(23,19,15,.06)"></div>
+                  <div style="flex:none;width:76px;height:32px;border-radius:999px;background:rgba(23,19,15,.06)"></div>
+                </div>
+                <div style="flex:1;background:#fff;border-top:1px solid rgba(23,19,15,.07);padding-top:0">
+                  <div style="height:180px;background:linear-gradient(100deg,rgba(23,19,15,.05) 30%,rgba(23,19,15,.09) 50%,rgba(23,19,15,.05) 70%)"></div>
+                  <div style="padding:14px 20px 22px">
+                    <div style="width:60%;height:16px;border-radius:8px;background:rgba(23,19,15,.09)"></div>
+                    <div style="width:88%;height:10px;border-radius:6px;background:rgba(23,19,15,.06);margin-top:10px"></div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px"><div style="width:80px;height:16px;border-radius:8px;background:rgba(23,19,15,.09)"></div><div style="width:96px;height:38px;border-radius:999px;background:rgba(23,19,15,.06)"></div></div>
+                  </div>
+                  <div style="height:180px;background:linear-gradient(100deg,rgba(23,19,15,.05) 30%,rgba(23,19,15,.09) 50%,rgba(23,19,15,.05) 70%);border-top:1px solid rgba(23,19,15,.07)"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">7. Состояние: загрузка каталога</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dv-opt" id="1b">
+      <div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>«Каталог» — плотная сетка в две колонки, максимум товаров на экран</div>
+      <div class="dv-row">
+        <div class="spec">
+          <h4>Каталог</h4>
+          Для тех, кто уже знает меню. Две колонки, короткие названия, цена и «+» прямо в карточке — добавление без захода в товар. Категории закреплены сверху и работают как якоря: список один, скролл непрерывный. Воздух даёт не размер карточки, а ровный ритм и белый фон.
+          <dl>
+            <dt>Палитра</dt><dd>Холодный серый и зелёный сигнал<div class="sw"><i style="background:#F4F5F7"></i><i style="background:#fff"></i><i style="background:#1E8E5A"></i><i style="background:#1B1D21"></i><i style="background:#8A9099"></i></div></dd>
+            <dt>Шрифты</dt><dd>IBM Plex Sans 600/400 — текст<br>IBM Plex Mono 500 — цены и числа</dd>
+            <dt>Отступы</dt><dd>Сетка 8. Поля 14, зазор карточек 10.</dd>
+            <dt>Скругления</dt><dd>12 у карточек, 10 у кнопок, 8 у полей</dd>
+            <dt>Состояние</dt><dd>Товар в стоп-листе (7-й экран)</dd>
+          </dl>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#F4F5F7">
+            <div class="scr" style="font-family:'IBM Plex Sans',sans-serif;color:#1B1D21">
+              <div class="sb" style="background:#fff"><span>21:04</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:none;background:#fff;padding:4px 14px 12px;border-bottom:1px solid rgba(27,29,33,.08)">
+                  <div style="display:flex;align-items:center;justify-content:space-between">
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <div style="width:6px;height:6px;border-radius:999px;background:#1E8E5A"></div>
+                      <div style="font:600 13px/1.2 'IBM Plex Sans',sans-serif">Сатпаева, 38А</div>
+                      <div style="font:400 12px/1 'IBM Plex Sans',sans-serif;color:#8A9099">изменить</div>
+                    </div>
+                    <div style="font:500 11px/1 'IBM Plex Mono',monospace;color:#8A9099">35 МИН</div>
+                  </div>
+                  <div style="display:flex;gap:6px;margin-top:10px">
+                    <div style="padding:7px 13px;border-radius:10px;background:#1B1D21;color:#fff;font:600 12px/1 'IBM Plex Sans',sans-serif">Доставка</div>
+                    <div style="padding:7px 13px;border-radius:10px;background:#F4F5F7;font:400 12px/1 'IBM Plex Sans',sans-serif;color:#8A9099">Самовывоз</div>
+                    <div style="flex:1"></div>
+                    <div style="padding:7px 13px;border-radius:10px;border:1px solid rgba(27,29,33,.14);font:500 12px/1 'IBM Plex Sans',sans-serif">Поиск</div>
+                  </div>
+                </div>
+                <div style="flex:none;background:#fff;display:flex;gap:16px;padding:10px 14px;border-bottom:1px solid rgba(27,29,33,.08);overflow:hidden">
+                  <div style="font:600 12.5px/1 'IBM Plex Sans',sans-serif;padding-bottom:8px;margin-bottom:-11px;border-bottom:2px solid #1E8E5A;flex:none">Пиццы</div>
+                  <div style="font:400 12.5px/1 'IBM Plex Sans',sans-serif;color:#8A9099;flex:none">Бургеры</div>
+                  <div style="font:400 12.5px/1 'IBM Plex Sans',sans-serif;color:#8A9099;flex:none">Донеры</div>
+                  <div style="font:400 12.5px/1 'IBM Plex Sans',sans-serif;color:#8A9099;flex:none">Крылья</div>
+                  <div style="font:400 12.5px/1 'IBM Plex Sans',sans-serif;color:#8A9099;flex:none">Комбо</div>
+                </div>
+
+                <div style="flex:1;overflow:hidden;padding:12px 14px 0">
+                  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#fff;border-radius:12px;border:1px solid rgba(27,29,33,.09)">
+                    <div style="font:500 12px/1.3 'IBM Plex Sans',sans-serif">Повторить заказ от 12 августа<div style="font:400 11px/1 'IBM Plex Mono',monospace;color:#8A9099;margin-top:5px">5 050 ₸ · 3 позиции</div></div>
+                    <div style="padding:8px 12px;border-radius:10px;background:#1E8E5A;color:#fff;font:600 12px/1 'IBM Plex Sans',sans-serif">Повтор</div>
+                  </div>
+
+                  <div style="font:600 13px/1 'IBM Plex Sans',sans-serif;margin:16px 0 10px">Пиццы <span style="font:400 11px/1 'IBM Plex Mono',monospace;color:#8A9099">14</span></div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                    <div style="background:#fff;border-radius:12px;border:1px solid rgba(27,29,33,.09);overflow:hidden">
+                      <img src="assets/pizza-4syra.jpg" alt="" style="width:100%;height:76px;object-fit:cover;display:block">
+                      <div style="padding:8px 9px 9px">
+                        <div style="font:600 12px/1.25 'IBM Plex Sans',sans-serif">Четыре сыра</div>
+                        <div style="font:400 10.5px/1.3 'IBM Plex Sans',sans-serif;color:#8A9099;margin-top:3px">470 г</div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+                          <span style="font:500 13px/1 'IBM Plex Mono',monospace">3 200 ₸</span>
+                          <span style="width:26px;height:26px;border-radius:8px;background:#1E8E5A;color:#fff;display:flex;align-items:center;justify-content:center;font:500 16px/1 'IBM Plex Sans',sans-serif">+</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div style="background:#fff;border-radius:12px;border:1px solid rgba(27,29,33,.09);overflow:hidden">
+                      <img src="assets/pizza-bolonez.jpg" alt="" style="width:100%;height:76px;object-fit:cover;display:block">
+                      <div style="padding:8px 9px 9px">
+                        <div style="font:600 12px/1.25 'IBM Plex Sans',sans-serif">Болоньезе</div>
+                        <div style="font:400 10.5px/1.3 'IBM Plex Sans',sans-serif;color:#8A9099;margin-top:3px">510 г</div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+                          <span style="font:500 13px/1 'IBM Plex Mono',monospace">3 450 ₸</span>
+                          <span style="width:26px;height:26px;border-radius:8px;background:#1E8E5A;color:#fff;display:flex;align-items:center;justify-content:center;font:500 16px/1 'IBM Plex Sans',sans-serif">+</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div style="background:#fff;border-radius:12px;border:1px solid rgba(27,29,33,.09);overflow:hidden">
+                      <img src="assets/pizza-alfredo.jpg" alt="" style="width:100%;height:76px;object-fit:cover;display:block">
+                      <div style="padding:8px 9px 9px">
+                        <div style="font:600 12px/1.25 'IBM Plex Sans',sans-serif">Альфредо</div>
+                        <div style="font:400 10.5px/1.3 'IBM Plex Sans',sans-serif;color:#8A9099;margin-top:3px">480 г</div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+                          <span style="font:500 13px/1 'IBM Plex Mono',monospace">3 600 ₸</span>
+                          <span style="width:26px;height:26px;border-radius:8px;background:#1E8E5A;color:#fff;display:flex;align-items:center;justify-content:center;font:500 16px/1 'IBM Plex Sans',sans-serif">+</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div style="background:#fff;border-radius:12px;border:1px solid rgba(27,29,33,.09);overflow:hidden">
+                      <div style="position:relative"><img src="assets/pizza-donernaya.jpg" alt="" style="width:100%;height:76px;object-fit:cover;display:block;filter:grayscale(1);opacity:.4"><div style="position:absolute;inset:auto 0 0;padding:4px 9px;background:rgba(27,29,33,.75);color:#fff;font:500 10px/1 'IBM Plex Sans',sans-serif">Закончилась</div></div>
+                      <div style="padding:8px 9px 9px;opacity:.45">
+                        <div style="font:600 12px/1.25 'IBM Plex Sans',sans-serif">Донерная</div>
+                        <div style="font:400 10.5px/1.3 'IBM Plex Sans',sans-serif;color:#8A9099;margin-top:3px">520 г</div>
+                        <div style="font:500 13px/1 'IBM Plex Mono',monospace;margin-top:8px">3 100 ₸</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style="flex:none;display:flex;background:#fff;border-top:1px solid rgba(27,29,33,.1);padding:8px 0 13px">
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px"><div style="display:grid;grid-template-columns:6px 6px;gap:3px"><i style="background:#1B1D21;height:6px"></i><i style="background:#1B1D21;height:6px"></i><i style="background:#1B1D21;height:6px"></i><i style="background:#1B1D21;height:6px"></i></div><span style="font:600 10px/1 'IBM Plex Sans',sans-serif">Меню</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#8A9099"><div style="width:15px;height:12px;border:1.6px solid #8A9099;border-radius:0 0 4px 4px;margin-top:3px"></div><span style="font:400 10px/1 'IBM Plex Sans',sans-serif">Корзина</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#8A9099"><div style="display:flex;flex-direction:column;gap:2.5px;width:15px;margin-top:4px"><i style="height:1.6px;background:#8A9099"></i><i style="height:1.6px;background:#8A9099"></i><i style="height:1.6px;background:#8A9099"></i></div><span style="font:400 10px/1 'IBM Plex Sans',sans-serif">Заказы</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#8A9099"><div style="width:14px;height:14px;border:1.6px solid #8A9099;border-radius:999px;margin-top:1px"></div><span style="font:400 10px/1 'IBM Plex Sans',sans-serif">Профиль</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">1. Каталог</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#fff">
+            <div class="scr" style="font-family:'IBM Plex Sans',sans-serif;color:#1B1D21">
+              <div class="sb" style="background:#fff"><span>21:05</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:1;overflow:hidden">
+                  <div style="display:flex;align-items:center;gap:10px;padding:4px 14px 10px"><div style="width:28px;height:28px;border-radius:8px;border:1px solid rgba(27,29,33,.14);display:flex;align-items:center;justify-content:center;font:500 14px/1">←</div><div style="font:600 13px/1 'IBM Plex Sans',sans-serif">Барбекю бургер</div></div>
+                  <img src="assets/burger-bbq.jpg" alt="" style="width:calc(100% - 28px);height:150px;object-fit:cover;display:block;margin:0 14px;border-radius:12px">
+                  <div style="padding:14px 14px 0">
+                    <div style="display:flex;align-items:baseline;justify-content:space-between"><div style="font:600 18px/1.2 'IBM Plex Sans',sans-serif">Барбекю бургер</div><div style="font:500 17px/1 'IBM Plex Mono',monospace">2 400 ₸</div></div>
+                    <div style="font:400 12px/1.45 'IBM Plex Sans',sans-serif;color:#8A9099;margin-top:6px">Котлета из говядины, чеддер, соус барбекю, томаты, лук, айсберг, булочка с кунжутом</div>
+                    <div style="display:flex;gap:6px;margin-top:10px">
+                      <span style="padding:4px 8px;border-radius:6px;background:#F4F5F7;font:500 10.5px/1 'IBM Plex Mono',monospace;color:#8A9099">320 Г</span>
+                      <span style="padding:4px 8px;border-radius:6px;background:#F4F5F7;font:500 10.5px/1 'IBM Plex Mono',monospace;color:#8A9099">690 ККАЛ</span>
+                      <span style="padding:4px 8px;border-radius:6px;background:#F4F5F7;font:500 10.5px/1 'IBM Plex Mono',monospace;color:#8A9099">ОСТРЫЙ</span>
+                    </div>
+
+                    <div style="font:600 12px/1 'IBM Plex Sans',sans-serif;margin-top:18px">Размер котлеты</div>
+                    <div style="display:flex;gap:8px;margin-top:8px">
+                      <div style="flex:1;padding:10px 0;text-align:center;border-radius:10px;border:1.5px solid #1E8E5A;background:rgba(30,142,90,.06);font:600 12px/1 'IBM Plex Sans',sans-serif">Одинарная</div>
+                      <div style="flex:1;padding:10px 0;text-align:center;border-radius:10px;border:1px solid rgba(27,29,33,.14);font:400 12px/1 'IBM Plex Sans',sans-serif">Двойная <span style="color:#8A9099">+900</span></div>
+                    </div>
+
+                    <div style="font:600 12px/1 'IBM Plex Sans',sans-serif;margin-top:18px">Добавки</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+                      <div style="padding:9px 10px;border-radius:10px;border:1px solid rgba(27,29,33,.14);display:flex;justify-content:space-between;align-items:center"><span style="font:400 11.5px/1 'IBM Plex Sans',sans-serif">Бекон</span><span style="font:500 11px/1 'IBM Plex Mono',monospace;color:#8A9099">+500</span></div>
+                      <div style="padding:9px 10px;border-radius:10px;border:1.5px solid #1E8E5A;background:rgba(30,142,90,.06);display:flex;justify-content:space-between;align-items:center"><span style="font:600 11.5px/1 'IBM Plex Sans',sans-serif">Чеддер</span><span style="font:500 11px/1 'IBM Plex Mono',monospace">+400</span></div>
+                      <div style="padding:9px 10px;border-radius:10px;border:1px solid rgba(27,29,33,.14);display:flex;justify-content:space-between;align-items:center"><span style="font:400 11.5px/1 'IBM Plex Sans',sans-serif">Халапеньо</span><span style="font:500 11px/1 'IBM Plex Mono',monospace;color:#8A9099">+300</span></div>
+                      <div style="padding:9px 10px;border-radius:10px;border:1px solid rgba(27,29,33,.14);display:flex;justify-content:space-between;align-items:center"><span style="font:400 11.5px/1 'IBM Plex Sans',sans-serif">Соус</span><span style="font:500 11px/1 'IBM Plex Mono',monospace;color:#8A9099">+200</span></div>
+                    </div>
+                  </div>
+                </div>
+                <div style="flex:none;padding:12px 14px 18px;border-top:1px solid rgba(27,29,33,.1);display:flex;gap:10px;align-items:center">
+                  <div style="display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:10px;border:1px solid rgba(27,29,33,.14)"><span style="font:400 15px/1">−</span><span style="font:500 13px/1 'IBM Plex Mono',monospace">1</span><span style="font:400 15px/1">+</span></div>
+                  <div style="flex:1;text-align:center;padding:14px 0;border-radius:10px;background:#1E8E5A;color:#fff;font:600 13px/1 'IBM Plex Sans',sans-serif">В корзину · 2 800 ₸</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">2. Карточка товара</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#F4F5F7">
+            <div class="scr" style="font-family:'IBM Plex Sans',sans-serif;color:#1B1D21">
+              <div class="sb" style="background:#fff"><span>21:07</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:none;background:#fff;padding:4px 14px 12px;border-bottom:1px solid rgba(27,29,33,.08);display:flex;align-items:baseline;justify-content:space-between"><span style="font:600 16px/1 'IBM Plex Sans',sans-serif">Корзина</span><span style="font:400 11px/1 'IBM Plex Mono',monospace;color:#8A9099">4 ПОЗИЦИИ</span></div>
+                <div style="flex:1;overflow:hidden;padding:12px 14px 0">
+                  <div style="background:#fff;border-radius:12px;border:1px solid rgba(27,29,33,.09);padding:0 12px">
+                    <div style="display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid rgba(27,29,33,.08)"><img src="assets/pizza-4syra.jpg" alt="" style="width:44px;height:44px;border-radius:8px;object-fit:cover"><div style="flex:1"><div style="font:600 12px/1.2 'IBM Plex Sans',sans-serif">Четыре сыра, 30 см</div><div style="font:500 12px/1 'IBM Plex Mono',monospace;margin-top:5px">3 200 ₸</div></div><div style="display:flex;align-items:center;gap:9px;padding:4px 8px;border-radius:8px;background:#F4F5F7"><span style="font:400 13px/1">−</span><span style="font:500 12px/1 'IBM Plex Mono',monospace">1</span><span style="font:400 13px/1">+</span></div></div>
+                    <div style="display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid rgba(27,29,33,.08)"><img src="assets/burger-bbq.jpg" alt="" style="width:44px;height:44px;border-radius:8px;object-fit:cover"><div style="flex:1"><div style="font:600 12px/1.2 'IBM Plex Sans',sans-serif">Барбекю бургер</div><div style="font:500 12px/1 'IBM Plex Mono',monospace;margin-top:5px">2 400 ₸</div></div><div style="display:flex;align-items:center;gap:9px;padding:4px 8px;border-radius:8px;background:#F4F5F7"><span style="font:400 13px/1">−</span><span style="font:500 12px/1 'IBM Plex Mono',monospace">1</span><span style="font:400 13px/1">+</span></div></div>
+                    <div style="display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid rgba(27,29,33,.08)"><img src="assets/side-fri.jpg" alt="" style="width:44px;height:44px;border-radius:8px;object-fit:cover"><div style="flex:1"><div style="font:600 12px/1.2 'IBM Plex Sans',sans-serif">Фри</div><div style="font:500 12px/1 'IBM Plex Mono',monospace;margin-top:5px">900 ₸</div></div><div style="display:flex;align-items:center;gap:9px;padding:4px 8px;border-radius:8px;background:#F4F5F7"><span style="font:400 13px/1">−</span><span style="font:500 12px/1 'IBM Plex Mono',monospace">2</span><span style="font:400 13px/1">+</span></div></div>
+                    <div style="display:flex;gap:10px;align-items:center;padding:10px 0"><img src="assets/side-naggetsy.jpg" alt="" style="width:44px;height:44px;border-radius:8px;object-fit:cover"><div style="flex:1"><div style="font:600 12px/1.2 'IBM Plex Sans',sans-serif">Наггетсы 6 шт</div><div style="display:flex;gap:7px;align-items:center;margin-top:5px"><span style="font:500 12px/1 'IBM Plex Mono',monospace;color:#1E8E5A">0 ₸</span><span style="font:500 10px/1 'IBM Plex Sans',sans-serif;padding:3px 6px;border-radius:5px;background:rgba(30,142,90,.1);color:#1E8E5A">Подарок за 5 000 ₸</span></div></div></div>
+                  </div>
+
+                  <div style="display:flex;gap:8px;margin-top:12px">
+                    <div style="flex:1;padding:12px;background:#fff;border-radius:10px;border:1px solid rgba(27,29,33,.14);font:400 12px/1 'IBM Plex Sans',sans-serif;color:#8A9099">Промокод</div>
+                    <div style="padding:12px 16px;border-radius:10px;background:#1B1D21;color:#fff;font:600 12px/1 'IBM Plex Sans',sans-serif">ОК</div>
+                  </div>
+
+                  <div style="margin-top:12px;background:#fff;border-radius:12px;border:1px solid rgba(27,29,33,.09);padding:12px">
+                    <div style="display:flex;align-items:center;justify-content:space-between"><span style="font:600 12px/1 'IBM Plex Sans',sans-serif">Списать баллы</span><span style="font:400 11px/1 'IBM Plex Mono',monospace;color:#8A9099">ДОСТУПНО 1 006</span></div>
+                    <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+                      <div style="flex:1;padding:10px 12px;border-radius:8px;background:#F4F5F7;font:500 14px/1 'IBM Plex Mono',monospace">600</div>
+                      <div style="padding:10px 11px;border-radius:8px;border:1px solid rgba(27,29,33,.14);font:400 11px/1 'IBM Plex Sans',sans-serif">Всё</div>
+                      <div style="padding:10px 11px;border-radius:8px;border:1px solid rgba(27,29,33,.14);font:400 11px/1 'IBM Plex Sans',sans-serif">Ничего</div>
+                    </div>
+                  </div>
+                </div>
+                <div style="flex:none;background:#fff;padding:12px 14px 18px;border-top:1px solid rgba(27,29,33,.1)">
+                  <div style="display:flex;justify-content:space-between;font:400 11.5px/1.7 'IBM Plex Sans',sans-serif;color:#8A9099"><span>Товары</span><span style="font-family:'IBM Plex Mono'">6 500 ₸</span></div>
+                  <div style="display:flex;justify-content:space-between;font:400 11.5px/1.7 'IBM Plex Sans',sans-serif;color:#8A9099"><span>Доставка</span><span style="font-family:'IBM Plex Mono'">0 ₸</span></div>
+                  <div style="display:flex;justify-content:space-between;font:400 11.5px/1.7 'IBM Plex Sans',sans-serif;color:#1E8E5A"><span>Баллы</span><span style="font-family:'IBM Plex Mono'">−600 ₸</span></div>
+                  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:6px"><span style="font:600 13px/1 'IBM Plex Sans',sans-serif">Итого</span><span style="font:500 20px/1 'IBM Plex Mono',monospace">5 900 ₸</span></div>
+                  <div style="margin-top:12px;text-align:center;padding:14px 0;border-radius:10px;background:#1E8E5A;color:#fff;font:600 13px/1 'IBM Plex Sans',sans-serif">К оформлению</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">3. Корзина</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#F4F5F7">
+            <div class="scr" style="font-family:'IBM Plex Sans',sans-serif;color:#1B1D21">
+              <div class="sb" style="background:#fff"><span>21:08</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:none;background:#fff;padding:4px 14px 12px;border-bottom:1px solid rgba(27,29,33,.08);font:600 16px/1 'IBM Plex Sans',sans-serif">Оформление</div>
+                <div style="flex:1;overflow:hidden;padding:12px 14px 0">
+                  <div style="font:500 10px/1 'IBM Plex Mono',monospace;color:#8A9099;letter-spacing:.06em">АДРЕС ДОСТАВКИ</div>
+                  <div style="display:flex;gap:8px;margin-top:8px">
+                    <div style="flex:1;padding:10px;border-radius:10px;border:1.5px solid #1E8E5A;background:#fff"><div style="font:600 11.5px/1.2 'IBM Plex Sans',sans-serif">Сатпаева, 38А</div><div style="font:400 10px/1.3 'IBM Plex Sans',sans-serif;color:#8A9099;margin-top:4px">кв. 24 · п. 2 · эт. 5</div></div>
+                    <div style="flex:1;padding:10px;border-radius:10px;border:1px solid rgba(27,29,33,.14);background:#fff"><div style="font:400 11.5px/1.2 'IBM Plex Sans',sans-serif">Ауэзова, 53/2</div><div style="font:400 10px/1.3 'IBM Plex Sans',sans-serif;color:#8A9099;margin-top:4px">кв. 7 · п. 1</div></div>
+                  </div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px">
+                    <div style="padding:9px 10px;border-radius:8px;background:#fff;border:1px solid rgba(27,29,33,.12);font:400 11.5px/1 'IBM Plex Sans',sans-serif">Кв. <span style="font-family:'IBM Plex Mono'">24</span></div>
+                    <div style="padding:9px 10px;border-radius:8px;background:#fff;border:1px solid rgba(27,29,33,.12);font:400 11.5px/1 'IBM Plex Sans',sans-serif">Подъезд <span style="font-family:'IBM Plex Mono'">2</span></div>
+                    <div style="padding:9px 10px;border-radius:8px;background:#fff;border:1px solid rgba(27,29,33,.12);font:400 11.5px/1 'IBM Plex Sans',sans-serif">Этаж <span style="font-family:'IBM Plex Mono'">5</span></div>
+                  </div>
+
+                  <div style="font:500 10px/1 'IBM Plex Mono',monospace;color:#8A9099;letter-spacing:.06em;margin-top:16px">КОНТАКТЫ</div>
+                  <div style="display:flex;gap:8px;margin-top:8px">
+                    <div style="flex:1;padding:11px;border-radius:8px;background:#fff;border:1px solid rgba(27,29,33,.12);font:400 12px/1 'IBM Plex Sans',sans-serif">Ержан</div>
+                    <div style="flex:1;padding:11px;border-radius:8px;background:#fff;border:1px solid rgba(27,29,33,.12);font:500 12px/1 'IBM Plex Mono',monospace">+7 705 123 45 67</div>
+                  </div>
+
+                  <div style="font:500 10px/1 'IBM Plex Mono',monospace;color:#8A9099;letter-spacing:.06em;margin-top:16px">ВРЕМЯ</div>
+                  <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+                    <div style="padding:8px 11px;border-radius:8px;background:#1B1D21;color:#fff;font:600 11.5px/1 'IBM Plex Sans',sans-serif">Ближайшее</div>
+                    <div style="padding:8px 11px;border-radius:8px;background:#fff;border:1px solid rgba(27,29,33,.12);font:500 11.5px/1 'IBM Plex Mono',monospace">22:00</div>
+                    <div style="padding:8px 11px;border-radius:8px;background:#fff;border:1px solid rgba(27,29,33,.12);font:500 11.5px/1 'IBM Plex Mono',monospace">22:30</div>
+                    <div style="padding:8px 11px;border-radius:8px;background:#fff;border:1px solid rgba(27,29,33,.12);font:500 11.5px/1 'IBM Plex Mono',monospace">23:00</div>
+                  </div>
+
+                  <div style="font:500 10px/1 'IBM Plex Mono',monospace;color:#8A9099;letter-spacing:.06em;margin-top:16px">ОПЛАТА</div>
+                  <div style="display:flex;gap:6px;margin-top:8px">
+                    <div style="flex:1;padding:10px 0;text-align:center;border-radius:8px;border:1.5px solid #1E8E5A;background:#fff;font:600 11.5px/1 'IBM Plex Sans',sans-serif">Наличные</div>
+                    <div style="flex:1;padding:10px 0;text-align:center;border-radius:8px;border:1px solid rgba(27,29,33,.12);background:#fff;font:400 11.5px/1 'IBM Plex Sans',sans-serif">Карта</div>
+                    <div style="flex:1;padding:10px 0;text-align:center;border-radius:8px;border:1px solid rgba(27,29,33,.12);background:#fff;font:400 11.5px/1 'IBM Plex Sans',sans-serif">Онлайн</div>
+                  </div>
+                  <div style="margin-top:8px;padding:10px;border-radius:8px;background:#fff;border:1px solid rgba(27,29,33,.12);display:flex;justify-content:space-between"><span style="font:400 11.5px/1 'IBM Plex Sans',sans-serif;color:#8A9099">Сдача с</span><span style="font:500 12px/1 'IBM Plex Mono',monospace">10 000 ₸</span></div>
+                </div>
+                <div style="flex:none;background:#fff;padding:10px 14px 16px;border-top:1px solid rgba(27,29,33,.1)">
+                  <div style="font:400 9.5px/1.4 'IBM Plex Sans',sans-serif;color:#8A9099">Нажимая кнопку, вы принимаете оферту и политику обработки данных</div>
+                  <div style="margin-top:10px;text-align:center;padding:14px 0;border-radius:10px;background:#1E8E5A;color:#fff;font:600 13px/1 'IBM Plex Sans',sans-serif">Заказать · 5 900 ₸</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">4. Оформление</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#F4F5F7">
+            <div class="scr" style="font-family:'IBM Plex Sans',sans-serif;color:#1B1D21">
+              <div class="sb" style="background:#fff"><span>21:09</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:none;background:#fff;padding:4px 14px 12px;border-bottom:1px solid rgba(27,29,33,.08);display:flex;align-items:baseline;justify-content:space-between"><span style="font:600 16px/1 'IBM Plex Sans',sans-serif">Заказ</span><span style="font:500 11px/1 'IBM Plex Mono',monospace;color:#8A9099">№ 10482</span></div>
+                <div style="flex:1;overflow:hidden;padding:12px 14px 0">
+                  <div style="background:#fff;border-radius:12px;border:1px solid rgba(27,29,33,.09);padding:14px">
+                    <div style="display:flex;align-items:baseline;justify-content:space-between"><span style="font:600 14px/1 'IBM Plex Sans',sans-serif">Курьер в пути</span><span style="font:500 12px/1 'IBM Plex Mono',monospace;color:#1E8E5A">21:45</span></div>
+                    <div style="display:flex;gap:4px;margin-top:12px">
+                      <div style="flex:1;height:4px;border-radius:2px;background:#1E8E5A"></div>
+                      <div style="flex:1;height:4px;border-radius:2px;background:#1E8E5A"></div>
+                      <div style="flex:1;height:4px;border-radius:2px;background:#1E8E5A"></div>
+                      <div style="flex:1;height:4px;border-radius:2px;background:#1E8E5A"></div>
+                      <div style="flex:1;height:4px;border-radius:2px;background:rgba(27,29,33,.12)"></div>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:0;margin-top:14px">
+                      <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid rgba(27,29,33,.07);font:400 11.5px/1 'IBM Plex Sans',sans-serif;color:#8A9099"><span>Отправлен</span><span style="font-family:'IBM Plex Mono'">21:08</span></div>
+                      <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid rgba(27,29,33,.07);font:400 11.5px/1 'IBM Plex Sans',sans-serif;color:#8A9099"><span>Принят</span><span style="font-family:'IBM Plex Mono'">21:09</span></div>
+                      <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid rgba(27,29,33,.07);font:400 11.5px/1 'IBM Plex Sans',sans-serif;color:#8A9099"><span>Приготовлен</span><span style="font-family:'IBM Plex Mono'">21:31</span></div>
+                      <div style="display:flex;justify-content:space-between;padding:7px 0;font:600 11.5px/1 'IBM Plex Sans',sans-serif"><span>Передан курьеру</span><span style="font-family:'IBM Plex Mono'">21:34</span></div>
+                    </div>
+                  </div>
+                  <div style="margin-top:12px;background:#fff;border-radius:12px;border:1px solid rgba(27,29,33,.09);padding:12px 14px">
+                    <div style="font:500 10px/1 'IBM Plex Mono',monospace;color:#8A9099;letter-spacing:.06em">СОСТАВ</div>
+                    <div style="display:flex;justify-content:space-between;font:400 12px/1.9 'IBM Plex Sans',sans-serif"><span>Четыре сыра, 30 см</span><span style="font-family:'IBM Plex Mono'">3 200 ₸</span></div>
+                    <div style="display:flex;justify-content:space-between;font:400 12px/1.9 'IBM Plex Sans',sans-serif"><span>Барбекю бургер</span><span style="font-family:'IBM Plex Mono'">2 400 ₸</span></div>
+                    <div style="display:flex;justify-content:space-between;font:400 12px/1.9 'IBM Plex Sans',sans-serif"><span>Фри ×2</span><span style="font-family:'IBM Plex Mono'">1 800 ₸</span></div>
+                    <div style="display:flex;justify-content:space-between;font:600 12.5px/1.9 'IBM Plex Sans',sans-serif;border-top:1px solid rgba(27,29,33,.08);margin-top:6px;padding-top:6px"><span>Итого</span><span style="font-family:'IBM Plex Mono'">5 900 ₸</span></div>
+                  </div>
+                  <div style="margin-top:12px;padding:13px;border-radius:10px;border:1px solid rgba(27,29,33,.14);background:#fff;text-align:center;font:500 12px/1 'IBM Plex Sans',sans-serif;color:#8A9099">Отмена недоступна — заказ уже у курьера</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">5. Статус заказа</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#F4F5F7">
+            <div class="scr" style="font-family:'IBM Plex Sans',sans-serif;color:#1B1D21">
+              <div class="sb" style="background:#fff"><span>21:12</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:1;overflow:hidden;padding:4px 14px 0">
+                  <div style="display:flex;align-items:baseline;justify-content:space-between"><span style="font:600 16px/1 'IBM Plex Sans',sans-serif">Ержан</span><span style="font:500 11px/1 'IBM Plex Mono',monospace;color:#8A9099">+7 705 123 45 67</span></div>
+                  <div style="display:flex;gap:8px;margin-top:12px">
+                    <div style="flex:1;padding:14px;border-radius:12px;background:#1B1D21;color:#fff"><div style="font:400 10px/1 'IBM Plex Mono',monospace;opacity:.6;letter-spacing:.06em">БАЛЛЫ</div><div style="font:500 26px/1 'IBM Plex Mono',monospace;margin-top:8px">1 006</div></div>
+                    <div style="flex:1;padding:14px;border-radius:12px;background:#fff;border:1px solid rgba(27,29,33,.09)"><div style="font:400 10px/1 'IBM Plex Mono',monospace;color:#8A9099;letter-spacing:.06em">КЭШБЭК</div><div style="font:500 26px/1 'IBM Plex Mono',monospace;margin-top:8px;color:#1E8E5A">7%</div><div style="font:400 10.5px/1 'IBM Plex Sans',sans-serif;color:#8A9099;margin-top:5px">уровень 2 из 4</div></div>
+                  </div>
+                  <div style="margin-top:8px;padding:10px 12px;background:#fff;border-radius:10px;border:1px solid rgba(27,29,33,.09);font:400 11px/1.4 'IBM Plex Sans',sans-serif;color:#8A9099">До уровня 3 — ещё <span style="font-family:'IBM Plex Mono';color:#1B1D21">12 000 ₸</span> заказов</div>
+
+                  <div style="font:500 10px/1 'IBM Plex Mono',monospace;color:#8A9099;letter-spacing:.06em;margin-top:18px">ЗАКАЗЫ</div>
+                  <div style="margin-top:8px;background:#fff;border-radius:12px;border:1px solid rgba(27,29,33,.09);padding:0 12px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid rgba(27,29,33,.08)"><div><div style="font:600 12px/1 'IBM Plex Sans',sans-serif">12 августа</div><div style="font:400 10.5px/1 'IBM Plex Sans',sans-serif;color:#8A9099;margin-top:4px">Четыре сыра, Фри ×2</div></div><div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px/1 'IBM Plex Mono',monospace">5 050 ₸</span><span style="padding:6px 9px;border-radius:7px;background:#F4F5F7;font:600 10.5px/1 'IBM Plex Sans',sans-serif">Повтор</span></div></div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid rgba(27,29,33,.08)"><div><div style="font:600 12px/1 'IBM Plex Sans',sans-serif">5 августа</div><div style="font:400 10.5px/1 'IBM Plex Sans',sans-serif;color:#8A9099;margin-top:4px">Гриль бургер, Наггетсы</div></div><div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px/1 'IBM Plex Mono',monospace">3 700 ₸</span><span style="padding:6px 9px;border-radius:7px;background:#F4F5F7;font:600 10.5px/1 'IBM Plex Sans',sans-serif">Повтор</span></div></div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 0"><div><div style="font:600 12px/1 'IBM Plex Sans',sans-serif">28 июля</div><div style="font:400 10.5px/1 'IBM Plex Sans',sans-serif;color:#8A9099;margin-top:4px">Комбо на двоих</div></div><div style="display:flex;align-items:center;gap:10px"><span style="font:500 12px/1 'IBM Plex Mono',monospace">7 200 ₸</span><span style="padding:6px 9px;border-radius:7px;background:#F4F5F7;font:600 10.5px/1 'IBM Plex Sans',sans-serif">Повтор</span></div></div>
+                  </div>
+
+                  <div style="font:500 10px/1 'IBM Plex Mono',monospace;color:#8A9099;letter-spacing:.06em;margin-top:16px">БАЛЛЫ</div>
+                  <div style="margin-top:6px">
+                    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(27,29,33,.08);font:400 11.5px/1 'IBM Plex Sans',sans-serif"><span>Начислено · 12 авг</span><span style="font-family:'IBM Plex Mono';color:#1E8E5A">+353</span></div>
+                    <div style="display:flex;justify-content:space-between;padding:8px 0;font:400 11.5px/1 'IBM Plex Sans',sans-serif"><span>Списано · 5 авг</span><span style="font-family:'IBM Plex Mono'">−500</span></div>
+                  </div>
+                </div>
+                <div style="flex:none;display:flex;background:#fff;border-top:1px solid rgba(27,29,33,.1);padding:8px 0 13px">
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#8A9099"><div style="display:grid;grid-template-columns:6px 6px;gap:3px"><i style="background:#8A9099;height:6px"></i><i style="background:#8A9099;height:6px"></i><i style="background:#8A9099;height:6px"></i><i style="background:#8A9099;height:6px"></i></div><span style="font:400 10px/1 'IBM Plex Sans',sans-serif">Меню</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#8A9099"><div style="width:15px;height:12px;border:1.6px solid #8A9099;border-radius:0 0 4px 4px;margin-top:3px"></div><span style="font:400 10px/1 'IBM Plex Sans',sans-serif">Корзина</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#8A9099"><div style="display:flex;flex-direction:column;gap:2.5px;width:15px;margin-top:4px"><i style="height:1.6px;background:#8A9099"></i><i style="height:1.6px;background:#8A9099"></i><i style="height:1.6px;background:#8A9099"></i></div><span style="font:400 10px/1 'IBM Plex Sans',sans-serif">Заказы</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px"><div style="width:14px;height:14px;border:1.6px solid #1B1D21;border-radius:999px;margin-top:1px"></div><span style="font:600 10px/1 'IBM Plex Sans',sans-serif">Профиль</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">6. Профиль</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#F4F5F7">
+            <div class="scr" style="font-family:'IBM Plex Sans',sans-serif;color:#1B1D21">
+              <div class="sb" style="background:#fff"><span>21:06</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:1;overflow:hidden">
+                  <div style="display:flex;align-items:center;gap:10px;padding:4px 14px 10px;background:#fff"><div style="width:28px;height:28px;border-radius:8px;border:1px solid rgba(27,29,33,.14);display:flex;align-items:center;justify-content:center;font:500 14px/1">←</div><div style="font:600 13px/1 'IBM Plex Sans',sans-serif">Донерная</div></div>
+                  <div style="position:relative;margin:0 14px"><img src="assets/pizza-donernaya.jpg" alt="" style="width:100%;height:150px;object-fit:cover;display:block;border-radius:12px;filter:grayscale(1);opacity:.42"></div>
+                  <div style="padding:14px 14px 0">
+                    <div style="display:flex;align-items:baseline;justify-content:space-between;opacity:.5"><div style="font:600 18px/1.2 'IBM Plex Sans',sans-serif">Донерная</div><div style="font:500 17px/1 'IBM Plex Mono',monospace">3 100 ₸</div></div>
+                    <div style="font:400 12px/1.45 'IBM Plex Sans',sans-serif;color:#8A9099;margin-top:6px;opacity:.7">Курица, айран-соус, лук, томаты, моцарелла, лепёшка · 520 г</div>
+                    <div style="margin-top:16px;padding:14px;border-radius:12px;background:#fff;border:1px solid rgba(27,29,33,.09)">
+                      <div style="font:600 13px/1.3 'IBM Plex Sans',sans-serif">Сегодня закончилась</div>
+                      <div style="font:400 11.5px/1.5 'IBM Plex Sans',sans-serif;color:#8A9099;margin-top:6px">Вернём в меню, когда привезут продукты. Можем написать, как только появится.</div>
+                      <div style="display:flex;gap:8px;margin-top:12px">
+                        <div style="flex:1;text-align:center;padding:12px 0;border-radius:10px;background:#1B1D21;color:#fff;font:600 12px/1 'IBM Plex Sans',sans-serif">Сообщить о поступлении</div>
+                      </div>
+                    </div>
+                    <div style="font:500 10px/1 'IBM Plex Mono',monospace;color:#8A9099;letter-spacing:.06em;margin-top:18px">ПОХОЖЕЕ В НАЛИЧИИ</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px">
+                      <div style="background:#fff;border-radius:12px;border:1px solid rgba(27,29,33,.09);overflow:hidden"><img src="assets/pizza-kuritsa-griby.jpg" alt="" style="width:100%;height:70px;object-fit:cover;display:block"><div style="padding:8px 9px 9px"><div style="font:600 11.5px/1.2 'IBM Plex Sans',sans-serif">Курица и грибы</div><div style="display:flex;align-items:center;justify-content:space-between;margin-top:7px"><span style="font:500 12px/1 'IBM Plex Mono',monospace">3 300 ₸</span><span style="width:24px;height:24px;border-radius:7px;background:#1E8E5A;color:#fff;display:flex;align-items:center;justify-content:center;font:500 15px/1">+</span></div></div></div>
+                      <div style="background:#fff;border-radius:12px;border:1px solid rgba(27,29,33,.09);overflow:hidden"><img src="assets/pizza-4sezona.jpg" alt="" style="width:100%;height:70px;object-fit:cover;display:block"><div style="padding:8px 9px 9px"><div style="font:600 11.5px/1.2 'IBM Plex Sans',sans-serif">Четыре сезона</div><div style="display:flex;align-items:center;justify-content:space-between;margin-top:7px"><span style="font:500 12px/1 'IBM Plex Mono',monospace">3 400 ₸</span><span style="width:24px;height:24px;border-radius:7px;background:#1E8E5A;color:#fff;display:flex;align-items:center;justify-content:center;font:500 15px/1">+</span></div></div></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">7. Состояние: стоп-лист</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dv-opt" id="1c">
+      <div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>«Сигнал» — смелый цветовой акцент, крупная дисплейная типографика</div>
+      <div class="dv-row">
+        <div class="spec">
+          <h4>Сигнал</h4>
+          Ставка на цвет и масштаб цифр, а не на фото. Кобальт держит все действия, лайм — только для выгоды: баллы, подарки, кэшбэк. Заголовки крупные, дисплейные; цена — самый большой элемент экрана. Ближе всего к тому, что вы называли «как у сети кофеен»: узнаётся с одного взгляда и не зависит от логотипа — при мультитенантности меняется одна переменная акцента.
+          <dl>
+            <dt>Палитра</dt><dd>Кобальт, лайм, почти-чёрный<div class="sw"><i style="background:#fff"></i><i style="background:#2B3BEE"></i><i style="background:#D6F84C"></i><i style="background:#0B0B14"></i><i style="background:#8E8EA8"></i></div></dd>
+            <dt>Шрифты</dt><dd>Unbounded 700 — заголовки и цены<br>Golos Text 400/500 — текст</dd>
+            <dt>Отступы</dt><dd>Сетка 4. Поля 18, между блоками 24.</dd>
+            <dt>Скругления</dt><dd>28 у блоков, пилюля у кнопок, 20 у фото</dd>
+            <dt>Состояние</dt><dd>Пустая корзина (7-й экран)</dd>
+          </dl>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#fff">
+            <div class="scr" style="font-family:'Golos Text',sans-serif;color:#0B0B14">
+              <div class="sb" style="background:#2B3BEE;color:#fff"><span>21:04</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:none;background:#2B3BEE;color:#fff;padding:8px 18px 22px;border-radius:0 0 28px 28px">
+                  <div style="display:flex;align-items:center;justify-content:space-between">
+                    <div style="font:500 12px/1.3 'Golos Text',sans-serif;opacity:.85">Доставим на<br><span style="font-weight:600;opacity:1">Сатпаева, 38А ▾</span></div>
+                    <div style="padding:7px 12px;border-radius:999px;background:rgba(255,255,255,.16);font:600 11.5px/1 'Golos Text',sans-serif">35 мин</div>
+                  </div>
+                  <div style="font:700 26px/1.1 'Unbounded',sans-serif;margin-top:18px;letter-spacing:-.02em">Тот же<br>заказ?</div>
+                  <div style="display:flex;align-items:center;gap:10px;margin-top:14px;padding:12px 14px;background:#fff;border-radius:22px;color:#0B0B14">
+                    <img src="assets/pizza-4syra.jpg" alt="" style="width:40px;height:40px;border-radius:14px;object-fit:cover">
+                    <div style="flex:1"><div style="font:500 11.5px/1.3 'Golos Text',sans-serif">Четыре сыра, Гриль бургер, Фри</div><div style="font:700 13px/1 'Unbounded',sans-serif;margin-top:5px">5 050 ₸</div></div>
+                    <div style="padding:10px 14px;border-radius:999px;background:#D6F84C;font:600 12px/1 'Golos Text',sans-serif">Повторить</div>
+                  </div>
+                </div>
+                <div style="flex:none;display:flex;gap:6px;padding:16px 18px 12px">
+                  <div style="flex:1;text-align:center;padding:11px 0;border-radius:999px;background:#0B0B14;color:#fff;font:600 12.5px/1 'Golos Text',sans-serif">Доставка</div>
+                  <div style="flex:1;text-align:center;padding:11px 0;border-radius:999px;border:1.5px solid rgba(11,11,20,.12);font:500 12.5px/1 'Golos Text',sans-serif;color:#8E8EA8">Самовывоз</div>
+                </div>
+                <div style="flex:none;display:flex;gap:7px;padding:0 18px 12px;overflow:hidden">
+                  <div style="flex:none;padding:8px 14px;border-radius:999px;background:rgba(43,59,238,.1);color:#2B3BEE;font:600 12px/1 'Golos Text',sans-serif">Пиццы</div>
+                  <div style="flex:none;padding:8px 14px;border-radius:999px;background:rgba(11,11,20,.05);font:500 12px/1 'Golos Text',sans-serif;color:#8E8EA8">Бургеры</div>
+                  <div style="flex:none;padding:8px 14px;border-radius:999px;background:rgba(11,11,20,.05);font:500 12px/1 'Golos Text',sans-serif;color:#8E8EA8">Донеры</div>
+                  <div style="flex:none;padding:8px 14px;border-radius:999px;background:rgba(11,11,20,.05);font:500 12px/1 'Golos Text',sans-serif;color:#8E8EA8">Крыл</div>
+                </div>
+                <div style="flex:1;overflow:hidden;padding:0 18px">
+                  <div style="display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid rgba(11,11,20,.08)">
+                    <img src="assets/pizza-4sezona.jpg" alt="" style="width:74px;height:74px;border-radius:20px;object-fit:cover;flex:none">
+                    <div style="flex:1"><div style="font:600 14px/1.2 'Golos Text',sans-serif">Четыре сезона</div><div style="font:400 11px/1.4 'Golos Text',sans-serif;color:#8E8EA8;margin-top:4px">Пепперони, шампиньоны, ветчина · 470 г</div></div>
+                    <div style="text-align:right"><div style="font:700 14px/1 'Unbounded',sans-serif">3 400</div><div style="padding:7px 12px;border-radius:999px;background:#2B3BEE;color:#fff;font:600 11.5px/1 'Golos Text',sans-serif;margin-top:8px">+</div></div>
+                  </div>
+                  <div style="display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid rgba(11,11,20,.08)">
+                    <img src="assets/pizza-4syra.jpg" alt="" style="width:74px;height:74px;border-radius:20px;object-fit:cover;flex:none">
+                    <div style="flex:1"><div style="font:600 14px/1.2 'Golos Text',sans-serif">Четыре сыра</div><div style="font:400 11px/1.4 'Golos Text',sans-serif;color:#8E8EA8;margin-top:4px">Моцарелла, чеддер, дорблю · 470 г</div></div>
+                    <div style="text-align:right"><div style="font:700 14px/1 'Unbounded',sans-serif">3 200</div><div style="padding:7px 12px;border-radius:999px;background:#2B3BEE;color:#fff;font:600 11.5px/1 'Golos Text',sans-serif;margin-top:8px">+</div></div>
+                  </div>
+                  <div style="display:flex;gap:12px;align-items:center;padding:12px 0">
+                    <img src="assets/pizza-alfredo.jpg" alt="" style="width:74px;height:74px;border-radius:20px;object-fit:cover;flex:none">
+                    <div style="flex:1"><div style="font:600 14px/1.2 'Golos Text',sans-serif">Альфредо</div><div style="font:400 11px/1.4 'Golos Text',sans-serif;color:#8E8EA8;margin-top:4px">Курица, сливочный соус · 480 г</div></div>
+                    <div style="text-align:right"><div style="font:700 14px/1 'Unbounded',sans-serif">3 600</div><div style="padding:7px 12px;border-radius:999px;background:#2B3BEE;color:#fff;font:600 11.5px/1 'Golos Text',sans-serif;margin-top:8px">+</div></div>
+                  </div>
+                </div>
+                <div style="flex:none;display:flex;background:#fff;border-top:1px solid rgba(11,11,20,.08);padding:9px 0 14px">
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#2B3BEE"><div style="display:grid;grid-template-columns:6px 6px;gap:3px"><i style="background:#2B3BEE;height:6px;border-radius:1px"></i><i style="background:#2B3BEE;height:6px;border-radius:1px"></i><i style="background:#2B3BEE;height:6px;border-radius:1px"></i><i style="background:#2B3BEE;height:6px;border-radius:1px"></i></div><span style="font:600 10px/1 'Golos Text',sans-serif">Меню</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#8E8EA8"><div style="width:15px;height:12px;border:1.6px solid #8E8EA8;border-radius:0 0 5px 5px;margin-top:3px"></div><span style="font:500 10px/1 'Golos Text',sans-serif">Корзина</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#8E8EA8"><div style="display:flex;flex-direction:column;gap:2.5px;width:15px;margin-top:4px"><i style="height:1.6px;background:#8E8EA8"></i><i style="height:1.6px;background:#8E8EA8"></i><i style="height:1.6px;background:#8E8EA8"></i></div><span style="font:500 10px/1 'Golos Text',sans-serif">Заказы</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#8E8EA8"><div style="width:14px;height:14px;border:1.6px solid #8E8EA8;border-radius:999px;margin-top:1px"></div><span style="font:500 10px/1 'Golos Text',sans-serif">Профиль</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">1. Каталог</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#fff">
+            <div class="scr" style="font-family:'Golos Text',sans-serif;color:#0B0B14">
+              <div class="sb" style="background:#fff"><span>21:05</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:1;overflow:hidden;padding:0 18px">
+                  <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0 12px"><div style="width:32px;height:32px;border-radius:999px;background:rgba(11,11,20,.06);display:flex;align-items:center;justify-content:center;font:500 15px/1">←</div><div style="padding:7px 12px;border-radius:999px;background:rgba(11,11,20,.06);font:500 11.5px/1 'Golos Text',sans-serif;color:#8E8EA8">Состав и КБЖУ</div></div>
+                  <img src="assets/burger-dabl.jpg" alt="" style="width:100%;height:170px;object-fit:cover;display:block;border-radius:24px">
+                  <div style="font:700 22px/1.15 'Unbounded',sans-serif;margin-top:16px;letter-spacing:-.02em">Дабл<br>чикенбургер</div>
+                  <div style="font:400 12px/1.5 'Golos Text',sans-serif;color:#8E8EA8;margin-top:8px">Две куриные котлеты, чеддер, айсберг, томаты, соус «Цезарь» · 340 г</div>
+
+                  <div style="display:flex;gap:7px;margin-top:16px">
+                    <div style="flex:1;padding:12px 0;text-align:center;border-radius:999px;background:#0B0B14;color:#fff;font:600 12px/1 'Golos Text',sans-serif">Обычный</div>
+                    <div style="flex:1;padding:12px 0;text-align:center;border-radius:999px;border:1.5px solid rgba(11,11,20,.12);font:500 12px/1 'Golos Text',sans-serif">Комбо <span style="color:#2B3BEE">+1 200</span></div>
+                  </div>
+
+                  <div style="font:600 13px/1 'Golos Text',sans-serif;margin-top:20px">Добавки</div>
+                  <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:10px">
+                    <div style="padding:10px 14px;border-radius:999px;background:#2B3BEE;color:#fff;font:600 12px/1 'Golos Text',sans-serif">Бекон +500</div>
+                    <div style="padding:10px 14px;border-radius:999px;border:1.5px solid rgba(11,11,20,.12);font:500 12px/1 'Golos Text',sans-serif">Халапеньо +300</div>
+                    <div style="padding:10px 14px;border-radius:999px;border:1.5px solid rgba(11,11,20,.12);font:500 12px/1 'Golos Text',sans-serif">Двойной чеддер +400</div>
+                    <div style="padding:10px 14px;border-radius:999px;border:1.5px solid rgba(11,11,20,.12);font:500 12px/1 'Golos Text',sans-serif">Соус +200</div>
+                  </div>
+                </div>
+                <div style="flex:none;padding:14px 18px 20px">
+                  <div style="display:flex;align-items:center;gap:12px;padding:8px 8px 8px 20px;border-radius:999px;background:#0B0B14;color:#fff">
+                    <div style="flex:1;font:700 18px/1 'Unbounded',sans-serif">3 200 ₸</div>
+                    <div style="padding:14px 22px;border-radius:999px;background:#D6F84C;color:#0B0B14;font:600 13px/1 'Golos Text',sans-serif">В корзину</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">2. Карточка товара</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#fff">
+            <div class="scr" style="font-family:'Golos Text',sans-serif;color:#0B0B14">
+              <div class="sb" style="background:#fff"><span>21:07</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:none;padding:6px 18px 14px;font:700 22px/1.1 'Unbounded',sans-serif;letter-spacing:-.02em">Корзина</div>
+                <div style="flex:1;overflow:hidden;padding:0 18px">
+                  <div style="display:flex;gap:12px;align-items:center;padding:11px 0;border-bottom:1px solid rgba(11,11,20,.08)">
+                    <img src="assets/burger-dabl.jpg" alt="" style="width:56px;height:56px;border-radius:18px;object-fit:cover">
+                    <div style="flex:1"><div style="font:600 13px/1.25 'Golos Text',sans-serif">Дабл чикенбургер</div><div style="font:400 10.5px/1 'Golos Text',sans-serif;color:#8E8EA8;margin-top:4px">+ бекон</div><div style="font:700 13px/1 'Unbounded',sans-serif;margin-top:6px">3 700 ₸</div></div>
+                    <div style="display:flex;align-items:center;gap:9px;padding:6px 10px;border-radius:999px;background:rgba(11,11,20,.05)"><span style="font:500 13px/1">−</span><span style="font:600 12px/1">1</span><span style="font:500 13px/1">+</span></div>
+                  </div>
+                  <div style="display:flex;gap:12px;align-items:center;padding:11px 0;border-bottom:1px solid rgba(11,11,20,.08)">
+                    <img src="assets/side-dolki.jpg" alt="" style="width:56px;height:56px;border-radius:18px;object-fit:cover">
+                    <div style="flex:1"><div style="font:600 13px/1.25 'Golos Text',sans-serif">Картофельные дольки</div><div style="font:700 13px/1 'Unbounded',sans-serif;margin-top:6px">1 100 ₸</div></div>
+                    <div style="display:flex;align-items:center;gap:9px;padding:6px 10px;border-radius:999px;background:rgba(11,11,20,.05)"><span style="font:500 13px/1">−</span><span style="font:600 12px/1">1</span><span style="font:500 13px/1">+</span></div>
+                  </div>
+                  <div style="display:flex;gap:12px;align-items:center;padding:11px 0">
+                    <img src="assets/side-syrnye.jpg" alt="" style="width:56px;height:56px;border-radius:18px;object-fit:cover">
+                    <div style="flex:1"><div style="font:600 13px/1.25 'Golos Text',sans-serif">Сырные палочки</div><div style="display:flex;gap:7px;align-items:center;margin-top:6px"><span style="font:700 13px/1 'Unbounded',sans-serif">0 ₸</span><span style="padding:4px 9px;border-radius:999px;background:#D6F84C;font:600 10px/1 'Golos Text',sans-serif">Подарок</span></div></div>
+                  </div>
+
+                  <div style="display:flex;align-items:center;gap:8px;margin-top:14px;padding:6px 6px 6px 18px;border-radius:999px;background:rgba(11,11,20,.05)">
+                    <span style="flex:1;font:500 12.5px/1 'Golos Text',sans-serif;color:#8E8EA8">Промокод</span>
+                    <span style="padding:11px 18px;border-radius:999px;background:#0B0B14;color:#fff;font:600 12px/1 'Golos Text',sans-serif">Применить</span>
+                  </div>
+
+                  <div style="margin-top:14px;padding:18px;border-radius:28px;background:#0B0B14;color:#fff">
+                    <div style="display:flex;align-items:baseline;justify-content:space-between"><span style="font:600 12.5px/1 'Golos Text',sans-serif">Списать баллы</span><span style="font:500 11px/1 'Golos Text',sans-serif;opacity:.6">1 006 доступно</span></div>
+                    <div style="font:700 28px/1 'Unbounded',sans-serif;margin-top:12px;color:#D6F84C">700 ₸</div>
+                    <div style="margin-top:14px;height:4px;border-radius:999px;background:rgba(255,255,255,.18);position:relative">
+                      <div style="position:absolute;left:0;top:0;bottom:0;width:70%;background:#D6F84C;border-radius:999px"></div>
+                      <div style="position:absolute;left:70%;top:-8px;margin-left:-10px;width:20px;height:20px;border-radius:999px;background:#D6F84C"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font:500 10px/1 'Golos Text',sans-serif;opacity:.55;margin-top:10px"><span>0</span><span>1 006</span></div>
+                  </div>
+                </div>
+                <div style="flex:none;padding:14px 18px 20px">
+                  <div style="display:flex;justify-content:space-between;font:500 12px/1.7 'Golos Text',sans-serif;color:#8E8EA8"><span>Товары · 3</span><span>4 800 ₸</span></div>
+                  <div style="display:flex;justify-content:space-between;font:500 12px/1.7 'Golos Text',sans-serif;color:#2B3BEE"><span>Баллы</span><span>−700 ₸</span></div>
+                  <div style="display:flex;align-items:center;gap:12px;margin-top:10px;padding:8px 8px 8px 20px;border-radius:999px;background:#2B3BEE;color:#fff">
+                    <div style="flex:1;font:700 18px/1 'Unbounded',sans-serif">4 100 ₸</div>
+                    <div style="padding:14px 20px;border-radius:999px;background:#fff;color:#0B0B14;font:600 13px/1 'Golos Text',sans-serif">Оформить</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">3. Корзина</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#fff">
+            <div class="scr" style="font-family:'Golos Text',sans-serif;color:#0B0B14">
+              <div class="sb" style="background:#fff"><span>21:08</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:none;padding:6px 18px 14px;font:700 22px/1.1 'Unbounded',sans-serif;letter-spacing:-.02em">Оформление</div>
+                <div style="flex:1;overflow:hidden;padding:0 18px">
+                  <div style="padding:16px;border-radius:28px;border:1.5px solid rgba(11,11,20,.1)">
+                    <div style="font:600 12px/1 'Golos Text',sans-serif;color:#8E8EA8">Куда</div>
+                    <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+                      <div style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:18px;background:rgba(43,59,238,.08)"><div style="width:16px;height:16px;border-radius:999px;border:5px solid #2B3BEE"></div><div style="flex:1"><div style="font:600 12.5px/1.2 'Golos Text',sans-serif">Сатпаева, 38А</div><div style="font:400 10.5px/1 'Golos Text',sans-serif;color:#8E8EA8;margin-top:4px">кв. 24 · подъезд 2 · этаж 5</div></div></div>
+                      <div style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:18px;background:rgba(11,11,20,.04)"><div style="width:16px;height:16px;border-radius:999px;border:1.5px solid rgba(11,11,20,.2)"></div><div style="font:500 12.5px/1 'Golos Text',sans-serif">Ауэзова, 53/2</div></div>
+                      <div style="padding:11px 14px;font:600 12.5px/1 'Golos Text',sans-serif;color:#2B3BEE">+ Новый адрес</div>
+                    </div>
+                  </div>
+
+                  <div style="display:flex;gap:8px;margin-top:12px">
+                    <div style="flex:1;padding:14px 16px;border-radius:22px;border:1.5px solid rgba(11,11,20,.1)"><div style="font:400 10.5px/1 'Golos Text',sans-serif;color:#8E8EA8">Имя</div><div style="font:600 13px/1 'Golos Text',sans-serif;margin-top:6px">Ержан</div></div>
+                    <div style="flex:1.3;padding:14px 16px;border-radius:22px;border:1.5px solid rgba(11,11,20,.1)"><div style="font:400 10.5px/1 'Golos Text',sans-serif;color:#8E8EA8">Телефон</div><div style="font:600 13px/1 'Golos Text',sans-serif;margin-top:6px">+7 705 123 45 67</div></div>
+                  </div>
+
+                  <div style="font:600 13px/1 'Golos Text',sans-serif;margin-top:20px">Время</div>
+                  <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:10px">
+                    <div style="padding:11px 16px;border-radius:999px;background:#0B0B14;color:#fff;font:600 12px/1 'Golos Text',sans-serif">Ближайшее</div>
+                    <div style="padding:11px 16px;border-radius:999px;border:1.5px solid rgba(11,11,20,.12);font:500 12px/1 'Golos Text',sans-serif">22:00</div>
+                    <div style="padding:11px 16px;border-radius:999px;border:1.5px solid rgba(11,11,20,.12);font:500 12px/1 'Golos Text',sans-serif">22:30</div>
+                  </div>
+
+                  <div style="font:600 13px/1 'Golos Text',sans-serif;margin-top:20px">Оплата</div>
+                  <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:10px">
+                    <div style="padding:11px 16px;border-radius:999px;background:#2B3BEE;color:#fff;font:600 12px/1 'Golos Text',sans-serif">Наличными</div>
+                    <div style="padding:11px 16px;border-radius:999px;border:1.5px solid rgba(11,11,20,.12);font:500 12px/1 'Golos Text',sans-serif">Картой курьеру</div>
+                    <div style="padding:11px 16px;border-radius:999px;border:1.5px solid rgba(11,11,20,.12);font:500 12px/1 'Golos Text',sans-serif">Онлайн</div>
+                  </div>
+                  <div style="margin-top:10px;padding:13px 16px;border-radius:18px;background:rgba(11,11,20,.04);display:flex;justify-content:space-between"><span style="font:500 12px/1 'Golos Text',sans-serif;color:#8E8EA8">Сдача с</span><span style="font:600 12.5px/1 'Golos Text',sans-serif">10 000 ₸</span></div>
+                </div>
+                <div style="flex:none;padding:12px 18px 20px">
+                  <div style="font:400 9.5px/1.4 'Golos Text',sans-serif;color:#8E8EA8">Продолжая, вы соглашаетесь с офертой и политикой обработки данных</div>
+                  <div style="display:flex;align-items:center;gap:12px;margin-top:10px;padding:8px 8px 8px 20px;border-radius:999px;background:#2B3BEE;color:#fff">
+                    <div style="flex:1;font:700 17px/1 'Unbounded',sans-serif">4 100 ₸</div>
+                    <div style="padding:14px 20px;border-radius:999px;background:#D6F84C;color:#0B0B14;font:600 13px/1 'Golos Text',sans-serif">Заказать</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">4. Оформление</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#2B3BEE">
+            <div class="scr" style="font-family:'Golos Text',sans-serif;color:#fff">
+              <div class="sb" style="background:#2B3BEE;color:#fff"><span>21:09</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:1;overflow:hidden;padding:14px 18px 0">
+                  <div style="font:500 11.5px/1 'Golos Text',sans-serif;opacity:.7">Заказ № 10482</div>
+                  <div style="font:700 30px/1.05 'Unbounded',sans-serif;margin-top:12px;letter-spacing:-.03em">Курьер<br>в пути</div>
+                  <div style="display:inline-block;margin-top:16px;padding:10px 16px;border-radius:999px;background:#D6F84C;color:#0B0B14;font:700 14px/1 'Unbounded',sans-serif">21:45</div>
+
+                  <div style="margin-top:26px;display:flex;flex-direction:column;gap:14px">
+                    <div style="display:flex;align-items:center;gap:12px"><div style="width:22px;height:22px;border-radius:999px;background:#D6F84C;color:#0B0B14;display:flex;align-items:center;justify-content:center;font:600 12px/1">✓</div><span style="flex:1;font:500 13px/1 'Golos Text',sans-serif">Заказ отправлен</span><span style="font:500 11.5px/1 'Golos Text',sans-serif;opacity:.6">21:08</span></div>
+                    <div style="display:flex;align-items:center;gap:12px"><div style="width:22px;height:22px;border-radius:999px;background:#D6F84C;color:#0B0B14;display:flex;align-items:center;justify-content:center;font:600 12px/1">✓</div><span style="flex:1;font:500 13px/1 'Golos Text',sans-serif">Принят</span><span style="font:500 11.5px/1 'Golos Text',sans-serif;opacity:.6">21:09</span></div>
+                    <div style="display:flex;align-items:center;gap:12px"><div style="width:22px;height:22px;border-radius:999px;background:#D6F84C;color:#0B0B14;display:flex;align-items:center;justify-content:center;font:600 12px/1">✓</div><span style="flex:1;font:500 13px/1 'Golos Text',sans-serif">Приготовлен</span><span style="font:500 11.5px/1 'Golos Text',sans-serif;opacity:.6">21:31</span></div>
+                    <div style="display:flex;align-items:center;gap:12px"><div style="width:22px;height:22px;border-radius:999px;border:2px solid #D6F84C"></div><span style="flex:1;font:700 13px/1 'Golos Text',sans-serif">Курьер в пути</span></div>
+                    <div style="display:flex;align-items:center;gap:12px;opacity:.5"><div style="width:22px;height:22px;border-radius:999px;border:1.5px solid rgba(255,255,255,.5)"></div><span style="flex:1;font:500 13px/1 'Golos Text',sans-serif">Доставлен</span></div>
+                  </div>
+                </div>
+                <div style="flex:none;padding:14px 18px 20px">
+                  <div style="padding:16px;border-radius:24px;background:rgba(255,255,255,.12)">
+                    <div style="display:flex;justify-content:space-between;font:500 12px/1.7 'Golos Text',sans-serif;opacity:.8"><span>3 позиции</span><span>Сатпаева, 38А</span></div>
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:8px"><span style="font:500 12px/1 'Golos Text',sans-serif;opacity:.8">Наличными курьеру</span><span style="font:700 17px/1 'Unbounded',sans-serif">4 100 ₸</span></div>
+                  </div>
+                  <div style="margin-top:10px;text-align:center;padding:15px 0;border-radius:999px;border:1.5px solid rgba(255,255,255,.3);font:600 13px/1 'Golos Text',sans-serif">Отменить заказ</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">5. Статус заказа</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#fff">
+            <div class="scr" style="font-family:'Golos Text',sans-serif;color:#0B0B14">
+              <div class="sb" style="background:#fff"><span>21:12</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:1;overflow:hidden;padding:6px 18px 0">
+                  <div style="font:700 22px/1.1 'Unbounded',sans-serif;letter-spacing:-.02em">Ержан</div>
+                  <div style="font:500 12px/1 'Golos Text',sans-serif;color:#8E8EA8;margin-top:7px">+7 705 123 45 67</div>
+
+                  <div style="margin-top:16px;padding:20px;border-radius:28px;background:#D6F84C">
+                    <div style="font:600 12px/1 'Golos Text',sans-serif;opacity:.6">Баллы</div>
+                    <div style="font:700 40px/1 'Unbounded',sans-serif;margin-top:10px;letter-spacing:-.03em">1 006</div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding-top:14px;border-top:1.5px solid rgba(11,11,20,.15)"><span style="font:500 12px/1 'Golos Text',sans-serif">Кэшбэк 7%</span><span style="font:600 12px/1 'Golos Text',sans-serif">Уровень 2 из 4</span></div>
+                  </div>
+                  <div style="margin-top:10px;padding:14px 16px;border-radius:20px;background:rgba(43,59,238,.07);font:400 11.5px/1.45 'Golos Text',sans-serif;color:#2B3BEE">Ещё 12 000 ₸ заказов — и кэшбэк станет 10%</div>
+
+                  <div style="font:600 13px/1 'Golos Text',sans-serif;margin-top:20px">Заказы</div>
+                  <div style="margin-top:8px">
+                    <div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid rgba(11,11,20,.08)"><div style="flex:1"><div style="font:600 12.5px/1 'Golos Text',sans-serif">12 августа</div><div style="font:400 10.5px/1 'Golos Text',sans-serif;color:#8E8EA8;margin-top:4px">Четыре сыра, Фри ×2</div></div><span style="font:700 13px/1 'Unbounded',sans-serif">5 050</span><span style="padding:8px 12px;border-radius:999px;background:#0B0B14;color:#fff;font:600 11px/1 'Golos Text',sans-serif">Повтор</span></div>
+                    <div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid rgba(11,11,20,.08)"><div style="flex:1"><div style="font:600 12.5px/1 'Golos Text',sans-serif">5 августа</div><div style="font:400 10.5px/1 'Golos Text',sans-serif;color:#8E8EA8;margin-top:4px">Гриль бургер, Наггетсы</div></div><span style="font:700 13px/1 'Unbounded',sans-serif">3 700</span><span style="padding:8px 12px;border-radius:999px;background:rgba(11,11,20,.06);font:600 11px/1 'Golos Text',sans-serif">Повтор</span></div>
+                  </div>
+
+                  <div style="font:600 13px/1 'Golos Text',sans-serif;margin-top:18px">История баллов</div>
+                  <div style="margin-top:6px">
+                    <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(11,11,20,.08);font:500 12px/1 'Golos Text',sans-serif"><span>Начислено · 12 авг</span><span style="color:#2B3BEE;font-weight:700">+353</span></div>
+                    <div style="display:flex;justify-content:space-between;padding:9px 0;font:500 12px/1 'Golos Text',sans-serif"><span>Списано · 5 авг</span><span style="font-weight:700">−500</span></div>
+                  </div>
+                </div>
+                <div style="flex:none;display:flex;background:#fff;border-top:1px solid rgba(11,11,20,.08);padding:9px 0 14px">
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#8E8EA8"><div style="display:grid;grid-template-columns:6px 6px;gap:3px"><i style="background:#8E8EA8;height:6px;border-radius:1px"></i><i style="background:#8E8EA8;height:6px;border-radius:1px"></i><i style="background:#8E8EA8;height:6px;border-radius:1px"></i><i style="background:#8E8EA8;height:6px;border-radius:1px"></i></div><span style="font:500 10px/1 'Golos Text',sans-serif">Меню</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#8E8EA8"><div style="width:15px;height:12px;border:1.6px solid #8E8EA8;border-radius:0 0 5px 5px;margin-top:3px"></div><span style="font:500 10px/1 'Golos Text',sans-serif">Корзина</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#8E8EA8"><div style="display:flex;flex-direction:column;gap:2.5px;width:15px;margin-top:4px"><i style="height:1.6px;background:#8E8EA8"></i><i style="height:1.6px;background:#8E8EA8"></i><i style="height:1.6px;background:#8E8EA8"></i></div><span style="font:500 10px/1 'Golos Text',sans-serif">Заказы</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#2B3BEE"><div style="width:14px;height:14px;border:1.6px solid #2B3BEE;border-radius:999px;margin-top:1px"></div><span style="font:600 10px/1 'Golos Text',sans-serif">Профиль</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">6. Профиль</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#fff">
+            <div class="scr" style="font-family:'Golos Text',sans-serif;color:#0B0B14">
+              <div class="sb" style="background:#fff"><span>21:06</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:none;padding:6px 18px 14px;font:700 22px/1.1 'Unbounded',sans-serif;letter-spacing:-.02em">Корзина</div>
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 28px;text-align:center">
+                  <div style="width:88px;height:88px;border-radius:999px;background:rgba(43,59,238,.08);display:flex;align-items:center;justify-content:center">
+                    <div style="width:34px;height:28px;border:2.5px solid #2B3BEE;border-radius:0 0 12px 12px"></div>
+                  </div>
+                  <div style="font:700 18px/1.2 'Unbounded',sans-serif;margin-top:22px;letter-spacing:-.02em">Пока пусто</div>
+                  <div style="font:400 12.5px/1.5 'Golos Text',sans-serif;color:#8E8EA8;margin-top:10px">Можно повторить прошлый заказ — это быстрее всего</div>
+                  <div style="width:100%;margin-top:18px;padding:14px;border-radius:24px;border:1.5px solid rgba(11,11,20,.1);display:flex;align-items:center;gap:12px;text-align:left">
+                    <img src="assets/pizza-4syra.jpg" alt="" style="width:40px;height:40px;border-radius:14px;object-fit:cover">
+                    <div style="flex:1"><div style="font:500 11.5px/1.3 'Golos Text',sans-serif">Четыре сыра, Гриль бургер, Фри</div><div style="font:700 12.5px/1 'Unbounded',sans-serif;margin-top:5px">5 050 ₸</div></div>
+                  </div>
+                  <div style="width:100%;margin-top:10px;padding:15px 0;border-radius:999px;background:#2B3BEE;color:#fff;font:600 13px/1 'Golos Text',sans-serif">Повторить заказ</div>
+                  <div style="width:100%;margin-top:8px;padding:15px 0;border-radius:999px;background:rgba(11,11,20,.05);font:600 13px/1 'Golos Text',sans-serif">Открыть меню</div>
+                </div>
+                <div style="flex:none;display:flex;background:#fff;border-top:1px solid rgba(11,11,20,.08);padding:9px 0 14px">
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#8E8EA8"><div style="display:grid;grid-template-columns:6px 6px;gap:3px"><i style="background:#8E8EA8;height:6px;border-radius:1px"></i><i style="background:#8E8EA8;height:6px;border-radius:1px"></i><i style="background:#8E8EA8;height:6px;border-radius:1px"></i><i style="background:#8E8EA8;height:6px;border-radius:1px"></i></div><span style="font:500 10px/1 'Golos Text',sans-serif">Меню</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#2B3BEE"><div style="width:15px;height:12px;border:1.6px solid #2B3BEE;border-radius:0 0 5px 5px;margin-top:3px"></div><span style="font:600 10px/1 'Golos Text',sans-serif">Корзина</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#8E8EA8"><div style="display:flex;flex-direction:column;gap:2.5px;width:15px;margin-top:4px"><i style="height:1.6px;background:#8E8EA8"></i><i style="height:1.6px;background:#8E8EA8"></i><i style="height:1.6px;background:#8E8EA8"></i></div><span style="font:500 10px/1 'Golos Text',sans-serif">Заказы</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#8E8EA8"><div style="width:14px;height:14px;border:1.6px solid #8E8EA8;border-radius:999px;margin-top:1px"></div><span style="font:500 10px/1 'Golos Text',sans-serif">Профиль</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">7. Состояние: пустая корзина</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dv-opt" id="1d">
+      <div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>«Дастархан» — тёплый локальный стиль, серифные заголовки</div>
+      <div class="dv-row">
+        <div class="spec">
+          <h4>Дастархан</h4>
+          Не сетевой фастфуд, а своё заведение в своём городе. Песочная бумага, глина, полынь; заголовки серифом, интерфейс — спокойным гротеском. Фото лежат прямоугольниками без скруглений, как снимки на столе. Уместно, если владелец хочет звучать «по-домашнему», а не «по-корпоративному», и легко перекрашивается под другое заведение.
+          <dl>
+            <dt>Палитра</dt><dd>Песок, глина, полынь<div class="sw"><i style="background:#F6EFE4"></i><i style="background:#FFFCF7"></i><i style="background:#A65B2B"></i><i style="background:#4E6E58"></i><i style="background:#2A2118"></i></div></dd>
+            <dt>Шрифты</dt><dd>PT Serif 700 — заголовки<br>Golos Text 400/500 — интерфейс</dd>
+            <dt>Отступы</dt><dd>Сетка 4. Поля 20, между блоками 24, строки высокие.</dd>
+            <dt>Скругления</dt><dd>16 у блоков, 12 у кнопок, фото без скруглений</dd>
+            <dt>Состояние</dt><dd>Закрыто / только самовывоз (7-й экран)</dd>
+          </dl>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#F6EFE4">
+            <div class="scr" style="font-family:'Golos Text',sans-serif;color:#2A2118">
+              <div class="sb" style="background:#F6EFE4"><span>21:04</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:none;padding:6px 20px 16px">
+                  <div style="display:flex;align-items:center;justify-content:space-between">
+                    <div><div style="font:400 10.5px/1 'Golos Text',sans-serif;color:#8A7C6A">Доставка на</div><div style="font:700 14px/1.2 'PT Serif',serif;margin-top:5px">Сатпаева, 38А</div></div>
+                    <div style="padding:8px 13px;border-radius:12px;background:#FFFCF7;border:1px solid rgba(42,33,24,.1);font:500 11.5px/1 'Golos Text',sans-serif">≈ 35 мин</div>
+                  </div>
+                  <div style="display:flex;margin-top:16px;border-bottom:1.5px solid rgba(42,33,24,.14)">
+                    <div style="padding:0 0 9px;margin-right:20px;font:600 13px/1 'Golos Text',sans-serif;border-bottom:1.5px solid #A65B2B;margin-bottom:-1.5px">Доставка</div>
+                    <div style="padding:0 0 9px;font:400 13px/1 'Golos Text',sans-serif;color:#8A7C6A">Самовывоз</div>
+                  </div>
+                </div>
+
+                <div style="flex:none;margin:0 20px 18px;padding:16px;background:#FFFCF7;border:1px solid rgba(42,33,24,.1);border-radius:16px">
+                  <div style="font:400 10.5px/1 'Golos Text',sans-serif;color:#8A7C6A">Ваш обычный заказ</div>
+                  <div style="font:700 16px/1.3 'PT Serif',serif;margin-top:7px">Четыре сыра, Гриль бургер и фри</div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px">
+                    <div style="font:700 17px/1 'PT Serif',serif">5 050 ₸</div>
+                    <div style="padding:10px 16px;border-radius:12px;background:#A65B2B;color:#FFFCF7;font:600 12.5px/1 'Golos Text',sans-serif">Собрать снова</div>
+                  </div>
+                </div>
+
+                <div style="flex:none;display:flex;gap:8px;padding:0 20px 16px;overflow:hidden">
+                  <div style="flex:none;padding:9px 14px;border-radius:12px;background:#2A2118;color:#F6EFE4;font:600 12px/1 'Golos Text',sans-serif">Пиццы</div>
+                  <div style="flex:none;padding:9px 14px;border-radius:12px;background:#FFFCF7;border:1px solid rgba(42,33,24,.1);font:500 12px/1 'Golos Text',sans-serif">Донеры</div>
+                  <div style="flex:none;padding:9px 14px;border-radius:12px;background:#FFFCF7;border:1px solid rgba(42,33,24,.1);font:500 12px/1 'Golos Text',sans-serif">Бургеры</div>
+                  <div style="flex:none;padding:9px 14px;border-radius:12px;background:#FFFCF7;border:1px solid rgba(42,33,24,.1);font:500 12px/1 'Golos Text',sans-serif">Сеты</div>
+                </div>
+
+                <div style="flex:1;overflow:hidden;padding:0 20px">
+                  <div style="display:flex;gap:14px;padding-bottom:16px;border-bottom:1px solid rgba(42,33,24,.12)">
+                    <img src="assets/pizza-kuritsa-griby.jpg" alt="" style="width:96px;height:96px;object-fit:cover;display:block;flex:none">
+                    <div style="flex:1">
+                      <div style="font:700 15px/1.2 'PT Serif',serif">Курица и грибы</div>
+                      <div style="font:400 11px/1.45 'Golos Text',sans-serif;color:#8A7C6A;margin-top:5px">Курица, шампиньоны, моцарелла, сливочный соус · 490 г</div>
+                      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px">
+                        <span style="font:700 15px/1 'PT Serif',serif">3 300 ₸</span>
+                        <span style="padding:8px 14px;border-radius:12px;border:1.5px solid #A65B2B;color:#A65B2B;font:600 11.5px/1 'Golos Text',sans-serif">В корзину</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div style="display:flex;gap:14px;padding:16px 0;border-bottom:1px solid rgba(42,33,24,.12)">
+                    <img src="assets/pizza-bolonez.jpg" alt="" style="width:96px;height:96px;object-fit:cover;display:block;flex:none">
+                    <div style="flex:1">
+                      <div style="font:700 15px/1.2 'PT Serif',serif">Болоньезе</div>
+                      <div style="font:400 11px/1.45 'Golos Text',sans-serif;color:#8A7C6A;margin-top:5px">Говяжий фарш, томаты, лук, моцарелла · 510 г</div>
+                      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px">
+                        <span style="font:700 15px/1 'PT Serif',serif">3 450 ₸</span>
+                        <span style="padding:8px 14px;border-radius:12px;border:1.5px solid #A65B2B;color:#A65B2B;font:600 11.5px/1 'Golos Text',sans-serif">В корзину</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div style="display:flex;gap:14px;padding:16px 0">
+                    <div style="position:relative;flex:none"><img src="assets/pizza-donernaya.jpg" alt="" style="width:96px;height:96px;object-fit:cover;display:block;filter:grayscale(1);opacity:.4"></div>
+                    <div style="flex:1;opacity:.55">
+                      <div style="font:700 15px/1.2 'PT Serif',serif">Донерная</div>
+                      <div style="font:400 11px/1.45 'Golos Text',sans-serif;color:#8A7C6A;margin-top:5px">Закончилась, вернём завтра</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style="flex:none;display:flex;background:#FFFCF7;border-top:1px solid rgba(42,33,24,.12);padding:9px 0 14px">
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="display:grid;grid-template-columns:7px 7px;gap:3px"><i style="background:#2A2118;height:7px"></i><i style="background:#2A2118;height:7px"></i><i style="background:#2A2118;height:7px"></i><i style="background:#2A2118;height:7px"></i></div><span style="font:600 10px/1 'Golos Text',sans-serif">Меню</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;color:#8A7C6A"><div style="width:16px;height:13px;border:1.6px solid #8A7C6A;border-radius:0 0 3px 3px;margin-top:4px"></div><span style="font:500 10px/1 'Golos Text',sans-serif">Корзина</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;color:#8A7C6A"><div style="display:flex;flex-direction:column;gap:2.5px;width:16px;margin-top:5px"><i style="height:1.6px;background:#8A7C6A"></i><i style="height:1.6px;background:#8A7C6A"></i><i style="height:1.6px;background:#8A7C6A"></i></div><span style="font:500 10px/1 'Golos Text',sans-serif">Заказы</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;color:#8A7C6A"><div style="width:15px;height:15px;border:1.6px solid #8A7C6A;border-radius:999px;margin-top:2px"></div><span style="font:500 10px/1 'Golos Text',sans-serif">Профиль</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">1. Каталог</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#FFFCF7">
+            <div class="scr" style="font-family:'Golos Text',sans-serif;color:#2A2118">
+              <div class="sb" style="background:#FFFCF7"><span>21:05</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:1;overflow:hidden">
+                  <div style="display:flex;align-items:center;gap:12px;padding:4px 20px 12px"><div style="font:500 16px/1">←</div><div style="font:500 12px/1 'Golos Text',sans-serif;color:#8A7C6A">Пиццы</div></div>
+                  <img src="assets/pizza-alfredo.jpg" alt="" style="width:100%;height:200px;object-fit:cover;display:block">
+                  <div style="padding:18px 20px 0">
+                    <div style="font:700 24px/1.15 'PT Serif',serif">Альфредо</div>
+                    <div style="font:400 12.5px/1.55 'Golos Text',sans-serif;color:#6B5D4C;margin-top:9px">Курица, шампиньоны, сливочный соус альфредо, моцарелла, зелень. Готовим на тонком тесте.</div>
+                    <div style="display:flex;gap:16px;margin-top:12px;padding:12px 0;border-top:1px solid rgba(42,33,24,.12);border-bottom:1px solid rgba(42,33,24,.12)">
+                      <div><div style="font:400 10px/1 'Golos Text',sans-serif;color:#8A7C6A">Размер</div><div style="font:600 12.5px/1 'Golos Text',sans-serif;margin-top:5px">30 см</div></div>
+                      <div><div style="font:400 10px/1 'Golos Text',sans-serif;color:#8A7C6A">Вес</div><div style="font:600 12.5px/1 'Golos Text',sans-serif;margin-top:5px">480 г</div></div>
+                      <div><div style="font:400 10px/1 'Golos Text',sans-serif;color:#8A7C6A">Тесто</div><div style="font:600 12.5px/1 'Golos Text',sans-serif;margin-top:5px">тонкое</div></div>
+                    </div>
+
+                    <div style="font:700 15px/1 'PT Serif',serif;margin-top:20px">Размер</div>
+                    <div style="display:flex;gap:8px;margin-top:10px">
+                      <div style="flex:1;text-align:center;padding:11px 0;border-radius:12px;border:1px solid rgba(42,33,24,.14);font:500 12px/1 'Golos Text',sans-serif;color:#8A7C6A">25 см</div>
+                      <div style="flex:1;text-align:center;padding:11px 0;border-radius:12px;background:#2A2118;color:#FFFCF7;font:600 12px/1 'Golos Text',sans-serif">30 см</div>
+                      <div style="flex:1;text-align:center;padding:11px 0;border-radius:12px;border:1px solid rgba(42,33,24,.14);font:500 12px/1 'Golos Text',sans-serif;color:#8A7C6A">35 см</div>
+                    </div>
+
+                    <div style="font:700 15px/1 'PT Serif',serif;margin-top:20px">Добавки</div>
+                    <div style="margin-top:6px">
+                      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(42,33,24,.1)"><span style="font:500 12.5px/1 'Golos Text',sans-serif">Двойная моцарелла</span><span style="display:flex;gap:12px;align-items:center"><span style="font:500 12px/1 'Golos Text',sans-serif;color:#8A7C6A">450 ₸</span><span style="width:22px;height:22px;border-radius:6px;border:1.5px solid rgba(42,33,24,.2)"></span></span></div>
+                      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(42,33,24,.1)"><span style="font:600 12.5px/1 'Golos Text',sans-serif">Соус чесночный</span><span style="display:flex;gap:12px;align-items:center"><span style="font:500 12px/1 'Golos Text',sans-serif;color:#8A7C6A">200 ₸</span><span style="width:22px;height:22px;border-radius:6px;background:#4E6E58;color:#fff;display:flex;align-items:center;justify-content:center;font:600 12px/1">✓</span></span></div>
+                      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0"><span style="font:500 12.5px/1 'Golos Text',sans-serif">Бортик с сыром</span><span style="display:flex;gap:12px;align-items:center"><span style="font:500 12px/1 'Golos Text',sans-serif;color:#8A7C6A">700 ₸</span><span style="width:22px;height:22px;border-radius:6px;border:1.5px solid rgba(42,33,24,.2)"></span></span></div>
+                    </div>
+                  </div>
+                </div>
+                <div style="flex:none;padding:14px 20px 20px;background:#FFFCF7;border-top:1px solid rgba(42,33,24,.12);display:flex;align-items:center;gap:14px">
+                  <div><div style="font:700 19px/1 'PT Serif',serif">3 800 ₸</div><div style="font:400 10px/1 'Golos Text',sans-serif;color:#8A7C6A;margin-top:5px">30 см + соус</div></div>
+                  <div style="flex:1;text-align:center;padding:15px 0;border-radius:12px;background:#A65B2B;color:#FFFCF7;font:600 13.5px/1 'Golos Text',sans-serif">В корзину</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">2. Карточка товара</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#F6EFE4">
+            <div class="scr" style="font-family:'Golos Text',sans-serif;color:#2A2118">
+              <div class="sb" style="background:#F6EFE4"><span>21:07</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:none;padding:6px 20px 14px;font:700 24px/1.1 'PT Serif',serif">Корзина</div>
+                <div style="flex:1;overflow:hidden;padding:0 20px">
+                  <div style="background:#FFFCF7;border:1px solid rgba(42,33,24,.1);border-radius:16px;padding:0 14px">
+                    <div style="display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid rgba(42,33,24,.1)"><img src="assets/pizza-alfredo.jpg" alt="" style="width:48px;height:48px;object-fit:cover;flex:none"><div style="flex:1"><div style="font:600 12.5px/1.25 'Golos Text',sans-serif">Альфредо, 30 см</div><div style="font:700 13.5px/1 'PT Serif',serif;margin-top:5px">3 800 ₸</div></div><div style="display:flex;align-items:center;gap:10px;padding:5px 9px;border-radius:10px;border:1px solid rgba(42,33,24,.14)"><span style="font:400 13px/1">−</span><span style="font:600 12px/1">1</span><span style="font:400 13px/1">+</span></div></div>
+                    <div style="display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid rgba(42,33,24,.1)"><img src="assets/burger-grill.jpg" alt="" style="width:48px;height:48px;object-fit:cover;flex:none"><div style="flex:1"><div style="font:600 12.5px/1.25 'Golos Text',sans-serif">Гриль бургер</div><div style="font:700 13.5px/1 'PT Serif',serif;margin-top:5px">2 300 ₸</div></div><div style="display:flex;align-items:center;gap:10px;padding:5px 9px;border-radius:10px;border:1px solid rgba(42,33,24,.14)"><span style="font:400 13px/1">−</span><span style="font:600 12px/1">1</span><span style="font:400 13px/1">+</span></div></div>
+                    <div style="display:flex;gap:12px;align-items:center;padding:12px 0"><img src="assets/side-dolki.jpg" alt="" style="width:48px;height:48px;object-fit:cover;flex:none"><div style="flex:1"><div style="font:600 12.5px/1.25 'Golos Text',sans-serif">Дольки</div><div style="display:flex;gap:8px;align-items:center;margin-top:5px"><span style="font:700 13.5px/1 'PT Serif',serif;color:#4E6E58">0 ₸</span><span style="font:500 10px/1 'Golos Text',sans-serif;padding:4px 8px;border-radius:6px;background:rgba(78,110,88,.12);color:#4E6E58">Подарок к заказу</span></div></div></div>
+                  </div>
+
+                  <div style="margin-top:14px;display:flex;gap:8px">
+                    <div style="flex:1;padding:13px 14px;background:#FFFCF7;border:1px solid rgba(42,33,24,.14);border-radius:12px;font:400 12px/1 'Golos Text',sans-serif;color:#8A7C6A">Промокод</div>
+                    <div style="padding:13px 18px;border-radius:12px;background:#2A2118;color:#FFFCF7;font:600 12px/1 'Golos Text',sans-serif">Ввести</div>
+                  </div>
+
+                  <div style="margin-top:14px;background:#FFFCF7;border:1px solid rgba(42,33,24,.1);border-radius:16px;padding:16px">
+                    <div style="font:700 15px/1 'PT Serif',serif">Списать баллы</div>
+                    <div style="font:400 11px/1.4 'Golos Text',sans-serif;color:#8A7C6A;margin-top:6px">У вас 1 006 баллов. 1 балл = 1 ₸, списывайте сколько нужно.</div>
+                    <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+                      <div style="flex:1;padding:11px 14px;border-radius:10px;background:#F6EFE4;font:600 15px/1 'Golos Text',sans-serif">500</div>
+                      <div style="padding:11px 13px;border-radius:10px;border:1px solid rgba(42,33,24,.14);font:500 11.5px/1 'Golos Text',sans-serif">Всё</div>
+                    </div>
+                    <div style="margin-top:12px;height:4px;border-radius:999px;background:rgba(42,33,24,.12);position:relative"><div style="position:absolute;left:0;top:0;bottom:0;width:50%;background:#A65B2B;border-radius:999px"></div><div style="position:absolute;left:50%;top:-7px;margin-left:-9px;width:18px;height:18px;border-radius:999px;background:#A65B2B"></div></div>
+                  </div>
+                </div>
+                <div style="flex:none;padding:16px 20px 20px;background:#FFFCF7;border-top:1px solid rgba(42,33,24,.12)">
+                  <div style="display:flex;justify-content:space-between;font:400 12px/1.7 'Golos Text',sans-serif;color:#6B5D4C"><span>Товары</span><span>6 100 ₸</span></div>
+                  <div style="display:flex;justify-content:space-between;font:400 12px/1.7 'Golos Text',sans-serif;color:#6B5D4C"><span>Доставка</span><span>бесплатно</span></div>
+                  <div style="display:flex;justify-content:space-between;font:400 12px/1.7 'Golos Text',sans-serif;color:#A65B2B"><span>Баллы</span><span>−500 ₸</span></div>
+                  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:8px;padding-top:10px;border-top:1px solid rgba(42,33,24,.12)"><span style="font:700 15px/1 'PT Serif',serif">Итого</span><span style="font:700 22px/1 'PT Serif',serif">5 600 ₸</span></div>
+                  <div style="margin-top:14px;text-align:center;padding:15px 0;border-radius:12px;background:#A65B2B;color:#FFFCF7;font:600 13.5px/1 'Golos Text',sans-serif">Оформить заказ</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">3. Корзина</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#F6EFE4">
+            <div class="scr" style="font-family:'Golos Text',sans-serif;color:#2A2118">
+              <div class="sb" style="background:#F6EFE4"><span>21:08</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:none;padding:6px 20px 14px;font:700 24px/1.1 'PT Serif',serif">Оформление</div>
+                <div style="flex:1;overflow:hidden;padding:0 20px">
+                  <div style="font:700 15px/1 'PT Serif',serif">Куда привезти</div>
+                  <div style="margin-top:10px;background:#FFFCF7;border:1px solid rgba(42,33,24,.1);border-radius:16px;overflow:hidden">
+                    <div style="display:flex;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid rgba(42,33,24,.1)"><div style="width:16px;height:16px;border-radius:999px;border:5px solid #A65B2B"></div><div style="flex:1"><div style="font:600 12.5px/1.2 'Golos Text',sans-serif">Сатпаева, 38А</div><div style="font:400 10.5px/1 'Golos Text',sans-serif;color:#8A7C6A;margin-top:4px">кв. 24, подъезд 2, этаж 5</div></div><span style="font:500 11px/1 'Golos Text',sans-serif;color:#A65B2B">Изменить</span></div>
+                    <div style="display:flex;align-items:center;gap:12px;padding:13px 14px;border-bottom:1px solid rgba(42,33,24,.1)"><div style="width:16px;height:16px;border-radius:999px;border:1.5px solid rgba(42,33,24,.2)"></div><div style="font:500 12.5px/1 'Golos Text',sans-serif">Ауэзова, 53/2</div></div>
+                    <div style="padding:12px 14px;font:600 12px/1 'Golos Text',sans-serif;color:#A65B2B">Добавить адрес</div>
+                  </div>
+
+                  <div style="font:700 15px/1 'PT Serif',serif;margin-top:20px">Кто получит</div>
+                  <div style="display:flex;gap:8px;margin-top:10px">
+                    <div style="flex:1;padding:12px 14px;background:#FFFCF7;border:1px solid rgba(42,33,24,.14);border-radius:12px"><div style="font:400 10px/1 'Golos Text',sans-serif;color:#8A7C6A">Имя</div><div style="font:500 12.5px/1 'Golos Text',sans-serif;margin-top:5px">Ержан</div></div>
+                    <div style="flex:1.4;padding:12px 14px;background:#FFFCF7;border:1px solid rgba(42,33,24,.14);border-radius:12px"><div style="font:400 10px/1 'Golos Text',sans-serif;color:#8A7C6A">Телефон</div><div style="font:500 12.5px/1 'Golos Text',sans-serif;margin-top:5px">+7 705 123 45 67</div></div>
+                  </div>
+
+                  <div style="font:700 15px/1 'PT Serif',serif;margin-top:20px">Когда</div>
+                  <div style="display:flex;gap:8px;margin-top:10px">
+                    <div style="flex:1;padding:12px 0;text-align:center;border-radius:12px;background:#2A2118;color:#FFFCF7;font:600 12px/1 'Golos Text',sans-serif">Как можно скорее</div>
+                    <div style="flex:1;padding:12px 0;text-align:center;border-radius:12px;background:#FFFCF7;border:1px solid rgba(42,33,24,.14);font:500 12px/1 'Golos Text',sans-serif">Ко времени</div>
+                  </div>
+
+                  <div style="font:700 15px/1 'PT Serif',serif;margin-top:20px">Оплата</div>
+                  <div style="margin-top:10px;background:#FFFCF7;border:1px solid rgba(42,33,24,.1);border-radius:16px;overflow:hidden">
+                    <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid rgba(42,33,24,.1)"><div style="width:16px;height:16px;border-radius:999px;border:5px solid #A65B2B"></div><span style="flex:1;font:600 12.5px/1 'Golos Text',sans-serif">Наличными курьеру</span><span style="font:400 11px/1 'Golos Text',sans-serif;color:#8A7C6A">сдача с 10 000 ₸</span></div>
+                    <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid rgba(42,33,24,.1)"><div style="width:16px;height:16px;border-radius:999px;border:1.5px solid rgba(42,33,24,.2)"></div><span style="font:500 12.5px/1 'Golos Text',sans-serif">Картой курьеру</span></div>
+                    <div style="display:flex;align-items:center;gap:12px;padding:12px 14px"><div style="width:16px;height:16px;border-radius:999px;border:1.5px solid rgba(42,33,24,.2)"></div><span style="font:500 12.5px/1 'Golos Text',sans-serif">Онлайн-оплата</span></div>
+                  </div>
+                  <div style="margin-top:10px;padding:13px 14px;background:#FFFCF7;border:1px solid rgba(42,33,24,.14);border-radius:12px;font:400 12px/1 'Golos Text',sans-serif;color:#8A7C6A">Комментарий: домофон не работает</div>
+                </div>
+                <div style="flex:none;padding:12px 20px 20px;background:#FFFCF7;border-top:1px solid rgba(42,33,24,.12)">
+                  <div style="font:400 9.5px/1.4 'Golos Text',sans-serif;color:#8A7C6A">Оформляя заказ, вы принимаете оферту и политику обработки данных</div>
+                  <div style="margin-top:10px;text-align:center;padding:15px 0;border-radius:12px;background:#A65B2B;color:#FFFCF7;font:600 13.5px/1 'Golos Text',sans-serif">Заказать на 5 600 ₸</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">4. Оформление</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#F6EFE4">
+            <div class="scr" style="font-family:'Golos Text',sans-serif;color:#2A2118">
+              <div class="sb" style="background:#F6EFE4"><span>21:09</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:1;overflow:hidden;padding:10px 20px 0">
+                  <div style="font:400 11px/1 'Golos Text',sans-serif;color:#8A7C6A">Заказ № 10482 · 12 августа</div>
+                  <div style="font:700 28px/1.15 'PT Serif',serif;margin-top:10px">Уже готовим</div>
+                  <div style="font:400 12.5px/1.5 'Golos Text',sans-serif;color:#6B5D4C;margin-top:8px">Привезём к 21:45. Курьер позвонит, когда подъедет.</div>
+
+                  <div style="margin-top:24px;background:#FFFCF7;border:1px solid rgba(42,33,24,.1);border-radius:16px;padding:16px">
+                    <div style="display:flex;gap:14px">
+                      <div style="display:flex;flex-direction:column;align-items:center;flex:none"><div style="width:10px;height:10px;border-radius:999px;background:#4E6E58"></div><div style="width:1.5px;flex:1;background:#4E6E58;min-height:28px"></div></div>
+                      <div style="padding-bottom:16px;flex:1;display:flex;justify-content:space-between"><span style="font:500 12.5px/1 'Golos Text',sans-serif">Отправлен</span><span style="font:400 11px/1 'Golos Text',sans-serif;color:#8A7C6A">21:08</span></div>
+                    </div>
+                    <div style="display:flex;gap:14px">
+                      <div style="display:flex;flex-direction:column;align-items:center;flex:none"><div style="width:10px;height:10px;border-radius:999px;background:#4E6E58"></div><div style="width:1.5px;flex:1;background:#4E6E58;min-height:28px"></div></div>
+                      <div style="padding-bottom:16px;flex:1;display:flex;justify-content:space-between"><span style="font:500 12.5px/1 'Golos Text',sans-serif">Принят</span><span style="font:400 11px/1 'Golos Text',sans-serif;color:#8A7C6A">21:09</span></div>
+                    </div>
+                    <div style="display:flex;gap:14px">
+                      <div style="display:flex;flex-direction:column;align-items:center;flex:none"><div style="width:10px;height:10px;border-radius:999px;background:#A65B2B;box-shadow:0 0 0 5px rgba(166,91,43,.18)"></div><div style="width:1.5px;flex:1;background:rgba(42,33,24,.14);min-height:28px"></div></div>
+                      <div style="padding-bottom:16px;flex:1"><span style="font:700 13px/1 'PT Serif',serif">Готовится</span></div>
+                    </div>
+                    <div style="display:flex;gap:14px">
+                      <div style="display:flex;flex-direction:column;align-items:center;flex:none"><div style="width:10px;height:10px;border-radius:999px;border:1.5px solid rgba(42,33,24,.2)"></div><div style="width:1.5px;flex:1;background:rgba(42,33,24,.14);min-height:28px"></div></div>
+                      <div style="padding-bottom:16px;flex:1;color:#8A7C6A"><span style="font:500 12.5px/1 'Golos Text',sans-serif">В пути</span></div>
+                    </div>
+                    <div style="display:flex;gap:14px">
+                      <div style="flex:none;width:10px;display:flex;justify-content:center"><div style="width:10px;height:10px;border-radius:999px;border:1.5px solid rgba(42,33,24,.2)"></div></div>
+                      <div style="flex:1;color:#8A7C6A"><span style="font:500 12.5px/1 'Golos Text',sans-serif">Доставлен</span></div>
+                    </div>
+                  </div>
+                </div>
+                <div style="flex:none;padding:14px 20px 20px">
+                  <div style="background:#FFFCF7;border:1px solid rgba(42,33,24,.1);border-radius:16px;padding:14px;display:flex;align-items:center;gap:12px">
+                    <img src="assets/pizza-alfredo.jpg" alt="" style="width:44px;height:44px;object-fit:cover">
+                    <div style="flex:1;font:400 11.5px/1.4 'Golos Text',sans-serif;color:#6B5D4C">3 позиции<br>Наличными курьеру</div>
+                    <div style="font:700 16px/1 'PT Serif',serif">5 600 ₸</div>
+                  </div>
+                  <div style="margin-top:10px;text-align:center;padding:14px 0;border-radius:12px;border:1.5px solid rgba(42,33,24,.16);font:600 12.5px/1 'Golos Text',sans-serif">Отменить заказ</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">5. Статус заказа</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#F6EFE4">
+            <div class="scr" style="font-family:'Golos Text',sans-serif;color:#2A2118">
+              <div class="sb" style="background:#F6EFE4"><span>21:12</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:1;overflow:hidden;padding:8px 20px 0">
+                  <div style="font:700 24px/1.1 'PT Serif',serif">Ержан</div>
+                  <div style="font:400 12px/1 'Golos Text',sans-serif;color:#8A7C6A;margin-top:7px">+7 705 123 45 67</div>
+
+                  <div style="margin-top:18px;background:#FFFCF7;border:1px solid rgba(42,33,24,.1);border-radius:16px;padding:18px">
+                    <div style="display:flex;align-items:baseline;justify-content:space-between">
+                      <div><div style="font:400 11px/1 'Golos Text',sans-serif;color:#8A7C6A">Баллы</div><div style="font:700 34px/1 'PT Serif',serif;margin-top:8px">1 006</div></div>
+                      <div style="text-align:right"><div style="font:400 11px/1 'Golos Text',sans-serif;color:#8A7C6A">Кэшбэк</div><div style="font:700 20px/1 'PT Serif',serif;margin-top:8px;color:#4E6E58">7%</div></div>
+                    </div>
+                    <div style="margin-top:16px;height:4px;border-radius:999px;background:rgba(42,33,24,.1);position:relative"><div style="position:absolute;left:0;top:0;bottom:0;width:62%;background:#4E6E58;border-radius:999px"></div></div>
+                    <div style="font:400 10.5px/1.4 'Golos Text',sans-serif;color:#8A7C6A;margin-top:10px">До кэшбэка 10% — ещё 12 000 ₸ заказов</div>
+                  </div>
+
+                  <div style="font:700 15px/1 'PT Serif',serif;margin-top:20px">Прошлые заказы</div>
+                  <div style="margin-top:8px;background:#FFFCF7;border:1px solid rgba(42,33,24,.1);border-radius:16px;padding:0 14px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(42,33,24,.1)"><div><div style="font:600 12.5px/1 'Golos Text',sans-serif">12 августа</div><div style="font:400 10.5px/1 'Golos Text',sans-serif;color:#8A7C6A;margin-top:4px">Четыре сыра, Фри ×2</div></div><div style="display:flex;align-items:center;gap:10px"><span style="font:700 13.5px/1 'PT Serif',serif">5 050 ₸</span><span style="padding:7px 11px;border-radius:10px;border:1px solid rgba(42,33,24,.16);font:600 11px/1 'Golos Text',sans-serif">Повтор</span></div></div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0"><div><div style="font:600 12.5px/1 'Golos Text',sans-serif">5 августа</div><div style="font:400 10.5px/1 'Golos Text',sans-serif;color:#8A7C6A;margin-top:4px">Гриль бургер, Наггетсы</div></div><div style="display:flex;align-items:center;gap:10px"><span style="font:700 13.5px/1 'PT Serif',serif">3 700 ₸</span><span style="padding:7px 11px;border-radius:10px;border:1px solid rgba(42,33,24,.16);font:600 11px/1 'Golos Text',sans-serif">Повтор</span></div></div>
+                  </div>
+
+                  <div style="font:700 15px/1 'PT Serif',serif;margin-top:18px">История баллов</div>
+                  <div style="margin-top:6px">
+                    <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(42,33,24,.1);font:400 12px/1 'Golos Text',sans-serif"><span>Начислено · 12 авг</span><span style="color:#4E6E58;font-weight:600">+353</span></div>
+                    <div style="display:flex;justify-content:space-between;padding:10px 0;font:400 12px/1 'Golos Text',sans-serif"><span>Списано · 5 авг</span><span style="font-weight:600">−500</span></div>
+                  </div>
+                </div>
+                <div style="flex:none;display:flex;background:#FFFCF7;border-top:1px solid rgba(42,33,24,.12);padding:9px 0 14px">
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;color:#8A7C6A"><div style="display:grid;grid-template-columns:7px 7px;gap:3px"><i style="background:#8A7C6A;height:7px"></i><i style="background:#8A7C6A;height:7px"></i><i style="background:#8A7C6A;height:7px"></i><i style="background:#8A7C6A;height:7px"></i></div><span style="font:500 10px/1 'Golos Text',sans-serif">Меню</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;color:#8A7C6A"><div style="width:16px;height:13px;border:1.6px solid #8A7C6A;border-radius:0 0 3px 3px;margin-top:4px"></div><span style="font:500 10px/1 'Golos Text',sans-serif">Корзина</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;color:#8A7C6A"><div style="display:flex;flex-direction:column;gap:2.5px;width:16px;margin-top:5px"><i style="height:1.6px;background:#8A7C6A"></i><i style="height:1.6px;background:#8A7C6A"></i><i style="height:1.6px;background:#8A7C6A"></i></div><span style="font:500 10px/1 'Golos Text',sans-serif">Заказы</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="width:15px;height:15px;border:1.6px solid #2A2118;border-radius:999px;margin-top:2px"></div><span style="font:600 10px/1 'Golos Text',sans-serif">Профиль</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">6. Профиль</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#F6EFE4">
+            <div class="scr" style="font-family:'Golos Text',sans-serif;color:#2A2118">
+              <div class="sb" style="background:#F6EFE4"><span>23:41</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:none;padding:6px 20px 16px">
+                  <div style="display:flex;align-items:center;justify-content:space-between">
+                    <div><div style="font:400 10.5px/1 'Golos Text',sans-serif;color:#8A7C6A">Доставка на</div><div style="font:700 14px/1.2 'PT Serif',serif;margin-top:5px">Сатпаева, 38А</div></div>
+                    <div style="padding:8px 13px;border-radius:12px;background:rgba(42,33,24,.07);font:500 11.5px/1 'Golos Text',sans-serif;color:#8A7C6A">закрыто</div>
+                  </div>
+                </div>
+                <div style="flex:none;margin:0 20px 16px;padding:18px;background:#2A2118;color:#F6EFE4;border-radius:16px">
+                  <div style="font:700 18px/1.25 'PT Serif',serif">Доставка уже не работает</div>
+                  <div style="font:400 12px/1.5 'Golos Text',sans-serif;opacity:.75;margin-top:8px">Кухня принимает заказы до 23:00. Сейчас доступен только самовывоз до 23:50 или предзаказ на завтра.</div>
+                  <div style="display:flex;gap:8px;margin-top:14px">
+                    <div style="flex:1;text-align:center;padding:12px 0;border-radius:12px;background:#F6EFE4;color:#2A2118;font:600 12px/1 'Golos Text',sans-serif">Самовывоз</div>
+                    <div style="flex:1;text-align:center;padding:12px 0;border-radius:12px;border:1.5px solid rgba(246,239,228,.35);font:600 12px/1 'Golos Text',sans-serif">На завтра</div>
+                  </div>
+                </div>
+                <div style="flex:none;padding:0 20px 12px;font:400 11px/1 'Golos Text',sans-serif;color:#8A7C6A">Забрать можно на Сатпаева, 38А · 5 минут пешком от вас</div>
+                <div style="flex:1;overflow:hidden;padding:0 20px;opacity:.55">
+                  <div style="display:flex;gap:14px;padding:16px 0;border-top:1px solid rgba(42,33,24,.12)">
+                    <img src="assets/pizza-4sezona.jpg" alt="" style="width:80px;height:80px;object-fit:cover;flex:none">
+                    <div style="flex:1"><div style="font:700 14px/1.2 'PT Serif',serif">Четыре сезона</div><div style="font:400 10.5px/1.4 'Golos Text',sans-serif;color:#8A7C6A;margin-top:5px">470 г</div><div style="font:700 14px/1 'PT Serif',serif;margin-top:8px">3 400 ₸</div></div>
+                  </div>
+                  <div style="display:flex;gap:14px;padding:16px 0;border-top:1px solid rgba(42,33,24,.12)">
+                    <img src="assets/burger-vetchina.jpg" alt="" style="width:80px;height:80px;object-fit:cover;flex:none">
+                    <div style="flex:1"><div style="font:700 14px/1.2 'PT Serif',serif">Бургер с ветчиной</div><div style="font:400 10.5px/1.4 'Golos Text',sans-serif;color:#8A7C6A;margin-top:5px">300 г</div><div style="font:700 14px/1 'PT Serif',serif;margin-top:8px">1 690 ₸</div></div>
+                  </div>
+                </div>
+                <div style="flex:none;display:flex;background:#FFFCF7;border-top:1px solid rgba(42,33,24,.12);padding:9px 0 14px">
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px"><div style="display:grid;grid-template-columns:7px 7px;gap:3px"><i style="background:#2A2118;height:7px"></i><i style="background:#2A2118;height:7px"></i><i style="background:#2A2118;height:7px"></i><i style="background:#2A2118;height:7px"></i></div><span style="font:600 10px/1 'Golos Text',sans-serif">Меню</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;color:#8A7C6A"><div style="width:16px;height:13px;border:1.6px solid #8A7C6A;border-radius:0 0 3px 3px;margin-top:4px"></div><span style="font:500 10px/1 'Golos Text',sans-serif">Корзина</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;color:#8A7C6A"><div style="display:flex;flex-direction:column;gap:2.5px;width:16px;margin-top:5px"><i style="height:1.6px;background:#8A7C6A"></i><i style="height:1.6px;background:#8A7C6A"></i><i style="height:1.6px;background:#8A7C6A"></i></div><span style="font:500 10px/1 'Golos Text',sans-serif">Заказы</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;color:#8A7C6A"><div style="width:15px;height:15px;border:1.6px solid #8A7C6A;border-radius:999px;margin-top:2px"></div><span style="font:500 10px/1 'Golos Text',sans-serif">Профиль</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">7. Состояние: закрыто / самовывоз</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dv-opt" id="1e">
+      <div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>«Один тап» — утилитарный, повторный заказ вместо витрины</div>
+      <div class="dv-row">
+        <div class="spec">
+          <h4>Один тап</h4>
+          Направление против витрины: приложение считает, что человек уже знает, чего хочет. Первый экран — прошлый заказ и кнопка на весь ширину; фото уменьшены до миниатюр, вместо карточек — строки с разделителями и крупные цифры. Самый быстрый путь и самый дешёвый в поддержке: не зависит от качества фотосъёмки. Жёлтый — единственный сигнал, всё остальное чёрно-белое.
+          <dl>
+            <dt>Палитра</dt><dd>Чёрное, белое, жёлтый сигнал<div class="sw"><i style="background:#fff"></i><i style="background:#101010"></i><i style="background:#FFD400"></i><i style="background:#767676"></i></div></dd>
+            <dt>Шрифты</dt><dd>Archivo 700/500 — текст<br>JetBrains Mono 500 — цены, время, номера</dd>
+            <dt>Отступы</dt><dd>Сетка 4. Поля 16, строки 56+ (крупные тапы).</dd>
+            <dt>Скругления</dt><dd>4 у кнопок, 0 у строк и полей</dd>
+            <dt>Состояние</dt><dd>Ошибка сети с повтором (7-й экран)</dd>
+          </dl>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#fff">
+            <div class="scr" style="font-family:'Archivo',sans-serif;color:#101010">
+              <div class="sb" style="background:#fff"><span>21:04</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:none;padding:4px 16px 10px;border-bottom:1px solid #101010">
+                  <div style="display:flex;align-items:center;justify-content:space-between">
+                    <div style="font:700 13px/1 'Archivo',sans-serif">САТПАЕВА, 38А <span style="font-weight:500;color:#767676">▾</span></div>
+                    <div style="font:500 11px/1 'JetBrains Mono',monospace;color:#767676">35 МИН</div>
+                  </div>
+                  <div style="display:flex;margin-top:10px;border:1px solid #101010">
+                    <div style="flex:1;text-align:center;padding:9px 0;background:#101010;color:#fff;font:700 11.5px/1 'Archivo',sans-serif;letter-spacing:.03em">ДОСТАВКА</div>
+                    <div style="flex:1;text-align:center;padding:9px 0;font:500 11.5px/1 'Archivo',sans-serif;letter-spacing:.03em;color:#767676">САМОВЫВОЗ</div>
+                  </div>
+                </div>
+
+                <div style="flex:none;padding:16px;background:#FFD400">
+                  <div style="font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.08em">ВАШ ОБЫЧНЫЙ ЗАКАЗ</div>
+                  <div style="font:700 17px/1.25 'Archivo',sans-serif;margin-top:9px">Четыре сыра 30 см · Гриль бургер · Фри ×2</div>
+                  <div style="display:flex;align-items:baseline;gap:10px;margin-top:10px">
+                    <span style="font:500 24px/1 'JetBrains Mono',monospace">5 050 ₸</span>
+                    <span style="font:500 10.5px/1 'JetBrains Mono',monospace;color:rgba(16,16,16,.6)">ЗАКАЗАН 12 АВГ</span>
+                  </div>
+                  <div style="margin-top:14px;text-align:center;padding:17px 0;background:#101010;color:#fff;border-radius:4px;font:700 14px/1 'Archivo',sans-serif;letter-spacing:.03em">ПОВТОРИТЬ ЗАКАЗ</div>
+                  <div style="margin-top:8px;text-align:center;font:500 11px/1 'Archivo',sans-serif;text-decoration:underline">изменить состав</div>
+                </div>
+
+                <div style="flex:none;display:flex;border-bottom:1px solid #101010;overflow:hidden">
+                  <div style="flex:none;padding:11px 14px;font:700 11.5px/1 'Archivo',sans-serif;letter-spacing:.03em;border-bottom:3px solid #FFD400;margin-bottom:-1px">ПИЦЦЫ</div>
+                  <div style="flex:none;padding:11px 14px;font:500 11.5px/1 'Archivo',sans-serif;letter-spacing:.03em;color:#767676">БУРГЕРЫ</div>
+                  <div style="flex:none;padding:11px 14px;font:500 11.5px/1 'Archivo',sans-serif;letter-spacing:.03em;color:#767676">ДОНЕРЫ</div>
+                  <div style="flex:none;padding:11px 14px;font:500 11.5px/1 'Archivo',sans-serif;letter-spacing:.03em;color:#767676">КРЫЛ</div>
+                </div>
+
+                <div style="flex:1;overflow:hidden">
+                  <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(16,16,16,.14)">
+                    <img src="assets/pizza-4syra.jpg" alt="" style="width:44px;height:44px;object-fit:cover;flex:none">
+                    <div style="flex:1"><div style="font:700 13px/1.2 'Archivo',sans-serif">Четыре сыра</div><div style="font:500 10.5px/1 'JetBrains Mono',monospace;color:#767676;margin-top:5px">470 Г</div></div>
+                    <div style="font:500 13px/1 'JetBrains Mono',monospace">3 200</div>
+                    <div style="width:34px;height:34px;background:#101010;color:#fff;display:flex;align-items:center;justify-content:center;font:500 19px/1;border-radius:4px">+</div>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(16,16,16,.14)">
+                    <img src="assets/pizza-bolonez.jpg" alt="" style="width:44px;height:44px;object-fit:cover;flex:none">
+                    <div style="flex:1"><div style="font:700 13px/1.2 'Archivo',sans-serif">Болоньезе</div><div style="font:500 10.5px/1 'JetBrains Mono',monospace;color:#767676;margin-top:5px">510 Г</div></div>
+                    <div style="font:500 13px/1 'JetBrains Mono',monospace">3 450</div>
+                    <div style="width:34px;height:34px;background:#101010;color:#fff;display:flex;align-items:center;justify-content:center;font:500 19px/1;border-radius:4px">+</div>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(16,16,16,.14)">
+                    <img src="assets/pizza-4sezona.jpg" alt="" style="width:44px;height:44px;object-fit:cover;flex:none">
+                    <div style="flex:1"><div style="font:700 13px/1.2 'Archivo',sans-serif">Четыре сезона</div><div style="font:500 10.5px/1 'JetBrains Mono',monospace;color:#767676;margin-top:5px">470 Г</div></div>
+                    <div style="font:500 13px/1 'JetBrains Mono',monospace">3 400</div>
+                    <div style="width:34px;height:34px;background:#101010;color:#fff;display:flex;align-items:center;justify-content:center;font:500 19px/1;border-radius:4px">+</div>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(16,16,16,.14);opacity:.4">
+                    <img src="assets/pizza-donernaya.jpg" alt="" style="width:44px;height:44px;object-fit:cover;flex:none;filter:grayscale(1)">
+                    <div style="flex:1"><div style="font:700 13px/1.2 'Archivo',sans-serif">Донерная</div><div style="font:500 10.5px/1 'JetBrains Mono',monospace;color:#767676;margin-top:5px">НЕТ В НАЛИЧИИ</div></div>
+                    <div style="font:500 13px/1 'JetBrains Mono',monospace">3 100</div>
+                  </div>
+                </div>
+
+                <div style="flex:none;display:flex;border-top:1px solid #101010;padding:8px 0 13px">
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px"><div style="display:grid;grid-template-columns:6px 6px;gap:3px"><i style="background:#101010;height:6px"></i><i style="background:#101010;height:6px"></i><i style="background:#101010;height:6px"></i><i style="background:#101010;height:6px"></i></div><span style="font:700 9.5px/1 'Archivo',sans-serif;letter-spacing:.04em">МЕНЮ</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#767676"><div style="width:15px;height:12px;border:1.6px solid #767676;margin-top:3px"></div><span style="font:500 9.5px/1 'Archivo',sans-serif;letter-spacing:.04em">КОРЗИНА</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#767676"><div style="display:flex;flex-direction:column;gap:2.5px;width:15px;margin-top:4px"><i style="height:1.6px;background:#767676"></i><i style="height:1.6px;background:#767676"></i><i style="height:1.6px;background:#767676"></i></div><span style="font:500 9.5px/1 'Archivo',sans-serif;letter-spacing:.04em">ЗАКАЗЫ</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#767676"><div style="width:14px;height:14px;border:1.6px solid #767676;border-radius:999px;margin-top:1px"></div><span style="font:500 9.5px/1 'Archivo',sans-serif;letter-spacing:.04em">ПРОФИЛЬ</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">1. Каталог</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#fff">
+            <div class="scr" style="font-family:'Archivo',sans-serif;color:#101010">
+              <div class="sb" style="background:#fff"><span>21:05</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:1;overflow:hidden">
+                  <div style="display:flex;align-items:center;gap:12px;padding:4px 16px 10px;border-bottom:1px solid #101010"><div style="font:500 16px/1">←</div><div style="font:700 12px/1 'Archivo',sans-serif;letter-spacing:.03em">ГРИЛЬ БУРГЕР</div></div>
+                  <img src="assets/burger-grill.jpg" alt="" style="width:100%;height:140px;object-fit:cover;display:block">
+                  <div style="padding:14px 16px 0">
+                    <div style="font:700 22px/1.15 'Archivo',sans-serif">Гриль бургер</div>
+                    <div style="font:400 12px/1.5 'Archivo',sans-serif;color:#5A5A5A;margin-top:8px">Котлета из говядины на гриле, чеддер, айсберг, томаты, маринованный огурец, соус.</div>
+                    <div style="display:flex;gap:14px;margin-top:12px;font:500 10.5px/1 'JetBrains Mono',monospace;color:#767676"><span>310 Г</span><span>640 ККАЛ</span><span>ОСТРОТА 1</span></div>
+
+                    <div style="font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:#767676;margin-top:20px">РАЗМЕР</div>
+                    <div style="display:flex;border:1px solid #101010;margin-top:8px">
+                      <div style="flex:1;text-align:center;padding:13px 0;background:#101010;color:#fff;font:700 12px/1 'Archivo',sans-serif">ОБЫЧНЫЙ</div>
+                      <div style="flex:1;text-align:center;padding:13px 0;font:500 12px/1 'Archivo',sans-serif">ДВОЙНОЙ <span style="font-family:'JetBrains Mono'">+900</span></div>
+                    </div>
+
+                    <div style="font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:#767676;margin-top:20px">ДОБАВКИ</div>
+                    <div style="margin-top:6px">
+                      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid rgba(16,16,16,.14)"><span style="font:700 13px/1 'Archivo',sans-serif">Бекон</span><span style="display:flex;align-items:center;gap:14px"><span style="font:500 12px/1 'JetBrains Mono',monospace;color:#767676">+500</span><span style="width:26px;height:26px;border:1.5px solid #101010"></span></span></div>
+                      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid rgba(16,16,16,.14)"><span style="font:700 13px/1 'Archivo',sans-serif">Двойной чеддер</span><span style="display:flex;align-items:center;gap:14px"><span style="font:500 12px/1 'JetBrains Mono',monospace;color:#767676">+400</span><span style="width:26px;height:26px;background:#FFD400;border:1.5px solid #101010;display:flex;align-items:center;justify-content:center;font:700 13px/1">✓</span></span></div>
+                      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0"><span style="font:700 13px/1 'Archivo',sans-serif">Халапеньо</span><span style="display:flex;align-items:center;gap:14px"><span style="font:500 12px/1 'JetBrains Mono',monospace;color:#767676">+300</span><span style="width:26px;height:26px;border:1.5px solid #101010"></span></span></div>
+                    </div>
+                  </div>
+                </div>
+                <div style="flex:none;border-top:1px solid #101010;padding:12px 16px 18px;display:flex;gap:10px;align-items:stretch">
+                  <div style="display:flex;align-items:center;gap:14px;padding:0 12px;border:1px solid #101010"><span style="font:400 17px/1">−</span><span style="font:500 13px/1 'JetBrains Mono',monospace">1</span><span style="font:400 17px/1">+</span></div>
+                  <div style="flex:1;text-align:center;padding:16px 0;background:#FFD400;border-radius:4px;font:700 13.5px/1 'Archivo',sans-serif;letter-spacing:.03em">В КОРЗИНУ · <span style="font-family:'JetBrains Mono';font-weight:500">2 700 ₸</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">2. Карточка товара</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#fff">
+            <div class="scr" style="font-family:'Archivo',sans-serif;color:#101010">
+              <div class="sb" style="background:#fff"><span>21:07</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:none;padding:4px 16px 10px;border-bottom:1px solid #101010;display:flex;align-items:baseline;justify-content:space-between"><span style="font:700 18px/1 'Archivo',sans-serif">КОРЗИНА</span><span style="font:500 11px/1 'JetBrains Mono',monospace;color:#767676">4 ПОЗИЦИИ</span></div>
+                <div style="flex:1;overflow:hidden">
+                  <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(16,16,16,.14)">
+                    <img src="assets/burger-grill.jpg" alt="" style="width:40px;height:40px;object-fit:cover;flex:none">
+                    <div style="flex:1"><div style="font:700 12.5px/1.2 'Archivo',sans-serif">Гриль бургер</div><div style="font:500 10px/1 'JetBrains Mono',monospace;color:#767676;margin-top:4px">+ ДВОЙНОЙ ЧЕДДЕР</div></div>
+                    <div style="font:500 12.5px/1 'JetBrains Mono',monospace">2 700</div>
+                    <div style="display:flex;align-items:center;gap:9px;border:1px solid rgba(16,16,16,.2);padding:5px 8px"><span style="font:400 13px/1">−</span><span style="font:500 11.5px/1 'JetBrains Mono',monospace">1</span><span style="font:400 13px/1">+</span></div>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(16,16,16,.14)">
+                    <img src="assets/pizza-4syra.jpg" alt="" style="width:40px;height:40px;object-fit:cover;flex:none">
+                    <div style="flex:1"><div style="font:700 12.5px/1.2 'Archivo',sans-serif">Четыре сыра</div><div style="font:500 10px/1 'JetBrains Mono',monospace;color:#767676;margin-top:4px">30 СМ</div></div>
+                    <div style="font:500 12.5px/1 'JetBrains Mono',monospace">3 200</div>
+                    <div style="display:flex;align-items:center;gap:9px;border:1px solid rgba(16,16,16,.2);padding:5px 8px"><span style="font:400 13px/1">−</span><span style="font:500 11.5px/1 'JetBrains Mono',monospace">1</span><span style="font:400 13px/1">+</span></div>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(16,16,16,.14)">
+                    <img src="assets/side-fri.jpg" alt="" style="width:40px;height:40px;object-fit:cover;flex:none">
+                    <div style="flex:1"><div style="font:700 12.5px/1.2 'Archivo',sans-serif">Фри</div></div>
+                    <div style="font:500 12.5px/1 'JetBrains Mono',monospace">1 800</div>
+                    <div style="display:flex;align-items:center;gap:9px;border:1px solid rgba(16,16,16,.2);padding:5px 8px"><span style="font:400 13px/1">−</span><span style="font:500 11.5px/1 'JetBrains Mono',monospace">2</span><span style="font:400 13px/1">+</span></div>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(16,16,16,.14);background:#FFF9DB">
+                    <img src="assets/side-naggetsy.jpg" alt="" style="width:40px;height:40px;object-fit:cover;flex:none">
+                    <div style="flex:1"><div style="font:700 12.5px/1.2 'Archivo',sans-serif">Наггетсы 6 шт</div><div style="font:500 10px/1 'JetBrains Mono',monospace;margin-top:4px">ПОДАРОК ОТ 5 000 ₸</div></div>
+                    <div style="font:500 12.5px/1 'JetBrains Mono',monospace">0</div>
+                  </div>
+
+                  <div style="display:flex;border-bottom:1px solid rgba(16,16,16,.14)">
+                    <div style="flex:1;padding:14px 16px;font:500 12px/1 'Archivo',sans-serif;color:#767676">Промокод</div>
+                    <div style="padding:14px 16px;font:700 12px/1 'Archivo',sans-serif;border-left:1px solid rgba(16,16,16,.14)">ПРИМЕНИТЬ</div>
+                  </div>
+
+                  <div style="padding:14px 16px;border-bottom:1px solid rgba(16,16,16,.14)">
+                    <div style="display:flex;align-items:baseline;justify-content:space-between"><span style="font:700 12.5px/1 'Archivo',sans-serif">СПИСАТЬ БАЛЛЫ</span><span style="font:500 10.5px/1 'JetBrains Mono',monospace;color:#767676">1 006 ДОСТУПНО</span></div>
+                    <div style="display:flex;gap:8px;margin-top:10px;align-items:stretch">
+                      <div style="flex:1;padding:12px;border:1px solid #101010;font:500 16px/1 'JetBrains Mono',monospace">1 000</div>
+                      <div style="padding:12px 13px;border:1px solid rgba(16,16,16,.2);font:500 11px/1 'Archivo',sans-serif;display:flex;align-items:center">МАКС</div>
+                      <div style="padding:12px 13px;border:1px solid rgba(16,16,16,.2);font:500 11px/1 'Archivo',sans-serif;display:flex;align-items:center">СБРОС</div>
+                    </div>
+                  </div>
+                </div>
+                <div style="flex:none;border-top:1px solid #101010;padding:12px 16px 18px">
+                  <div style="display:flex;justify-content:space-between;font:500 11.5px/1.8 'Archivo',sans-serif;color:#767676"><span>ТОВАРЫ</span><span style="font-family:'JetBrains Mono'">7 700 ₸</span></div>
+                  <div style="display:flex;justify-content:space-between;font:500 11.5px/1.8 'Archivo',sans-serif;color:#767676"><span>ДОСТАВКА</span><span style="font-family:'JetBrains Mono'">0 ₸</span></div>
+                  <div style="display:flex;justify-content:space-between;font:500 11.5px/1.8 'Archivo',sans-serif"><span>БАЛЛЫ</span><span style="font-family:'JetBrains Mono'">−1 000 ₸</span></div>
+                  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:8px;padding-top:8px;border-top:1px solid #101010"><span style="font:700 13px/1 'Archivo',sans-serif">ИТОГО</span><span style="font:500 24px/1 'JetBrains Mono',monospace">6 700 ₸</span></div>
+                  <div style="margin-top:12px;text-align:center;padding:17px 0;background:#101010;color:#fff;border-radius:4px;font:700 13.5px/1 'Archivo',sans-serif;letter-spacing:.03em">К ОФОРМЛЕНИЮ</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">3. Корзина</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#fff">
+            <div class="scr" style="font-family:'Archivo',sans-serif;color:#101010">
+              <div class="sb" style="background:#fff"><span>21:08</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:none;padding:4px 16px 10px;border-bottom:1px solid #101010;font:700 18px/1 'Archivo',sans-serif">ОФОРМЛЕНИЕ</div>
+                <div style="flex:1;overflow:hidden">
+                  <div style="padding:12px 16px 0;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:#767676">АДРЕС</div>
+                  <div style="margin-top:8px">
+                    <div style="display:flex;align-items:center;gap:12px;padding:13px 16px;border-top:1px solid rgba(16,16,16,.14);border-bottom:1px solid rgba(16,16,16,.14);background:#FFF9DB"><div style="width:16px;height:16px;border:5px solid #101010;border-radius:999px"></div><div style="flex:1"><div style="font:700 12.5px/1.2 'Archivo',sans-serif">Сатпаева, 38А</div><div style="font:500 10px/1 'JetBrains Mono',monospace;color:#5A5A5A;margin-top:4px">КВ 24 · ПОДЪЕЗД 2 · ЭТАЖ 5</div></div></div>
+                    <div style="display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid rgba(16,16,16,.14)"><div style="width:16px;height:16px;border:1.5px solid rgba(16,16,16,.3);border-radius:999px"></div><div style="font:500 12.5px/1 'Archivo',sans-serif">Ауэзова, 53/2</div></div>
+                    <div style="padding:13px 16px;border-bottom:1px solid rgba(16,16,16,.14);font:700 12px/1 'Archivo',sans-serif">+ НОВЫЙ АДРЕС</div>
+                  </div>
+
+                  <div style="padding:14px 16px 0;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:#767676">КОНТАКТЫ</div>
+                  <div style="display:flex;border-top:1px solid rgba(16,16,16,.14);margin-top:8px;border-bottom:1px solid rgba(16,16,16,.14)">
+                    <div style="flex:1;padding:13px 16px;font:500 12.5px/1 'Archivo',sans-serif">Ержан</div>
+                    <div style="flex:1.3;padding:13px 16px;border-left:1px solid rgba(16,16,16,.14);font:500 12px/1 'JetBrains Mono',monospace">+7 705 123 45 67</div>
+                  </div>
+
+                  <div style="padding:14px 16px 0;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:#767676">ВРЕМЯ</div>
+                  <div style="display:flex;gap:6px;padding:8px 16px 0;flex-wrap:wrap">
+                    <div style="padding:11px 14px;background:#101010;color:#fff;font:700 11.5px/1 'Archivo',sans-serif;border-radius:4px">БЛИЖАЙШЕЕ</div>
+                    <div style="padding:11px 14px;border:1px solid rgba(16,16,16,.2);font:500 11.5px/1 'JetBrains Mono',monospace;border-radius:4px">22:00</div>
+                    <div style="padding:11px 14px;border:1px solid rgba(16,16,16,.2);font:500 11.5px/1 'JetBrains Mono',monospace;border-radius:4px">22:30</div>
+                    <div style="padding:11px 14px;border:1px solid rgba(16,16,16,.2);font:500 11.5px/1 'JetBrains Mono',monospace;border-radius:4px">23:00</div>
+                  </div>
+
+                  <div style="padding:16px 16px 0;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:#767676">ОПЛАТА</div>
+                  <div style="margin-top:8px">
+                    <div style="display:flex;align-items:center;gap:12px;padding:13px 16px;border-top:1px solid rgba(16,16,16,.14);border-bottom:1px solid rgba(16,16,16,.14);background:#FFF9DB"><div style="width:16px;height:16px;border:5px solid #101010;border-radius:999px"></div><span style="flex:1;font:700 12.5px/1 'Archivo',sans-serif">Наличными курьеру</span><span style="font:500 10.5px/1 'JetBrains Mono',monospace">СДАЧА С 10 000</span></div>
+                    <div style="display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid rgba(16,16,16,.14)"><div style="width:16px;height:16px;border:1.5px solid rgba(16,16,16,.3);border-radius:999px"></div><span style="font:500 12.5px/1 'Archivo',sans-serif">Картой курьеру</span></div>
+                    <div style="display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid rgba(16,16,16,.14)"><div style="width:16px;height:16px;border:1.5px solid rgba(16,16,16,.3);border-radius:999px"></div><span style="font:500 12.5px/1 'Archivo',sans-serif">Онлайн-оплата</span></div>
+                    <div style="padding:13px 16px;border-bottom:1px solid rgba(16,16,16,.14);font:500 12px/1 'Archivo',sans-serif;color:#767676">Комментарий курьеру</div>
+                  </div>
+                </div>
+                <div style="flex:none;border-top:1px solid #101010;padding:10px 16px 18px">
+                  <div style="font:400 9.5px/1.4 'Archivo',sans-serif;color:#767676">Нажимая кнопку, вы принимаете оферту и политику обработки данных</div>
+                  <div style="margin-top:10px;text-align:center;padding:17px 0;background:#FFD400;border-radius:4px;font:700 13.5px/1 'Archivo',sans-serif;letter-spacing:.03em">ЗАКАЗАТЬ · <span style="font-family:'JetBrains Mono';font-weight:500">6 700 ₸</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">4. Оформление</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#fff">
+            <div class="scr" style="font-family:'Archivo',sans-serif;color:#101010">
+              <div class="sb" style="background:#fff"><span>21:09</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:none;padding:4px 16px 10px;border-bottom:1px solid #101010;display:flex;align-items:baseline;justify-content:space-between"><span style="font:700 18px/1 'Archivo',sans-serif">ЗАКАЗ</span><span style="font:500 12px/1 'JetBrains Mono',monospace">№ 10482</span></div>
+                <div style="flex:1;overflow:hidden">
+                  <div style="padding:20px 16px;background:#FFD400;border-bottom:1px solid #101010">
+                    <div style="font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.08em">СЕЙЧАС</div>
+                    <div style="font:700 24px/1.1 'Archivo',sans-serif;margin-top:9px">ГОТОВИТСЯ</div>
+                    <div style="font:500 13px/1 'JetBrains Mono',monospace;margin-top:10px">ДОСТАВИМ К 21:45</div>
+                  </div>
+                  <div>
+                    <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid rgba(16,16,16,.14)"><div style="width:18px;height:18px;background:#101010;color:#fff;display:flex;align-items:center;justify-content:center;font:700 11px/1">✓</div><span style="flex:1;font:500 12.5px/1 'Archivo',sans-serif">Отправлен</span><span style="font:500 11px/1 'JetBrains Mono',monospace;color:#767676">21:08</span></div>
+                    <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid rgba(16,16,16,.14)"><div style="width:18px;height:18px;background:#101010;color:#fff;display:flex;align-items:center;justify-content:center;font:700 11px/1">✓</div><span style="flex:1;font:500 12.5px/1 'Archivo',sans-serif">Принят кухней</span><span style="font:500 11px/1 'JetBrains Mono',monospace;color:#767676">21:09</span></div>
+                    <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid rgba(16,16,16,.14)"><div style="width:18px;height:18px;border:2px solid #101010"></div><span style="flex:1;font:700 12.5px/1 'Archivo',sans-serif">Готовится</span><span style="font:500 11px/1 'JetBrains Mono',monospace">СЕЙЧАС</span></div>
+                    <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid rgba(16,16,16,.14);color:#A8A8A8"><div style="width:18px;height:18px;border:1.5px solid #C8C8C8"></div><span style="flex:1;font:500 12.5px/1 'Archivo',sans-serif">Курьер в пути</span></div>
+                    <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid rgba(16,16,16,.14);color:#A8A8A8"><div style="width:18px;height:18px;border:1.5px solid #C8C8C8"></div><span style="flex:1;font:500 12.5px/1 'Archivo',sans-serif">Доставлен</span></div>
+                  </div>
+                  <div style="padding:14px 16px;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:#767676">СОСТАВ · 4 ПОЗИЦИИ</div>
+                  <div style="padding:0 16px">
+                    <div style="display:flex;justify-content:space-between;font:500 12px/2 'Archivo',sans-serif"><span>Гриль бургер</span><span style="font-family:'JetBrains Mono'">2 700 ₸</span></div>
+                    <div style="display:flex;justify-content:space-between;font:500 12px/2 'Archivo',sans-serif"><span>Четыре сыра, 30 см</span><span style="font-family:'JetBrains Mono'">3 200 ₸</span></div>
+                    <div style="display:flex;justify-content:space-between;font:500 12px/2 'Archivo',sans-serif"><span>Фри ×2</span><span style="font-family:'JetBrains Mono'">1 800 ₸</span></div>
+                    <div style="display:flex;justify-content:space-between;font:500 12px/2 'Archivo',sans-serif;color:#767676"><span>Наггетсы (подарок)</span><span style="font-family:'JetBrains Mono'">0 ₸</span></div>
+                  </div>
+                </div>
+                <div style="flex:none;border-top:1px solid #101010;padding:12px 16px 18px">
+                  <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font:700 12.5px/1 'Archivo',sans-serif">ИТОГО</span><span style="font:500 20px/1 'JetBrains Mono',monospace">6 700 ₸</span></div>
+                  <div style="margin-top:12px;text-align:center;padding:15px 0;border:1px solid #101010;border-radius:4px;font:700 12.5px/1 'Archivo',sans-serif;letter-spacing:.03em">ОТМЕНИТЬ ЗАКАЗ</div>
+                  <div style="margin-top:7px;text-align:center;font:500 10px/1 'JetBrains Mono',monospace;color:#767676">ОТМЕНА ВОЗМОЖНА ЕЩЁ 4 МИН</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">5. Статус заказа</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#fff">
+            <div class="scr" style="font-family:'Archivo',sans-serif;color:#101010">
+              <div class="sb" style="background:#fff"><span>21:12</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:1;overflow:hidden">
+                  <div style="padding:4px 16px 10px;border-bottom:1px solid #101010;display:flex;align-items:baseline;justify-content:space-between"><span style="font:700 18px/1 'Archivo',sans-serif">ЕРЖАН</span><span style="font:500 11px/1 'JetBrains Mono',monospace;color:#767676">+7 705 123 45 67</span></div>
+                  <div style="padding:20px 16px;background:#101010;color:#fff">
+                    <div style="font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.08em;opacity:.6">БАЛЛЫ · 1 БАЛЛ = 1 ₸</div>
+                    <div style="font:500 42px/1 'JetBrains Mono',monospace;margin-top:10px">1 006</div>
+                    <div style="display:flex;justify-content:space-between;margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.2)"><span style="font:500 11.5px/1 'Archivo',sans-serif;opacity:.7">КЭШБЭК</span><span style="font:700 12.5px/1 'Archivo',sans-serif;color:#FFD400">УРОВЕНЬ 2 · 7%</span></div>
+                  </div>
+                  <div style="padding:12px 16px;border-bottom:1px solid rgba(16,16,16,.14);font:500 11px/1.4 'Archivo',sans-serif;color:#5A5A5A">До уровня 3 (10%) — ещё <span style="font-family:'JetBrains Mono';color:#101010">12 000 ₸</span></div>
+
+                  <div style="padding:14px 16px 8px;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:#767676">ЗАКАЗЫ</div>
+                  <div>
+                    <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid rgba(16,16,16,.14)"><div style="flex:1"><div style="font:700 12.5px/1.2 'Archivo',sans-serif">12 августа</div><div style="font:500 10px/1 'JetBrains Mono',monospace;color:#767676;margin-top:5px">3 ПОЗИЦИИ</div></div><span style="font:500 12.5px/1 'JetBrains Mono',monospace">5 050 ₸</span><span style="padding:9px 12px;background:#FFD400;border-radius:4px;font:700 10.5px/1 'Archivo',sans-serif">ПОВТОР</span></div>
+                    <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid rgba(16,16,16,.14)"><div style="flex:1"><div style="font:700 12.5px/1.2 'Archivo',sans-serif">5 августа</div><div style="font:500 10px/1 'JetBrains Mono',monospace;color:#767676;margin-top:5px">2 ПОЗИЦИИ</div></div><span style="font:500 12.5px/1 'JetBrains Mono',monospace">3 700 ₸</span><span style="padding:9px 12px;border:1px solid rgba(16,16,16,.25);border-radius:4px;font:700 10.5px/1 'Archivo',sans-serif">ПОВТОР</span></div>
+                    <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid rgba(16,16,16,.14);border-bottom:1px solid rgba(16,16,16,.14)"><div style="flex:1"><div style="font:700 12.5px/1.2 'Archivo',sans-serif">28 июля</div><div style="font:500 10px/1 'JetBrains Mono',monospace;color:#767676;margin-top:5px">КОМБО НА ДВОИХ</div></div><span style="font:500 12.5px/1 'JetBrains Mono',monospace">7 200 ₸</span><span style="padding:9px 12px;border:1px solid rgba(16,16,16,.25);border-radius:4px;font:700 10.5px/1 'Archivo',sans-serif">ПОВТОР</span></div>
+                  </div>
+
+                  <div style="padding:14px 16px 6px;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.08em;color:#767676">ИСТОРИЯ БАЛЛОВ</div>
+                  <div style="padding:0 16px">
+                    <div style="display:flex;justify-content:space-between;padding:10px 0;border-top:1px solid rgba(16,16,16,.14);font:500 12px/1 'Archivo',sans-serif"><span>Начислено · 12 авг</span><span style="font-family:'JetBrains Mono'">+353</span></div>
+                    <div style="display:flex;justify-content:space-between;padding:10px 0;border-top:1px solid rgba(16,16,16,.14);font:500 12px/1 'Archivo',sans-serif"><span>Списано · 5 авг</span><span style="font-family:'JetBrains Mono'">−500</span></div>
+                  </div>
+                </div>
+                <div style="flex:none;display:flex;border-top:1px solid #101010;padding:8px 0 13px">
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#767676"><div style="display:grid;grid-template-columns:6px 6px;gap:3px"><i style="background:#767676;height:6px"></i><i style="background:#767676;height:6px"></i><i style="background:#767676;height:6px"></i><i style="background:#767676;height:6px"></i></div><span style="font:500 9.5px/1 'Archivo',sans-serif;letter-spacing:.04em">МЕНЮ</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#767676"><div style="width:15px;height:12px;border:1.6px solid #767676;margin-top:3px"></div><span style="font:500 9.5px/1 'Archivo',sans-serif;letter-spacing:.04em">КОРЗИНА</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#767676"><div style="display:flex;flex-direction:column;gap:2.5px;width:15px;margin-top:4px"><i style="height:1.6px;background:#767676"></i><i style="height:1.6px;background:#767676"></i><i style="height:1.6px;background:#767676"></i></div><span style="font:500 9.5px/1 'Archivo',sans-serif;letter-spacing:.04em">ЗАКАЗЫ</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px"><div style="width:14px;height:14px;border:1.6px solid #101010;border-radius:999px;margin-top:1px"></div><span style="font:700 9.5px/1 'Archivo',sans-serif;letter-spacing:.04em">ПРОФИЛЬ</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">6. Профиль</div>
+        </div>
+
+        <div class="cell">
+          <div class="ph" style="background:#fff">
+            <div class="scr" style="font-family:'Archivo',sans-serif;color:#101010">
+              <div class="sb" style="background:#fff"><span>21:04</span><b>▮▮▮</b></div>
+              <div class="bd">
+                <div style="flex:none;padding:4px 16px 10px;border-bottom:1px solid #101010">
+                  <div style="display:flex;align-items:center;justify-content:space-between">
+                    <div style="font:700 13px/1 'Archivo',sans-serif">САТПАЕВА, 38А <span style="font-weight:500;color:#767676">▾</span></div>
+                    <div style="font:500 11px/1 'JetBrains Mono',monospace;color:#767676">НЕТ СЕТИ</div>
+                  </div>
+                </div>
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 24px;text-align:center">
+                  <div style="width:56px;height:56px;border:2.5px solid #101010;display:flex;align-items:center;justify-content:center"><div style="width:22px;height:2.5px;background:#101010"></div></div>
+                  <div style="font:700 20px/1.2 'Archivo',sans-serif;margin-top:22px">МЕНЮ НЕ ЗАГРУЗИЛОСЬ</div>
+                  <div style="font:400 12.5px/1.55 'Archivo',sans-serif;color:#5A5A5A;margin-top:10px">Не получается связаться с сервером. Проверьте интернет и попробуйте ещё раз — корзина сохранена.</div>
+                  <div style="width:100%;margin-top:20px;text-align:center;padding:17px 0;background:#FFD400;border-radius:4px;font:700 13.5px/1 'Archivo',sans-serif;letter-spacing:.03em">ПОВТОРИТЬ</div>
+                  <div style="width:100%;margin-top:8px;text-align:center;padding:16px 0;border:1px solid #101010;border-radius:4px;font:700 12.5px/1 'Archivo',sans-serif;letter-spacing:.03em">ПОЗВОНИТЬ В ЗАВЕДЕНИЕ</div>
+                  <div style="font:500 10px/1 'JetBrains Mono',monospace;color:#767676;margin-top:14px">ПОПЫТКА 2 · КОД 503</div>
+                </div>
+                <div style="flex:none;display:flex;border-top:1px solid #101010;padding:8px 0 13px">
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px"><div style="display:grid;grid-template-columns:6px 6px;gap:3px"><i style="background:#101010;height:6px"></i><i style="background:#101010;height:6px"></i><i style="background:#101010;height:6px"></i><i style="background:#101010;height:6px"></i></div><span style="font:700 9.5px/1 'Archivo',sans-serif;letter-spacing:.04em">МЕНЮ</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#767676"><div style="width:15px;height:12px;border:1.6px solid #767676;margin-top:3px"></div><span style="font:500 9.5px/1 'Archivo',sans-serif;letter-spacing:.04em">КОРЗИНА</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#767676"><div style="display:flex;flex-direction:column;gap:2.5px;width:15px;margin-top:4px"><i style="height:1.6px;background:#767676"></i><i style="height:1.6px;background:#767676"></i><i style="height:1.6px;background:#767676"></i></div><span style="font:500 9.5px/1 'Archivo',sans-serif;letter-spacing:.04em">ЗАКАЗЫ</span></div>
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;color:#767676"><div style="width:14px;height:14px;border:1.6px solid #767676;border-radius:999px;margin-top:1px"></div><span style="font:500 9.5px/1 'Archivo',sans-serif;letter-spacing:.04em">ПРОФИЛЬ</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="slab">7. Состояние: ошибка сети</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <p class="dv-next">Дальше можно: «собери кликабельный прототип на <a class="dv-oid" href="#1c">1c</a>» · «возьми <a class="dv-oid" href="#1a">1a</a>, но каталог как в <a class="dv-oid" href="#1b">1b</a>» · «в <a class="dv-oid" href="#1d">1d</a> попробуй другой сериф» · «нужны ещё направления»</p>
+</section>
+</x-dc>
+</body>
+</html>

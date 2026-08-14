@@ -148,16 +148,56 @@ export interface OrdersResponse {
   orders: AdminOrder[];
 }
 
+/** Тип акции определяет, какие поля условия и эффекта имеют смысл */
+export type PromotionKind =
+  | 'GIFT_FOR_QTY'
+  | 'GIFT_FOR_SUM'
+  | 'PERCENT_OFF'
+  | 'FIXED_OFF'
+  | 'FREE_DELIVERY';
+
+export const PROMOTION_KINDS: { value: PromotionKind; label: string; hint: string }[] = [
+  {
+    value: 'GIFT_FOR_QTY',
+    label: 'N товаров → подарок',
+    hint: 'Классическая «2+1»: сколько-то позиций из категории дают подарок',
+  },
+  {
+    value: 'GIFT_FOR_SUM',
+    label: 'Сумма → подарок',
+    hint: 'Заказ от указанной суммы даёт подарок',
+  },
+  {
+    value: 'PERCENT_OFF',
+    label: 'Скидка %',
+    hint: 'Процент от суммы товаров. Ставьте потолок, иначе крупный заказ съест выручку',
+  },
+  { value: 'FIXED_OFF', label: 'Скидка ₸', hint: 'Фиксированная сумма скидки' },
+  {
+    value: 'FREE_DELIVERY',
+    label: 'Бесплатная доставка',
+    hint: 'Обнуляет стоимость доставки; на самовывозе не применяется',
+  },
+];
+
 export interface Promotion {
   id: string;
   name: string;
+  kind: PromotionKind;
   code: string | null;
   isActive: boolean;
-  conditionCategoryId: string;
+  conditionCategoryId: string | null;
   conditionQty: number;
-  giftProductId: string;
+  minOrderSum: number | null;
+  giftProductId: string | null;
   giftQty: number;
+  discountValue: number;
+  maxDiscount: number | null;
   repeatPerCart: boolean;
+  firstOrderOnly: boolean;
+  perCustomerLimit: number | null;
+  totalLimit: number | null;
+  orderType: 'DELIVERY' | 'PICKUP' | null;
   conditionCategoryName: string;
   giftProductName: string;
 }
