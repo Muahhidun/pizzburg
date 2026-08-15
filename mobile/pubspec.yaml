@@ -62,6 +62,9 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  shaders:
+    - shaders/liquid_glass.frag
+
   assets:
     - assets/logo.jpg
 

@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'liquid_glass.dart';
+
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
@@ -11,11 +13,8 @@ class NavItem {
   final IconData activeIcon;
   final String label;
 
-  const NavItem({
-    required this.icon,
-    IconData? activeIcon,
-    required this.label,
-  }) : activeIcon = activeIcon ?? icon;
+  const NavItem({required this.icon, IconData? activeIcon, required this.label})
+    : activeIcon = activeIcon ?? icon;
 }
 
 /// Плавающий стеклянный таб-бар.
@@ -96,98 +95,151 @@ class _GlassNavBarState extends State<GlassNavBar> {
       ),
       child: ClipRRect(
         borderRadius: R.pill,
+        // Два слоя, а не один составной фильтр: размытие отвечает за
+        // читаемость подписей, преломление — за то, чтобы материал читался
+        // стеклом. Составить их в один ImageFilter нельзя, см. LiquidGlass.
         child: BackdropFilter(
-          // Размытие делает бар стеклом, а не полупрозрачной плашкой:
-          // без него просвечивающий текст читается сквозь панель и мешает.
-          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: R.pill,
-              // Сверху стекло светлее, снизу темнее — так падает свет,
-              // а ровная заливка выдаёт плоскую плашку.
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  c.surface.withValues(alpha: 0.80),
-                  c.surface.withValues(alpha: 0.60),
-                ],
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: LayoutBuilder(
+            builder: (context, outer) => _Refracted(
+              filter: LiquidGlass.filter(
+                center: _lensCenter(outer.maxWidth),
+                half: _lensHalf,
+                aspect: outer.maxWidth / math.max(outer.maxHeight, 1),
+                // Подобрано на симуляторе: на 0.09 преломления не видно
+                // вовсе, на 0.30 фон заметно коробит.
+                strength: _dragX != null ? 0.22 : 0.17,
               ),
-              border: Border.all(
-                color: c.surface.withValues(alpha: 0.7),
-                width: 0.8,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: c.ink.withValues(alpha: 0.12),
-                  blurRadius: 28,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final width = constraints.maxWidth;
-                final slot = width / widget.items.length;
-                final dragging = _dragX != null;
-
-                // Насколько капсула отошла от центра своей вкладки: на
-                // полпути между вкладками она растягивается, как капля.
-                final centerOf = (_activeIndex + 0.5) * slot;
-                final offCenter = dragging
-                    ? ((_dragX! - centerOf).abs() / (slot / 2)).clamp(0.0, 1.0)
-                    : 0.0;
-                final pillWidth = slot * (1 + 0.14 * offCenter);
-
-                final pillLeft = dragging
-                    ? (_dragX! - pillWidth / 2).clamp(0.0, width - pillWidth)
-                    : slot * widget.index;
-
-                return Listener(
-                  // opaque, а не deferToChild: сами вкладки для нажатий
-                  // прозрачны, и без этого палец, попавший мимо капсулы,
-                  // не доходил бы до бара вовсе — тап просто не срабатывал.
-                  behavior: HitTestBehavior.opaque,
-                  onPointerDown: (e) => _updateFrom(e.localPosition.dx, width),
-                  onPointerMove: (e) => _updateFrom(e.localPosition.dx, width),
-                  onPointerUp: (_) => _commit(),
-                  onPointerCancel: (_) => setState(() => _dragX = null),
-                  child: Stack(
-                    children: [
-                      AnimatedPositioned(
-                        // Пока палец на баре — никакой анимации: капсула
-                        // обязана быть ровно под пальцем, а не догонять его.
-                        duration: dragging ? Duration.zero : Motion.base,
-                        curve: Motion.benefit,
-                        left: pillLeft,
-                        top: 6,
-                        bottom: 6,
-                        width: dragging ? pillWidth : slot,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
-                          child: _Pill(pressed: dragging),
-                        ),
-                      ),
-                      Row(
-                        children: [
-                          for (var i = 0; i < widget.items.length; i++)
-                            Expanded(
-                              child: _Tab(
-                                item: widget.items[i],
-                                active: _activeIndex == i,
-                              ),
-                            ),
-                        ],
-                      ),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: R.pill,
+                  // Сверху стекло светлее, снизу темнее — так падает свет,
+                  // а ровная заливка выдаёт плоскую плашку.
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      c.surface.withValues(alpha: 0.80),
+                      c.surface.withValues(alpha: 0.60),
                     ],
                   ),
-                );
-              },
+                  border: Border.all(
+                    color: c.surface.withValues(alpha: 0.7),
+                    width: 0.8,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: c.ink.withValues(alpha: 0.12),
+                      blurRadius: 28,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final width = constraints.maxWidth;
+                    final slot = width / widget.items.length;
+                    final dragging = _dragX != null;
+
+                    // Насколько капсула отошла от центра своей вкладки: на
+                    // полпути между вкладками она растягивается, как капля.
+                    final centerOf = (_activeIndex + 0.5) * slot;
+                    final offCenter = dragging
+                        ? ((_dragX! - centerOf).abs() / (slot / 2)).clamp(
+                            0.0,
+                            1.0,
+                          )
+                        : 0.0;
+                    final pillWidth = slot * (1 + 0.14 * offCenter);
+
+                    final pillLeft = dragging
+                        ? (_dragX! - pillWidth / 2).clamp(
+                            0.0,
+                            width - pillWidth,
+                          )
+                        : slot * widget.index;
+
+                    return Listener(
+                      // opaque, а не deferToChild: сами вкладки для нажатий
+                      // прозрачны, и без этого палец, попавший мимо капсулы,
+                      // не доходил бы до бара вовсе — тап просто не срабатывал.
+                      behavior: HitTestBehavior.opaque,
+                      onPointerDown: (e) =>
+                          _updateFrom(e.localPosition.dx, width),
+                      onPointerMove: (e) =>
+                          _updateFrom(e.localPosition.dx, width),
+                      onPointerUp: (_) => _commit(),
+                      onPointerCancel: (_) => setState(() => _dragX = null),
+                      child: Stack(
+                        children: [
+                          AnimatedPositioned(
+                            // Пока палец на баре — никакой анимации: капсула
+                            // обязана быть ровно под пальцем, а не догонять его.
+                            duration: dragging ? Duration.zero : Motion.base,
+                            curve: Motion.benefit,
+                            left: pillLeft,
+                            top: 6,
+                            bottom: 6,
+                            width: dragging ? pillWidth : slot,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                              ),
+                              child: _Pill(pressed: dragging),
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              for (var i = 0; i < widget.items.length; i++)
+                                Expanded(
+                                  child: _Tab(
+                                    item: widget.items[i],
+                                    active: _activeIndex == i,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
             ),
           ),
         ),
       ),
     );
+  }
+
+  /// Центр линзы в долях бара. Пока палец ведут — под пальцем, иначе на
+  /// выбранной вкладке.
+  Offset _lensCenter(double width) {
+    final slot = 1 / widget.items.length;
+    final x = _dragX != null
+        ? (_dragX! / math.max(width, 1)).clamp(slot / 2, 1 - slot / 2)
+        : (widget.index + 0.5) * slot;
+    return Offset(x.toDouble(), 0.5);
+  }
+
+  /// Полуразмеры линзы в долях бара: по ширине — вкладка, по высоте —
+  /// почти весь бар, с полем под кромку.
+  Size get _lensHalf => Size(0.46 / widget.items.length, 0.40);
+}
+
+/// Слой преломления. Без шейдера (Skia, веб) просто пропускает ребёнка
+/// дальше: стекло — украшение, а не условие работы бара.
+class _Refracted extends StatelessWidget {
+  final ImageFilter? filter;
+  final Widget child;
+
+  const _Refracted({required this.filter, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final f = filter;
+    if (f == null) return child;
+    return BackdropFilter(filter: f, child: child);
   }
 }
 
@@ -205,18 +257,31 @@ class _Pill extends StatelessWidget {
       curve: Motion.change,
       decoration: BoxDecoration(
         borderRadius: R.pill,
+        // Преломление видно только там, где под стеклом есть что
+        // преломлять. Над белым списком физика не поможет, поэтому форму
+        // капли держат свет и кромка: блик сверху-слева, тень снизу-справа
+        // и светлый контур. Так она читается стеклянной на любом фоне.
         gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
           colors: [
-            c.accent.withValues(alpha: pressed ? 0.32 : 0.22),
-            c.accent.withValues(alpha: pressed ? 0.18 : 0.12),
+            c.surface.withValues(alpha: pressed ? 0.72 : 0.55),
+            c.accent.withValues(alpha: pressed ? 0.26 : 0.18),
+            c.accent.withValues(alpha: pressed ? 0.12 : 0.08),
           ],
+          stops: const [0.0, 0.55, 1.0],
         ),
         border: Border.all(
-          color: c.accent.withValues(alpha: pressed ? 0.38 : 0.20),
-          width: 0.8,
+          color: c.surface.withValues(alpha: pressed ? 0.95 : 0.8),
+          width: 1,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: c.ink.withValues(alpha: pressed ? 0.14 : 0.10),
+            blurRadius: pressed ? 14 : 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
     );
   }
