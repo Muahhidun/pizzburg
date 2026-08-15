@@ -60,6 +60,9 @@ class _GlassNavBarState extends State<GlassNavBar> {
   /// а не выбранная. Иначе капсула уезжает, а иконки не отзываются.
   int _hoverIndex = 0;
 
+  /// Линза остаётся в дереве, пока догорает её фейд после отпускания
+  bool _lensShown = false;
+
   int get _activeIndex => _dragX != null ? _hoverIndex : widget.index;
 
   void _updateFrom(double dx, double width) {
@@ -70,6 +73,7 @@ class _GlassNavBarState extends State<GlassNavBar> {
     setState(() {
       _dragX = dx.clamp(0.0, width);
       _hoverIndex = index;
+      _lensShown = true;
     });
   }
 
@@ -180,25 +184,33 @@ class _GlassNavBarState extends State<GlassNavBar> {
                         height: Gap.navBar,
                         child: Stack(
                           children: [
-                            // Без шейдера (Skia, веб) — прежняя цветная
-                            // капсула ВНУТРИ бара, под иконками
-                            if (!lensReady)
-                              AnimatedPositioned(
-                                duration: dragging
-                                    ? Duration.zero
-                                    : Motion.base,
-                                curve: Motion.benefit,
-                                left: pillLeft,
-                                top: 6,
-                                bottom: 6,
-                                width: dragging ? pillWidth : slot,
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                  ),
+                            // Плашка активной вкладки — состояние ПОКОЯ:
+                            // стекло существует только под пальцем, как в
+                            // системном баре. Без шейдера плашка же ездит
+                            // за пальцем — фолбэк для Skia и веба.
+                            AnimatedPositioned(
+                              duration: dragging ? Duration.zero : Motion.base,
+                              curve: Motion.benefit,
+                              left: (dragging && !lensReady)
+                                  ? pillLeft
+                                  : slot * widget.index,
+                              top: 6,
+                              bottom: 6,
+                              width: (dragging && !lensReady)
+                                  ? pillWidth
+                                  : slot,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                ),
+                                child: AnimatedOpacity(
+                                  // Под пальцем плашку сменяет стекло
+                                  duration: Motion.fast,
+                                  opacity: dragging && lensReady ? 0 : 1,
                                   child: _Pill(pressed: dragging),
                                 ),
                               ),
+                            ),
                             Row(
                               children: [
                                 for (var i = 0; i < widget.items.length; i++)
@@ -227,10 +239,11 @@ class _GlassNavBarState extends State<GlassNavBar> {
                 // Ширина линзы во время жеста не меняется намеренно: у
                 // Flutter известная утечка при анимации размера шейдерных
                 // фигур (flutter#138627), двигать позицию — безопасно.
-                if (lensReady)
+                if (lensReady && (dragging || _lensShown))
                   AnimatedPositioned(
                     // Пока палец на баре — никакой анимации: линза обязана
-                    // быть ровно под пальцем, а не догонять его.
+                    // быть ровно под пальцем, а не догонять его. После
+                    // отпускания она доезжает к выбранной вкладке, догорая.
                     duration: dragging ? Duration.zero : Motion.base,
                     curve: Motion.benefit,
                     // Пилюля в полтора слота: при почти квадратной линзе
@@ -245,25 +258,38 @@ class _GlassNavBarState extends State<GlassNavBar> {
                     width: slot * 1.5,
                     height: lensHeight,
                     child: IgnorePointer(
-                      child: LiquidGlass.withOwnLayer(
-                        shape: LiquidRoundedSuperellipse(
-                          borderRadius: lensHeight / 2,
+                      child: AnimatedOpacity(
+                        // Стекло рождается под пальцем и умирает при
+                        // отпускании — в покое остаётся плоская плашка
+                        duration: Motion.fast,
+                        opacity: dragging ? 1 : 0,
+                        onEnd: () {
+                          if (_dragX == null && mounted) {
+                            setState(() => _lensShown = false);
+                          }
+                        },
+                        child: LiquidGlass.withOwnLayer(
+                          shape: LiquidRoundedSuperellipse(
+                            borderRadius: lensHeight / 2,
+                          ),
+                          settings: const LiquidGlassSettings(
+                            // Внутри линзы контент остаётся резким
+                            blur: 0,
+                            // Толще и преломление сильнее, чем раньше:
+                            // стекло теперь видно только в движении, и
+                            // деформация иконок — весь его смысл
+                            thickness: 30,
+                            refractiveIndex: 1.3,
+                            // Едва заметная дымка: на ровном белом
+                            // преломлению не за что зацепиться
+                            glassColor: Color(0x0D000000),
+                            lightIntensity: 0.7,
+                            chromaticAberration: 0.5,
+                            // Дефолт пакета 1.5 перекрашивал бы иконки
+                            saturation: 1.0,
+                          ),
+                          child: SizedBox.expand(),
                         ),
-                        settings: LiquidGlassSettings(
-                          // Внутри линзы контент остаётся резким — мылит
-                          // только сама панель под ней
-                          blur: 0,
-                          thickness: dragging ? 26 : 20,
-                          // Едва заметная дымка: на ровном белом преломлению
-                          // не за что зацепиться, и без неё линза между
-                          // подписями пропадает целиком
-                          glassColor: const Color(0x0D000000),
-                          lightIntensity: 0.7,
-                          chromaticAberration: 0.5,
-                          // Дефолт пакета 1.5 перекрашивал бы иконки
-                          saturation: 1.0,
-                        ),
-                        child: const SizedBox.expand(),
                       ),
                     ),
                   ),
@@ -276,7 +302,10 @@ class _GlassNavBarState extends State<GlassNavBar> {
   }
 }
 
-/// Сама «капля»: тоже стекло, а не заливка — со светом сверху и контуром
+/// Плашка активной вкладки — состояние покоя.
+///
+/// Намеренно плоская и тихая: стеклом бар говорит только под пальцем,
+/// а два стекла разом — в покое и в жесте — превращают материал в шум.
 class _Pill extends StatelessWidget {
   final bool pressed;
 
@@ -290,31 +319,7 @@ class _Pill extends StatelessWidget {
       curve: Motion.change,
       decoration: BoxDecoration(
         borderRadius: R.pill,
-        // Преломление видно только там, где под стеклом есть что
-        // преломлять. Над белым списком физика не поможет, поэтому форму
-        // капли держат свет и кромка: блик сверху-слева, тень снизу-справа
-        // и светлый контур. Так она читается стеклянной на любом фоне.
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            c.surface.withValues(alpha: pressed ? 0.72 : 0.55),
-            c.accent.withValues(alpha: pressed ? 0.26 : 0.18),
-            c.accent.withValues(alpha: pressed ? 0.12 : 0.08),
-          ],
-          stops: const [0.0, 0.55, 1.0],
-        ),
-        border: Border.all(
-          color: c.surface.withValues(alpha: pressed ? 0.95 : 0.8),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: c.ink.withValues(alpha: pressed ? 0.14 : 0.10),
-            blurRadius: pressed ? 14 : 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
+        color: c.ink.withValues(alpha: pressed ? 0.09 : 0.055),
       ),
     );
   }
