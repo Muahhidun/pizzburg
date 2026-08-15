@@ -12,6 +12,7 @@ import 'services/push_notifications.dart';
 import 'screens/messages_screen.dart';
 import 'screens/order_screen.dart';
 import 'screens/legal_screen.dart';
+import 'screens/splash_screen.dart';
 import 'api/models.dart';
 import 'theme/app_theme.dart';
 import 'utils/haptics.dart';
@@ -123,18 +124,69 @@ class PizzBurgApp extends StatelessWidget {
             statusBarIconBrightness: Brightness.dark,
             statusBarColor: Colors.transparent,
           ),
-          child: ColoredBox(
-            color: const Color(0xFFF2F2F3),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 460),
-                child: child ?? const SizedBox.shrink(),
+          // Заставка лежит выше телефонной колонки, а не внутри неё:
+          // ограничение в 460 pt прижимает контент к центру, а чёрный фон
+          // заставки должен закрывать окно целиком.
+          child: _ColdStart(
+            child: ColoredBox(
+              color: const Color(0xFFF2F2F3),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 460),
+                  child: child ?? const SizedBox.shrink(),
+                ),
               ),
             ),
           ),
         ),
         home: const _LegalGate(child: AppShell()),
       ),
+    );
+  }
+}
+
+/// Держит заставку поверх приложения на холодном старте и гасит её.
+///
+/// Приложение под ней уже живое: к моменту первого кадра `main` дождался
+/// восстановления сессии и настроек, поэтому заставка ничего не ждёт — она
+/// доигрывает анимацию и уходит. Состояние живёт в дереве `builder`, куда
+/// навигация не достаёт, так что на переходах между экранами заставка не
+/// возвращается.
+class _ColdStart extends StatefulWidget {
+  final Widget child;
+  const _ColdStart({required this.child});
+
+  @override
+  State<_ColdStart> createState() => _ColdStartState();
+}
+
+enum _SplashStage { playing, fading, gone }
+
+class _ColdStartState extends State<_ColdStart> {
+  var _stage = _SplashStage.playing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        widget.child,
+        if (_stage != _SplashStage.gone)
+          Positioned.fill(
+            child: IgnorePointer(
+              ignoring: _stage == _SplashStage.fading,
+              child: AnimatedOpacity(
+                opacity: _stage == _SplashStage.playing ? 1 : 0,
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeOut,
+                onEnd: () => setState(() => _stage = _SplashStage.gone),
+                child: SplashScreen(
+                  onDone: () => setState(() => _stage = _SplashStage.fading),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

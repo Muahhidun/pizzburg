@@ -51,6 +51,40 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.1
+  flutter_native_splash: ^2.4.1
+
+# Иконки и нативный сплеш собираются генераторами из исходников в
+# assets/branding. Сгенерированное коммитим, но перезапуск генераторов
+# затирает ручные правки — список в docs/BRANDING_ASSETS.md.
+flutter_launcher_icons:
+  image_path: "assets/branding/icon-1024.png"
+  android: "ic_launcher"
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: "assets/branding/adaptive-foreground.png"
+  adaptive_icon_monochrome: "assets/branding/adaptive-monochrome.png"
+  # Исходник уже нарисован под холст 108 dp с безопасной зоной 72 dp.
+  # Инсет генератора по умолчанию (16%) поджал бы знак второй раз.
+  adaptive_icon_foreground_inset: 0
+  ios: true
+  remove_alpha_ios: true
+
+flutter_native_splash:
+  color: "#000000"
+  image: "assets/branding/splash-logo.png"
+  color_dark: "#000000"
+  image_dark: "assets/branding/splash-logo-dark.png"
+  android_12:
+    color: "#000000"
+    image: "assets/branding/android12-icon.png"
+    icon_background_color: "#000000"
+  android: true
+  ios: true
+  # fullscreen намеренно не включаем: на iOS он дописывает в Info.plist
+  # UIStatusBarHidden и UIViewControllerBasedStatusBarAppearance=false,
+  # а это гасит статус-бар не только на сплеше, но и во всём приложении
+  # и отбирает у Flutter управление стилем иконок — на нём держится
+  # переключение тёмных и светлых иконок в main.dart.
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -65,6 +99,7 @@ flutter:
 
   assets:
     - assets/logo.jpg
+    - assets/branding/
 
   # Шрифты направления «Сигнал» (design_handoff_pizzburg_app).
   # Оба содержат кириллицу и символ тенге (₸) — проверено по cmap.

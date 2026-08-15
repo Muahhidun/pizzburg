@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#000000</color>
+    <!-- Акцент уведомлений: Android красит им силуэт в шторке -->
+    <color name="pizzburg_orange">#F7931E</color>
+</resources>
