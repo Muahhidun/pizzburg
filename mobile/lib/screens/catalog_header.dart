@@ -52,15 +52,11 @@ class CatalogHeader extends StatelessWidget {
       ),
       child: Container(
         width: double.infinity,
-        // Хедер заходит ПОД статус-бар, поэтому сверху добавляем его высоту.
-        // Иначе над чёрным блоком остаётся белая полоса с часами — ровно то,
-        // что бросается в глаза на устройстве.
-        padding: EdgeInsets.fromLTRB(
-          Gap.screen,
-          MediaQuery.of(context).padding.top + 10,
-          Gap.screen,
-          26,
-        ),
+        // Высоту статус-бара сверху больше не добавляем: её занимает
+        // отдельная закреплённая чернильная полоса перед хедером. Она же
+        // держит статус-бар тёмным, когда хедер уже уехал вверх, — иначе
+        // светлые часы оказались бы на белом списке.
+        padding: const EdgeInsets.fromLTRB(Gap.screen, 10, Gap.screen, 26),
         decoration: BoxDecoration(color: c.ink, borderRadius: R.headerBottom),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

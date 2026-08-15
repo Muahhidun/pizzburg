@@ -1048,7 +1048,7 @@ class _AddressPickerState extends State<_AddressPicker> {
               widget.house.text.trim().isEmpty
                   ? 'Улица есть в справочнике города'
                   : 'Адрес есть в справочнике города',
-              style: TextStyle(fontSize: 11.5, color: c.benefit),
+              style: TextStyle(fontSize: 11.5, color: c.accent),
             ),
           )
         else

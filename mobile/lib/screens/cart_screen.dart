@@ -452,7 +452,7 @@ class _GiftRow extends StatelessWidget {
               color: c.benefitSoft,
               borderRadius: R.thumbCart,
             ),
-            child: Icon(Icons.card_giftcard, size: 22, color: c.benefit),
+            child: Icon(Icons.card_giftcard, size: 22, color: c.onBenefit),
           ),
           const SizedBox(width: Gap.md),
           Expanded(
@@ -471,7 +471,7 @@ class _GiftRow extends StatelessWidget {
                   '0 ₸',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontSize: 14.5,
-                    color: c.benefit,
+                    color: c.accent,
                   ),
                 ),
               ],
@@ -488,7 +488,7 @@ class _GiftRow extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: c.benefit,
+                color: c.onBenefit,
               ),
             ),
           ),
@@ -585,7 +585,7 @@ class _PromoField extends StatelessWidget {
             padding: const EdgeInsets.only(top: Gap.sm, left: Gap.xs),
             child: Text(
               'Промокод $applied применён',
-              style: TextStyle(fontSize: 13, color: c.benefit),
+              style: TextStyle(fontSize: 13, color: c.accent),
             ),
           ),
         if (error != null)
@@ -776,8 +776,8 @@ class _Totals extends StatelessWidget {
           _row(
             'Подарок по акции',
             formatTenge(preview.promoDiscount),
-            line(c.benefit),
-            line(c.benefit),
+            line(c.accent),
+            line(c.accent),
           ),
         if (points > 0)
           _row(

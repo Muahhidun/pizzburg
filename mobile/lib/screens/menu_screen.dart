@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
@@ -23,7 +24,11 @@ import 'product_screen.dart';
 /// человек видит всё меню и может листать, а чипсы лишь подсказывают, где
 /// он сейчас. Хендофф прямо рекомендует этот вариант.
 class MenuScreen extends StatefulWidget {
-  const MenuScreen({super.key});
+  /// Прокрутка каталога. Владелец — оболочка приложения: ей нужно уметь
+  /// вернуть список наверх по тапу на активную вкладку и по статус-бару.
+  final ScrollController? controller;
+
+  const MenuScreen({super.key, this.controller});
 
   @override
   State<MenuScreen> createState() => _MenuScreenState();
@@ -74,12 +79,20 @@ class _ProductRowItem extends _Row {
   const _ProductRowItem(this.categoryId, this.product);
 }
 
+/// Высота закреплённой строки категорий: поля по 12 вокруг тап-зоны 44.
+const _chipsExtent = Hit.min + Gap.md * 2;
 const _categoryTitleHeight = 58.0;
 const _productRowHeight = 101.0;
 
 class _MenuScreenState extends State<MenuScreen> {
   late Future<_CatalogData> _future;
-  final _listController = ScrollController();
+
+  /// Контроллер приходит от оболочки, чтобы она умела возвращать каталог
+  /// наверх по тапу на вкладку и по статус-бару. Свой заводим только когда
+  /// экран открыт сам по себе — например в тестах.
+  ScrollController? _ownedController;
+  ScrollController get _listController =>
+      widget.controller ?? (_ownedController ??= ScrollController());
 
   /// На сколько список оттянут вниз за свой верх, px.
   ///
@@ -90,6 +103,15 @@ class _MenuScreenState extends State<MenuScreen> {
   /// список прозрачен, и чёрное просвечивало бы между строк.
   final _overscroll = ValueNotifier<double>(0);
   final _chipsController = ScrollController();
+
+  /// Маркер начала списка товаров и его позиция в прокрутке.
+  ///
+  /// Смещения категорий копятся от нуля, а сам список начинается ниже
+  /// шапки, режима и поиска. Высота этого блока не константа — она зависит
+  /// от блока повтора и карточки активного заказа, — поэтому измеряем её
+  /// по факту, а не считаем.
+  final _listAnchorKey = GlobalKey();
+  double _listTop = 0;
 
   final List<_Row> _rows = [];
   final Map<String, double> _offsets = {};
@@ -112,7 +134,9 @@ class _MenuScreenState extends State<MenuScreen> {
   @override
   void dispose() {
     _overscroll.dispose();
-    _listController.dispose();
+    // Чужой контроллер не наш, его закроет оболочка
+    _listController.removeListener(_onScroll);
+    _ownedController?.dispose();
     _chipsController.dispose();
     _search.dispose();
     super.dispose();
@@ -203,10 +227,25 @@ class _MenuScreenState extends State<MenuScreen> {
     _activeCategory = menu.categories.isEmpty ? null : menu.categories.first.id;
   }
 
+  /// Сколько сверху занято закреплёнными слоями: под ними список не виден,
+  /// поэтому и заголовок категории должен вставать ровно под ними.
+  double _pinnedTop() =>
+      MediaQuery.paddingOf(context).top + (_query.trim().isEmpty ? _chipsExtent : 0);
+
+  void _measureListTop() {
+    final box = _listAnchorKey.currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return;
+    final viewport = RenderAbstractViewport.maybeOf(box);
+    if (viewport == null) return;
+    final top = viewport.getOffsetToReveal(box, 0).offset;
+    if (top.isFinite && (top - _listTop).abs() > 0.5) _listTop = top;
+  }
+
   void _onScroll() {
     _overscroll.value = math.max(0, -_listController.offset);
     if (_programmaticScroll || _categories.isEmpty) return;
-    final offset = _listController.offset + 1;
+    _measureListTop();
+    final offset = _listController.offset - _listTop + _pinnedTop() + 1;
     var current = _categories.first.id;
     for (final category in _categories) {
       if ((_offsets[category.id] ?? 0) <= offset) {
@@ -239,8 +278,10 @@ class _MenuScreenState extends State<MenuScreen> {
       _programmaticScroll = true;
     });
     _scrollChipsTo(categoryId);
+    _measureListTop();
     await _listController.animateTo(
-      offset.clamp(0.0, _listController.position.maxScrollExtent),
+      (_listTop + offset - _pinnedTop())
+          .clamp(0.0, _listController.position.maxScrollExtent),
       duration: Motion.page,
       curve: Motion.enter,
     );
@@ -320,6 +361,14 @@ class _MenuScreenState extends State<MenuScreen> {
                 CustomScrollView(
                   controller: _listController,
                   slivers: [
+                    // Статус-бар остаётся на чернилах и когда хедер уехал
+                    SliverPersistentHeader(
+                      pinned: true,
+                      delegate: SolidStripHeader(
+                        height: MediaQuery.paddingOf(context).top,
+                        color: colors.ink,
+                      ),
+                    ),
                     SliverToBoxAdapter(
                       child: CatalogHeader(
                         addressLabel: _addressLabel(data),
@@ -403,16 +452,25 @@ class _MenuScreenState extends State<MenuScreen> {
                     // Пока идёт поиск, категории не нужны: они относятся
                     // к полному меню, а не к результатам.
                     if (_query.trim().isEmpty)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: Gap.lg),
-                        child: CategoryChips(
-                          categories: _categories,
-                          activeId: _activeCategory,
-                          controller: _chipsController,
-                          onTap: _jumpToCategory,
+                      SliverPersistentHeader(
+                        pinned: true,
+                        delegate: PinnedChipsHeader(
+                          height: _chipsExtent,
+                          background: colors.surface,
+                          line: colors.line,
+                          child: CategoryChips(
+                            categories: _categories,
+                            activeId: _activeCategory,
+                            controller: _chipsController,
+                            onTap: _jumpToCategory,
+                          ),
                         ),
                       ),
+                    // Нулевой маркер начала списка: от него считаются якоря.
+                    // Высоту шапки заранее знать нельзя — она зависит от
+                    // блока повтора и активного заказа.
+                    SliverToBoxAdapter(
+                      child: SizedBox(key: _listAnchorKey, height: 0),
                     ),
                     if (_query.trim().isNotEmpty)
                       SliverPadding(
@@ -553,18 +611,6 @@ class _MenuScreenState extends State<MenuScreen> {
                     ),
                   ],
                 ),
-                Positioned(
-                  left: Gap.screen,
-                  right: Gap.screen,
-                  bottom: Gap.navBarSpace(context) - Gap.sm,
-                  child: Consumer<Cart>(
-                    builder: (_, cart, _) => FloatingCart(
-                      total: cart.subtotal,
-                      count: cart.count,
-                      onTap: _openCart,
-                    ),
-                  ),
-                ),
               ],
             ),
           );
@@ -586,11 +632,10 @@ class _MenuScreenState extends State<MenuScreen> {
     }
   }
 
-  /// Низ каталога занят двумя плавающими слоями: стеклянным баром и
-  /// кнопкой корзины над ним. Без этого запаса последняя позиция меню
-  /// оказывается под ними — и человек решает, что список кончился раньше.
-  double _bottomSpace(BuildContext context) =>
-      Gap.navBarSpace(context) + 64;
+  /// Низ каталога занят стеклянным баром. Отдельной кнопки корзины над ним
+  /// больше нет — сумма живёт внутри самого бара, — поэтому запас снизу
+  /// стал ровно на её высоту меньше.
+  double _bottomSpace(BuildContext context) => Gap.navBarSpace(context);
 
   void _openCart() {
     Haptics.tap();

@@ -12,11 +12,10 @@ abstract final class AppTheme {
   static const _text = 'Golos Text';
 
   static ThemeData build({
-    Color accent = const Color(0xFFF7941D),
-    Color benefit = const Color(0xFFE6007E),
+    Color accent = const Color(0xFF2B3BEE),
+    Color benefit = const Color(0xFFD6F84C),
   }) {
-    const base = AppColors();
-    final colors = base.copyWith(accent: accent, benefit: benefit);
+    final colors = AppColors(accent: accent, benefit: benefit);
 
     return ThemeData(
       useMaterial3: true,
@@ -143,6 +142,15 @@ abstract final class AppTheme {
 /// Общая ось: уходящий экран сдвигается и растворяется, приходящий
 /// приезжает с той же стороны. Дешевле и спокойнее, чем полноценный
 /// Material shared-axis, и не требует лишнего пакета.
+///
+/// Свой переход отменяет штатный купертиновский, а вместе с ним — и свайп
+/// от левого края «назад»: жест живёт не в анимации, а в детекторе внутри
+/// `CupertinoPageTransitionsBuilder`. Поэтому мы этот строитель всё-таки
+/// вызываем, но его собственную анимацию гасим постоянными значениями:
+/// при завершённой основной и погашенной вторичной он рисует ребёнка без
+/// сдвига, отдавая ровно то, ради чего нужен, — детектор. Тянут жестом при
+/// этом `route.controller`, то есть нашу же анимацию, и переход честно
+/// отматывается назад под пальцем.
 class _SharedAxisTransitions extends PageTransitionsBuilder {
   const _SharedAxisTransitions();
 
@@ -157,7 +165,7 @@ class _SharedAxisTransitions extends PageTransitionsBuilder {
     final enter = CurvedAnimation(parent: animation, curve: Motion.enter);
     final exit = CurvedAnimation(parent: secondaryAnimation, curve: Motion.change);
 
-    return FadeTransition(
+    final visual = FadeTransition(
       opacity: enter,
       child: SlideTransition(
         position: Tween(
@@ -173,11 +181,18 @@ class _SharedAxisTransitions extends PageTransitionsBuilder {
         ),
       ),
     );
+
+    return const CupertinoPageTransitionsBuilder().buildTransitions<T>(
+      route,
+      context,
+      kAlwaysCompleteAnimation,
+      kAlwaysDismissedAnimation,
+      visual,
+    );
   }
 }
 
 /// Быстрый доступ к палитре: `context.colors.accent`
 extension AppColorsX on BuildContext {
-  AppColors get colors =>
-      Theme.of(this).extension<AppColors>() ?? const AppColors();
+  AppColors get colors => Theme.of(this).extension<AppColors>() ?? AppColors();
 }

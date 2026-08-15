@@ -1,5 +1,8 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../api/models.dart';
+import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../utils/haptics.dart';
 
@@ -172,7 +175,10 @@ class StaggeredEntrance extends StatelessWidget {
       ),
       builder: (_, t, child) => Opacity(
         opacity: t,
-        child: Transform.translate(offset: Offset(0, 12 * (1 - t)), child: child),
+        child: Transform.translate(
+          offset: Offset(0, 12 * (1 - t)),
+          child: child,
+        ),
       ),
       child: child,
     );
@@ -221,6 +227,131 @@ class _ShimmerState extends State<Shimmer> with SingleTickerProviderStateMixin {
         child: child,
       ),
       child: widget.child,
+    );
+  }
+}
+
+/// Куда лететь товару при добавлении в корзину.
+///
+/// Ключ указывает на слот корзины внутри таб-бара. Плавающей плашки над
+/// баром больше нет, и без этого полёта добавление стало бы беззвучным:
+/// сумма меняется внизу, а взгляд остаётся на строке меню.
+class CartFlightTarget extends InheritedWidget {
+  final GlobalKey slotKey;
+
+  const CartFlightTarget({
+    super.key,
+    required this.slotKey,
+    required super.child,
+  });
+
+  static GlobalKey? of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<CartFlightTarget>()?.slotKey;
+
+  @override
+  bool updateShouldNotify(CartFlightTarget old) => old.slotKey != slotKey;
+}
+
+/// Запускает полёт из виджета, чей контекст передали, в слот корзины.
+///
+/// Источник берётся контекстом, а не ключом: кнопка «плюс» перестраивается
+/// на каждое изменение корзины, и `GlobalKey` пришлось бы хранить снаружи
+/// на каждую строку меню.
+void flyToCart(BuildContext source) {
+  final slotKey = CartFlightTarget.of(source);
+  final overlay = Overlay.maybeOf(source, rootOverlay: true);
+  if (slotKey == null || overlay == null) return;
+
+  final from = source.findRenderObject();
+  final to = slotKey.currentContext?.findRenderObject();
+  if (from is! RenderBox || to is! RenderBox) return;
+  if (!from.hasSize || !to.hasSize) return;
+
+  final start = from.localToGlobal(from.size.center(Offset.zero));
+  final end = to.localToGlobal(to.size.center(Offset.zero));
+
+  late OverlayEntry entry;
+  entry = OverlayEntry(
+    builder: (_) =>
+        _CartFlight(start: start, end: end, onDone: () => entry.remove()),
+  );
+  overlay.insert(entry);
+}
+
+class _CartFlight extends StatefulWidget {
+  final Offset start;
+  final Offset end;
+  final VoidCallback onDone;
+
+  const _CartFlight({
+    required this.start,
+    required this.end,
+    required this.onDone,
+  });
+
+  @override
+  State<_CartFlight> createState() => _CartFlightState();
+}
+
+class _CartFlightState extends State<_CartFlight>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: Motion.slow)
+        ..addStatusListener((s) {
+          if (s == AnimationStatus.completed) widget.onDone();
+        })
+        ..forward();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (_, _) {
+        final t = _c.value;
+        // Дуга, а не прямая: по прямой это читается как подсказка курсора,
+        // по дуге — как брошенный предмет. Управляющая точка поднята над
+        // серединой пути ровно настолько, чтобы бросок был заметен.
+        final control = Offset(
+          (widget.start.dx + widget.end.dx) / 2,
+          math.min(widget.start.dy, widget.end.dy) - 90,
+        );
+        final inv = 1 - t;
+        final p =
+            widget.start * (inv * inv) +
+            control * (2 * inv * t) +
+            widget.end * (t * t);
+        // К концу пути точка ужимается и гаснет: она не «приземляется», а
+        // втягивается в бар, где её подхватывает изменившаяся сумма.
+        final scale = 1 - 0.55 * Curves.easeIn.transform(t);
+        return Positioned(
+          left: p.dx - 13,
+          top: p.dy - 13,
+          child: IgnorePointer(
+            child: Opacity(
+              opacity: t < 0.82 ? 1 : (1 - t) / 0.18,
+              child: Transform.scale(
+                scale: scale,
+                child: Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    color: c.accent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.add, size: 15, color: c.surface),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

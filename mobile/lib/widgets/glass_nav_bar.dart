@@ -6,6 +6,7 @@ import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../utils/haptics.dart';
+import 'motion.dart';
 
 /// Сборочный флаг для подбора оптики линзы: держит стекло на экране без
 /// пальца. Включается только руками: --dart-define=LENS_DEBUG=true
@@ -45,11 +46,28 @@ class GlassNavBar extends StatefulWidget {
   final int index;
   final ValueChanged<int> onChanged;
 
+  /// Вкладка корзины: она одна умеет расширяться.
+  final int cartIndex;
+
+  /// Сумма и количество в корзине. Пока корзина пуста, вкладка выглядит как
+  /// все прочие; с первым товаром её слот разъезжается и показывает сумму.
+  /// Отдельной плавающей плашки над баром нет намеренно: две панели внизу
+  /// перекрывали друг друга и спорили за одно и то же действие.
+  final int cartTotal;
+  final int cartCount;
+
+  /// Метка слота корзины: по ней анимация добавления находит, куда лететь.
+  final GlobalKey? cartSlotKey;
+
   const GlassNavBar({
     super.key,
     required this.items,
     required this.index,
     required this.onChanged,
+    required this.cartIndex,
+    this.cartTotal = 0,
+    this.cartCount = 0,
+    this.cartSlotKey,
   });
 
   @override
@@ -69,9 +87,43 @@ class _GlassNavBarState extends State<GlassNavBar> {
 
   int get _activeIndex => _dragX != null ? _hoverIndex : widget.index;
 
+  /// Ширины и левые края слотов текущего кадра. Слоты неравные: корзина с
+  /// товаром шире прочих, — поэтому вся геометрия бара считается по этим
+  /// массивам, а не делением ширины на число вкладок.
+  List<double> _sizes = const [];
+  List<double> _lefts = const [];
+
+  /// Насколько корзина шире обычной вкладки в раскрытом состоянии
+  static const double _cartGrowth = 1.15;
+
+  void _measureSlots(double width, double expand) {
+    final n = widget.items.length;
+    final extra = _cartGrowth * expand;
+    final units = n + extra;
+    _sizes = [
+      for (var i = 0; i < n; i++)
+        width * ((i == widget.cartIndex ? 1 + extra : 1) / units),
+    ];
+    var x = 0.0;
+    _lefts = [
+      for (final w in _sizes)
+        (() {
+          final l = x;
+          x += w;
+          return l;
+        })(),
+    ];
+  }
+
+  int _indexAt(double dx) {
+    for (var i = 0; i < _sizes.length; i++) {
+      if (dx < _lefts[i] + _sizes[i]) return i;
+    }
+    return _sizes.length - 1;
+  }
+
   void _updateFrom(double dx, double width) {
-    final slot = width / widget.items.length;
-    final index = (dx ~/ slot).clamp(0, widget.items.length - 1);
+    final index = _indexAt(dx.clamp(0.0, width));
     // Щелчок на каждой пересечённой границе — так это ощущается на iOS
     if (index != _hoverIndex || _dragX == null) Haptics.selection();
     setState(() {
@@ -93,8 +145,6 @@ class _GlassNavBarState extends State<GlassNavBar> {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-
     return Padding(
       padding: EdgeInsets.fromLTRB(
         Gap.lg,
@@ -107,244 +157,291 @@ class _GlassNavBarState extends State<GlassNavBar> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.maxWidth;
-          final slot = width / widget.items.length;
-          final dragging = _dragX != null || _debugLens;
-          final dragX = _dragX ?? slot * (widget.index + 0.5);
+          return TweenAnimationBuilder<double>(
+            tween: Tween(end: widget.cartCount > 0 ? 1.0 : 0.0),
+            duration: Motion.base,
+            curve: Motion.benefit,
+            builder: (context, expand, _) {
+              return _buildBar(context, width, expand);
+            },
+          );
+        },
+      ),
+    );
+  }
 
-          // Насколько капсула отошла от центра своей вкладки: на полпути
-          // между вкладками она растягивается, как капля.
-          final centerOf = (_activeIndex + 0.5) * slot;
-          final offCenter = dragging
-              ? ((dragX - centerOf).abs() / (slot / 2)).clamp(0.0, 1.0)
-              : 0.0;
-          final pillWidth = slot * (1 + 0.14 * offCenter);
-          final pillLeft = dragging
-              ? (dragX - pillWidth / 2).clamp(0.0, width - pillWidth)
-              : slot * widget.index;
+  Widget _buildBar(BuildContext context, double width, double expand) {
+    final c = context.colors;
+    _measureSlots(width, expand);
 
-          // Тот же признак, которым гейтится сам пакет: линза требует
-          // Impeller, на Skia и в вебе остаётся цветная капсула.
-          final lensReady = ImageFilter.isShaderFilterSupported;
-          final lensHeight = Gap.navBar + _lensOverhang * 2;
-          final lensWidth = slot * 1.5;
-          final lensLeft =
-              ((dragging ? dragX : slot * (widget.index + 0.5)) - slot * 0.75)
-                  .clamp(-6.0, width - lensWidth + 6);
-          // Пока стеклянная линза на экране, перекраску вкладок делает она:
-          // базовый ряд весь приглушён, акцент появляется только сквозь
-          // маску — ровно настолько, насколько линза накрыла иконку.
-          final lensDrag = dragging && lensReady;
+    // Ширина обычной вкладки без раскрытия: по ней задаётся линза, чтобы её
+    // размер не менялся вместе с корзиной (у Flutter утечка при анимации
+    // размеров шейдерных фигур, flutter#138627 — двигать позицию безопасно).
+    final uniform = width / widget.items.length;
 
-          return Listener(
-            // opaque, а не deferToChild: вкладки для нажатий прозрачны,
-            // и без этого палец, попавший мимо капсулы, не доходил бы до
-            // бара вовсе — тап просто не срабатывал.
-            behavior: HitTestBehavior.opaque,
-            onPointerDown: (e) => _updateFrom(e.localPosition.dx, width),
-            onPointerMove: (e) => _updateFrom(e.localPosition.dx, width),
-            onPointerUp: (_) => _commit(),
-            onPointerCancel: (_) => setState(() => _dragX = null),
-            // Линза выступает за бар — без Clip.none её бы обрезало
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                // Сама панель
-                ClipRRect(
+    final dragging = _dragX != null || _debugLens;
+    final activeCenter = _lefts[_activeIndex] + _sizes[_activeIndex] / 2;
+    final dragX = _dragX ?? activeCenter;
+
+    // Насколько капсула отошла от центра своей вкладки: на полпути
+    // между вкладками она растягивается, как капля.
+    final offCenter = dragging
+        ? ((dragX - activeCenter).abs() / (_sizes[_activeIndex] / 2)).clamp(
+            0.0,
+            1.0,
+          )
+        : 0.0;
+    final pillWidth = _sizes[_activeIndex] * (1 + 0.14 * offCenter);
+    final pillLeft = dragging
+        ? (dragX - pillWidth / 2).clamp(0.0, width - pillWidth)
+        : _lefts[widget.index];
+
+    // Тот же признак, которым гейтится сам пакет: линза требует
+    // Impeller, на Skia и в вебе остаётся цветная капсула.
+    final lensReady = ImageFilter.isShaderFilterSupported;
+    final lensHeight = Gap.navBar + _lensOverhang * 2;
+    final lensWidth = uniform * 1.5;
+    final lensLeft = ((dragging ? dragX : activeCenter) - lensWidth / 2).clamp(
+      -6.0,
+      width - lensWidth + 6,
+    );
+
+    // Раскрытая корзина рисует свою акцентную капсулу — нейтральная плашка
+    // под ней превратилась бы во вторую подложку.
+    final cartOwnsPill = widget.index == widget.cartIndex && expand > 0.5;
+    // Пока стеклянная линза на экране, перекраску вкладок делает она:
+    // базовый ряд весь приглушён, акцент появляется только сквозь
+    // маску — ровно настолько, насколько линза накрыла иконку.
+    final lensDrag = dragging && lensReady;
+
+    return Listener(
+      // opaque, а не deferToChild: вкладки для нажатий прозрачны,
+      // и без этого палец, попавший мимо капсулы, не доходил бы до
+      // бара вовсе — тап просто не срабатывал.
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (e) => _updateFrom(e.localPosition.dx, width),
+      onPointerMove: (e) => _updateFrom(e.localPosition.dx, width),
+      onPointerUp: (_) => _commit(),
+      onPointerCancel: (_) => setState(() => _dragX = null),
+      // Линза выступает за бар — без Clip.none её бы обрезало
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // Сама панель
+          ClipRRect(
+            borderRadius: R.pill,
+            child: BackdropFilter(
+              // Размытие отвечает за читаемость подписей поверх
+              // проезжающего под баром списка.
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
                   borderRadius: R.pill,
-                  child: BackdropFilter(
-                    // Размытие отвечает за читаемость подписей поверх
-                    // проезжающего под баром списка.
-                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: R.pill,
-                        // Сверху стекло светлее, снизу темнее — так падает
-                        // свет, а ровная заливка выдаёт плоскую плашку.
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          // Не чисто белые: на белой странице белая панель
-                          // сливается с фоном, и линзе не на чем читаться.
-                          // Лёгкий серый — как системные панели iOS в
-                          // светлой теме.
-                          colors: [
-                            Color.lerp(
-                              c.surface,
-                              c.ink,
-                              0.045,
-                            )!.withValues(alpha: 0.80),
-                            Color.lerp(
-                              c.surface,
-                              c.ink,
-                              0.07,
-                            )!.withValues(alpha: 0.62),
-                          ],
-                        ),
-                        border: Border.all(
-                          color: c.ink.withValues(alpha: 0.05),
-                          width: 0.8,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: c.ink.withValues(alpha: 0.12),
-                            blurRadius: 28,
-                            offset: const Offset(0, 10),
+                  // Сверху стекло светлее, снизу темнее — так падает
+                  // свет, а ровная заливка выдаёт плоскую плашку.
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    // Не чисто белые: на белой странице белая панель
+                    // сливается с фоном, и линзе не на чем читаться.
+                    // Лёгкий серый — как системные панели iOS в
+                    // светлой теме.
+                    colors: [
+                      Color.lerp(
+                        c.surface,
+                        c.ink,
+                        0.045,
+                      )!.withValues(alpha: 0.80),
+                      Color.lerp(
+                        c.surface,
+                        c.ink,
+                        0.07,
+                      )!.withValues(alpha: 0.62),
+                    ],
+                  ),
+                  border: Border.all(
+                    color: c.ink.withValues(alpha: 0.05),
+                    width: 0.8,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: c.ink.withValues(alpha: 0.12),
+                      blurRadius: 28,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: Gap.navBar,
+                  child: Stack(
+                    children: [
+                      // Плашка активной вкладки — состояние ПОКОЯ:
+                      // стекло существует только под пальцем, как в
+                      // системном баре. Без шейдера плашка же ездит
+                      // за пальцем — фолбэк для Skia и веба.
+                      AnimatedPositioned(
+                        duration: dragging ? Duration.zero : Motion.base,
+                        curve: Motion.benefit,
+                        left: (dragging && !lensReady)
+                            ? pillLeft
+                            : _lefts[widget.index],
+                        top: 6,
+                        bottom: 6,
+                        width: (dragging && !lensReady)
+                            ? pillWidth
+                            : _sizes[widget.index],
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: AnimatedOpacity(
+                            // Под пальцем плашку сменяет стекло
+                            duration: Motion.fast,
+                            opacity: (dragging && lensReady) || cartOwnsPill
+                                ? 0
+                                : 1,
+                            child: _Pill(pressed: dragging),
                           ),
-                        ],
+                        ),
                       ),
-                      child: SizedBox(
-                        width: double.infinity,
-                        height: Gap.navBar,
-                        child: Stack(
-                          children: [
-                            // Плашка активной вкладки — состояние ПОКОЯ:
-                            // стекло существует только под пальцем, как в
-                            // системном баре. Без шейдера плашка же ездит
-                            // за пальцем — фолбэк для Skia и веба.
-                            AnimatedPositioned(
-                              duration: dragging ? Duration.zero : Motion.base,
-                              curve: Motion.benefit,
-                              left: (dragging && !lensReady)
-                                  ? pillLeft
-                                  : slot * widget.index,
-                              top: 6,
-                              bottom: 6,
-                              width: (dragging && !lensReady)
-                                  ? pillWidth
-                                  : slot,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                ),
-                                child: AnimatedOpacity(
-                                  // Под пальцем плашку сменяет стекло
-                                  duration: Motion.fast,
-                                  opacity: dragging && lensReady ? 0 : 1,
-                                  child: _Pill(pressed: dragging),
-                                ),
-                              ),
-                            ),
-                            Row(
-                              children: [
-                                for (var i = 0; i < widget.items.length; i++)
-                                  Expanded(
-                                    child: _Tab(
+                      Row(
+                        children: [
+                          for (var i = 0; i < widget.items.length; i++)
+                            SizedBox(
+                              width: _sizes[i],
+                              child: i == widget.cartIndex && expand > 0
+                                  ? _CartSlot(
+                                      item: widget.items[i],
+                                      active: !lensDrag && _activeIndex == i,
+                                      total: widget.cartTotal,
+                                      count: widget.cartCount,
+                                      expand: expand,
+                                    )
+                                  : _Tab(
                                       item: widget.items[i],
                                       active: !lensDrag && _activeIndex == i,
                                     ),
-                                  ),
-                              ],
                             ),
-                          ],
-                        ),
+                        ],
                       ),
-                    ),
+                    ],
                   ),
                 ),
+              ),
+            ),
+          ),
 
-                // Перекраска сквозь линзу, как в системном баре iOS 26:
-                // вторая копия вкладок в акцентном цвете, обрезанная по
-                // контуру линзы. Геометрия копии обязана до пикселя
-                // совпадать с базовым рядом — поэтому обе рисуются в
-                // «неактивной» геометрии (без масштаба и смены начертания),
-                // различие только в цвете. Иначе на кромке маски двоится.
-                if (lensDrag)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    top: 0,
-                    height: Gap.navBar,
-                    child: IgnorePointer(
-                      child: ClipPath(
-                        clipper: _LensClipper(
-                          rect: Rect.fromLTWH(
-                            lensLeft.toDouble(),
-                            -_lensOverhang,
-                            lensWidth,
-                            lensHeight,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            for (final item in widget.items)
-                              Expanded(
-                                child: _Tab(
-                                  item: item,
+          // Перекраска сквозь линзу, как в системном баре iOS 26:
+          // вторая копия вкладок в акцентном цвете, обрезанная по
+          // контуру линзы. Геометрия копии обязана до пикселя
+          // совпадать с базовым рядом — поэтому обе рисуются в
+          // «неактивной» геометрии (без масштаба и смены начертания),
+          // различие только в цвете. Иначе на кромке маски двоится.
+          if (lensDrag)
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              height: Gap.navBar,
+              child: IgnorePointer(
+                child: ClipPath(
+                  clipper: _LensClipper(
+                    rect: Rect.fromLTWH(
+                      lensLeft.toDouble(),
+                      -_lensOverhang,
+                      lensWidth,
+                      lensHeight,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      for (var i = 0; i < widget.items.length; i++)
+                        SizedBox(
+                          width: _sizes[i],
+                          // Корзина с товаром и так акцентная: её слот
+                          // повторяем как есть, иначе под линзой он
+                          // сместился бы относительно базового ряда.
+                          child: i == widget.cartIndex && expand > 0
+                              ? _CartSlot(
+                                  item: widget.items[i],
+                                  active: false,
+                                  total: widget.cartTotal,
+                                  count: widget.cartCount,
+                                  expand: expand,
+                                )
+                              : _Tab(
+                                  item: widget.items[i],
                                   active: false,
                                   overrideColor: c.accent,
                                 ),
-                              ),
-                          ],
                         ),
-                      ),
-                    ),
+                    ],
                   ),
-
-                // Линза ПОВЕРХ иконок: пакет захватывает всё, что
-                // нарисовано под ней — иконки, подписи и край панели, за
-                // который она выступает, — и честно преломляет по Снеллу.
-                // Своим слоем рендера, а не BackdropFilter: снимок фона у
-                // того отдавался по-разному на симуляторе и на устройстве,
-                // и линза хватала пиксели не оттуда.
-                //
-                // Ширина линзы во время жеста не меняется намеренно: у
-                // Flutter известная утечка при анимации размера шейдерных
-                // фигур (flutter#138627), двигать позицию — безопасно.
-                if (lensReady && (dragging || _lensShown))
-                  AnimatedPositioned(
-                    // Пока палец на баре — никакой анимации: линза обязана
-                    // быть ровно под пальцем, а не догонять его. После
-                    // отпускания она доезжает к выбранной вкладке, догорая.
-                    duration: dragging ? Duration.zero : Motion.base,
-                    curve: Motion.benefit,
-                    // Пилюля в полтора слота: при почти квадратной линзе
-                    // стадион вырождается в круг, а кромка почти не задевает
-                    // подпись — гнуть ей нечего. Широкая накрывает буквы
-                    // соседней вкладки, и преломление видно.
-                    left: lensLeft,
-                    top: -_lensOverhang,
-                    width: lensWidth,
-                    height: lensHeight,
-                    child: IgnorePointer(
-                      child: AnimatedOpacity(
-                        // Стекло рождается под пальцем и умирает при
-                        // отпускании — в покое остаётся плоская плашка
-                        duration: Motion.fast,
-                        opacity: dragging ? 1 : 0,
-                        onEnd: () {
-                          if (_dragX == null && mounted) {
-                            setState(() => _lensShown = false);
-                          }
-                        },
-                        child: LiquidGlass.withOwnLayer(
-                          shape: LiquidRoundedSuperellipse(
-                            borderRadius: lensHeight / 2,
-                          ),
-                          settings: const LiquidGlassSettings(
-                            // Внутри линзы контент остаётся резким
-                            blur: 0,
-                            // Толще и преломление сильнее, чем раньше:
-                            // стекло теперь видно только в движении, и
-                            // деформация иконок — весь его смысл
-                            thickness: 35,
-                            refractiveIndex: 1.45,
-                            // Едва заметная дымка: на ровном белом
-                            // преломлению не за что зацепиться
-                            glassColor: Color(0x0D000000),
-                            lightIntensity: 0.7,
-                            chromaticAberration: 0.22,
-                            // Дефолт пакета 1.5 перекрашивал бы иконки
-                            saturation: 1.0,
-                          ),
-                          child: SizedBox.expand(),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
+                ),
+              ),
             ),
-          );
-        },
+
+          // Линза ПОВЕРХ иконок: пакет захватывает всё, что
+          // нарисовано под ней — иконки, подписи и край панели, за
+          // который она выступает, — и честно преломляет по Снеллу.
+          // Своим слоем рендера, а не BackdropFilter: снимок фона у
+          // того отдавался по-разному на симуляторе и на устройстве,
+          // и линза хватала пиксели не оттуда.
+          //
+          // Ширина линзы во время жеста не меняется намеренно: у
+          // Flutter известная утечка при анимации размера шейдерных
+          // фигур (flutter#138627), двигать позицию — безопасно.
+          if (lensReady && (dragging || _lensShown))
+            AnimatedPositioned(
+              // Пока палец на баре — никакой анимации: линза обязана
+              // быть ровно под пальцем, а не догонять его. После
+              // отпускания она доезжает к выбранной вкладке, догорая.
+              duration: dragging ? Duration.zero : Motion.base,
+              curve: Motion.benefit,
+              // Пилюля в полтора слота: при почти квадратной линзе
+              // стадион вырождается в круг, а кромка почти не задевает
+              // подпись — гнуть ей нечего. Широкая накрывает буквы
+              // соседней вкладки, и преломление видно.
+              left: lensLeft,
+              top: -_lensOverhang,
+              width: lensWidth,
+              height: lensHeight,
+              child: IgnorePointer(
+                child: AnimatedOpacity(
+                  // Стекло рождается под пальцем и умирает при
+                  // отпускании — в покое остаётся плоская плашка
+                  duration: Motion.fast,
+                  opacity: dragging ? 1 : 0,
+                  onEnd: () {
+                    if (_dragX == null && mounted) {
+                      setState(() => _lensShown = false);
+                    }
+                  },
+                  child: LiquidGlass.withOwnLayer(
+                    shape: LiquidRoundedSuperellipse(
+                      borderRadius: lensHeight / 2,
+                    ),
+                    settings: const LiquidGlassSettings(
+                      // Внутри линзы контент остаётся резким
+                      blur: 0,
+                      // Толще и преломление сильнее, чем раньше:
+                      // стекло теперь видно только в движении, и
+                      // деформация иконок — весь его смысл
+                      thickness: 35,
+                      refractiveIndex: 1.45,
+                      // Едва заметная дымка: на ровном белом
+                      // преломлению не за что зацепиться
+                      glassColor: Color(0x0D000000),
+                      lightIntensity: 0.7,
+                      chromaticAberration: 0.22,
+                      // Дефолт пакета 1.5 перекрашивал бы иконки
+                      saturation: 1.0,
+                    ),
+                    child: SizedBox.expand(),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -368,6 +465,126 @@ class _Pill extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: R.pill,
         color: c.ink.withValues(alpha: pressed ? 0.09 : 0.055),
+      ),
+    );
+  }
+}
+
+/// Вкладка корзины, когда в ней что-то есть.
+///
+/// Заменяет собой плавающую плашку, которая раньше висела над баром: две
+/// панели внизу перекрывали друг друга и предлагали одно и то же действие.
+/// Здесь сумма живёт внутри стекла — слот разъезжается, подпись «Корзина»
+/// уступает место цифрам, а число позиций уходит на значок.
+class _CartSlot extends StatelessWidget {
+  final NavItem item;
+  final bool active;
+  final int total;
+  final int count;
+
+  /// 0 — обычная вкладка, 1 — раскрытая. Промежуточные значения приходят с
+  /// анимации, поэтому подпись и капсула проявляются вместе с шириной.
+  final double expand;
+
+  const _CartSlot({
+    required this.item,
+    required this.active,
+    required this.total,
+    required this.count,
+    required this.expand,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return IgnorePointer(
+      child: SizedBox(
+        height: Gap.navBar,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 6),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: c.accent.withValues(alpha: expand),
+              borderRadius: R.pill,
+            ),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Icon(
+                          item.activeIcon,
+                          size: 19,
+                          color: Color.lerp(
+                            active ? c.accent : c.muted,
+                            c.surface,
+                            expand,
+                          ),
+                        ),
+                        Positioned(
+                          right: -6,
+                          top: -5,
+                          child: Opacity(
+                            opacity: expand,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: c.surface,
+                                borderRadius: R.pill,
+                              ),
+                              child: Text(
+                                '$count',
+                                style: TextStyle(
+                                  fontFamily: 'Golos Text',
+                                  fontSize: 9.5,
+                                  height: 1,
+                                  fontWeight: FontWeight.w700,
+                                  color: c.accent,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    // Ширина слота растёт постепенно, и цифры на полпути
+                    // не помещаются — отдаём им ровно тот запас, который
+                    // уже появился, вместо переполнения на кадр.
+                    Flexible(
+                      child: Padding(
+                        padding: EdgeInsets.only(left: 8 * expand),
+                        child: Opacity(
+                          opacity: expand,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: AnimatedMoney(
+                              total,
+                              style: TextStyle(
+                                fontFamily: 'Unbounded',
+                                fontSize: 13,
+                                height: 1,
+                                fontWeight: FontWeight.w700,
+                                color: c.surface,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

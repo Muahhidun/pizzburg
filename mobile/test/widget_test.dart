@@ -499,6 +499,7 @@ void main() {
                 items: items,
                 index: index,
                 onChanged: onChanged,
+                cartIndex: 2,
               ),
             ),
           ),

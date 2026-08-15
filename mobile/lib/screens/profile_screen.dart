@@ -487,7 +487,7 @@ class _PointsRow extends StatelessWidget {
               fontFamily: 'Unbounded',
               fontSize: 14.5,
               fontWeight: FontWeight.w700,
-              color: earned ? c.benefit : c.ink,
+              color: earned ? c.accent : c.ink,
             ),
           ),
         ],
@@ -570,7 +570,7 @@ class _MessagesRowState extends State<_MessagesRow> {
                 height: 8,
                 margin: const EdgeInsets.only(right: Gap.sm),
                 decoration: BoxDecoration(
-                  color: c.benefit,
+                  color: c.accent,
                   shape: BoxShape.circle,
                 ),
               ),

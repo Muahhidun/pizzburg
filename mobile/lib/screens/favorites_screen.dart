@@ -217,10 +217,10 @@ class _FavoritesEmpty extends StatelessWidget {
               width: 92,
               height: 92,
               decoration: BoxDecoration(
-                color: c.benefitSoft,
+                color: c.accentSoft,
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.favorite_border, size: 34, color: c.benefit),
+              child: Icon(Icons.favorite_border, size: 34, color: c.accent),
             ),
             const SizedBox(height: Gap.block),
             Text(

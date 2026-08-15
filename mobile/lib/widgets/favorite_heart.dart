@@ -97,7 +97,7 @@ class _FavoriteHeartState extends State<FavoriteHeart>
               child: Icon(
                 widget.active ? Icons.favorite : Icons.favorite_border,
                 size: widget.size * 0.58,
-                color: widget.active ? c.benefit : c.muted,
+                color: widget.active ? c.accent : c.muted,
               ),
             ),
           ),

@@ -2,28 +2,39 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// Токены направления «Сигнал» из `design_handoff_pizzburg_app/README.md`.
+/// Токены направления «Сигнал» из `design_handoff_pizzburg_app`.
 ///
-/// Правило палитры, которое нельзя нарушать: **чёрный — основа, оранжевый —
-/// действия, маджента — выгода.** Больше цветов не вводить. Если новому
-/// элементу «нужен свой цвет», это почти всегда значит, что он на самом
-/// деле относится к одной из трёх ролей.
+/// Правило палитры, которое нельзя нарушать: **почти-чёрный — основа,
+/// кобальт — действия, лайм — выгода.** Больше цветов не вводить. Если
+/// новому элементу «нужен свой цвет», это почти всегда значит, что он на
+/// самом деле относится к одной из трёх ролей.
+///
+/// **Лайм — только заливка.** Его контраст к белому около 1.4:1, текстом на
+/// светлом фоне он нечитаем. Поэтому выгода выражается либо лаймовой
+/// плашкой с чернильным текстом ([onBenefit]), либо — когда плашки нет —
+/// кобальтом: в прототипе «Баллы −700 ₸» и «+353» именно синие.
 ///
 /// `accent` и `benefit` вынесены в параметры: платформа мультитенантная,
 /// и следующее заведение придёт со своими цветами. Ни один экран не должен
-/// брать эти цвета константами напрямую — только через тему.
+/// брать эти цвета константами напрямую — только через тему. Все
+/// производные оттенки считаются от них же: захардкоженные значения
+/// пережили бы смену акцента и остались от прошлой палитры.
 @immutable
 class AppColors extends ThemeExtension<AppColors> {
-  /// Основной текст и чёрные поверхности: хедер каталога, экран статуса,
+  /// Основной текст и тёмные поверхности: хедер каталога, экран статуса,
   /// тёмный блок баллов в корзине, выбранные сегменты.
   final Color ink;
 
   /// Все действия: кнопки, «+» в списке, активные чипсы, выбранный адрес.
+  /// Им же набирается выгода, выраженная текстом на светлом фоне.
   final Color accent;
 
-  /// Только выгода: списанные баллы, «0 ₸» у подарка, бейдж «Подарок»,
-  /// карточка баллов, галочки пройденных этапов.
+  /// Только выгода и только заливкой: карточка баллов, бейдж «Подарок»,
+  /// кнопка «Заказать», ползунок баллов на тёмном блоке, галочки этапов.
   final Color benefit;
+
+  /// Текст и иконки поверх [benefit].
+  final Color onBenefit;
 
   final Color surface;
   final Color muted;
@@ -40,7 +51,8 @@ class AppColors extends ThemeExtension<AppColors> {
   /// Подложка выбранного адреса, круги в пустых состояниях
   final Color accentSoft;
 
-  /// Фон бейджа подарка (текст на нём — `benefit`)
+  /// Фон бейджа выгоды. Это сам лайм: приглушать его нельзя — выгода
+  /// должна быть заметной, а бледная лаймовая подложка на белом исчезает.
   final Color benefitSoft;
 
   /// Фон подсказки «добавьте ещё на N ₸»
@@ -49,20 +61,44 @@ class AppColors extends ThemeExtension<AppColors> {
   /// Текст на `warnSoft`
   final Color warnText;
 
-  const AppColors({
-    this.ink = const Color(0xFF0E0D10),
-    this.accent = const Color(0xFFF7941D),
-    this.benefit = const Color(0xFFE6007E),
-    this.surface = const Color(0xFFFFFFFF),
-    this.muted = const Color(0xFF8B8792),
-    this.line = const Color(0x140E0D10),
-    this.border = const Color(0x1F0E0D10),
-    this.fillSoft = const Color(0x0D0E0D10),
-    this.accentSoft = const Color(0x1AF7941D),
-    this.benefitSoft = const Color(0x24F7941D),
-    this.warnSoft = const Color(0x1AF7941D),
-    this.warnText = const Color(0xFFA96410),
+  const AppColors._({
+    required this.ink,
+    required this.accent,
+    required this.benefit,
+    required this.onBenefit,
+    required this.surface,
+    required this.muted,
+    required this.line,
+    required this.border,
+    required this.fillSoft,
+    required this.accentSoft,
+    required this.benefitSoft,
+    required this.warnSoft,
+    required this.warnText,
   });
+
+  factory AppColors({
+    Color ink = const Color(0xFF0B0B14),
+    Color accent = const Color(0xFF2B3BEE),
+    Color benefit = const Color(0xFFD6F84C),
+    Color surface = const Color(0xFFFFFFFF),
+  }) => AppColors._(
+    ink: ink,
+    accent: accent,
+    benefit: benefit,
+    onBenefit: ink,
+    surface: surface,
+    muted: const Color(0xFF8E8EA8),
+    line: ink.withValues(alpha: 0.08),
+    border: ink.withValues(alpha: 0.12),
+    fillSoft: ink.withValues(alpha: 0.05),
+    accentSoft: accent.withValues(alpha: 0.10),
+    benefitSoft: benefit,
+    warnSoft: accent.withValues(alpha: 0.10),
+    // Подпись на бледной подложке акцента: сам акцент на ней сливается,
+    // поэтому берём его же, приглушённый чернилами до читаемого.
+    warnText: Color.lerp(accent, ink, 0.35)!,
+  );
 
   @override
   AppColors copyWith({Color? ink, Color? accent, Color? benefit}) => AppColors(
@@ -70,23 +106,16 @@ class AppColors extends ThemeExtension<AppColors> {
     accent: accent ?? this.accent,
     benefit: benefit ?? this.benefit,
     surface: surface,
-    muted: muted,
-    line: line,
-    border: border,
-    fillSoft: fillSoft,
-    accentSoft: accentSoft,
-    benefitSoft: benefitSoft,
-    warnSoft: warnSoft,
-    warnText: warnText,
   );
 
   @override
   AppColors lerp(ThemeExtension<AppColors>? other, double t) {
     if (other is! AppColors) return this;
-    return AppColors(
+    return AppColors._(
       ink: Color.lerp(ink, other.ink, t)!,
       accent: Color.lerp(accent, other.accent, t)!,
       benefit: Color.lerp(benefit, other.benefit, t)!,
+      onBenefit: Color.lerp(onBenefit, other.onBenefit, t)!,
       surface: Color.lerp(surface, other.surface, t)!,
       muted: Color.lerp(muted, other.muted, t)!,
       line: Color.lerp(line, other.line, t)!,

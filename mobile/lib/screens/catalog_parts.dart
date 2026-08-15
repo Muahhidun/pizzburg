@@ -81,8 +81,12 @@ class _Half extends StatelessWidget {
     final Color background;
     final Color text;
     if (disabled) {
-      background = onDark ? c.surface.withValues(alpha: 0.06) : const Color(0x0A0E0D10);
-      text = onDark ? c.surface.withValues(alpha: 0.35) : c.muted.withValues(alpha: 0.6);
+      background = onDark
+          ? c.surface.withValues(alpha: 0.06)
+          : const Color(0x0A0E0D10);
+      text = onDark
+          ? c.surface.withValues(alpha: 0.35)
+          : c.muted.withValues(alpha: 0.6);
     } else if (active) {
       background = onDark ? c.surface : c.ink;
       text = onDark ? c.ink : c.surface;
@@ -116,6 +120,83 @@ class _Half extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Сплошная полоса фиксированной высоты для закреплённого слоя.
+///
+/// Держит статус-бар на чернилах, пока каталог прокручивается: хедер
+/// уезжает, а иконки часов остаются светлыми на тёмном. Иначе пришлось бы
+/// переключать их яркость по порогу прокрутки — и ловить моменты, когда
+/// белый текст оказывается на белом.
+class SolidStripHeader extends SliverPersistentHeaderDelegate {
+  final double height;
+  final Color color;
+
+  const SolidStripHeader({required this.height, required this.color});
+
+  @override
+  double get minExtent => height;
+
+  @override
+  double get maxExtent => height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlaps) =>
+      ColoredBox(color: color, child: const SizedBox.expand());
+
+  @override
+  bool shouldRebuild(SolidStripHeader old) =>
+      old.height != height || old.color != color;
+}
+
+/// Закреплённая строка категорий.
+///
+/// Прокрутка уводит шапку, но не якоря: без этого, чтобы сменить раздел,
+/// пришлось бы возвращаться в начало списка. Подложка непрозрачная —
+/// строки меню проезжают под ней, а не сквозь.
+class PinnedChipsHeader extends SliverPersistentHeaderDelegate {
+  final double height;
+  final Widget child;
+  final Color background;
+  final Color line;
+
+  const PinnedChipsHeader({
+    required this.height,
+    required this.child,
+    required this.background,
+    required this.line,
+  });
+
+  @override
+  double get minExtent => height;
+
+  @override
+  double get maxExtent => height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlaps) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: background,
+        // Волосяная линия только когда под строкой действительно едет
+        // список: в покое она превратила бы якоря в отдельную панель.
+        border: Border(
+          bottom: BorderSide(
+            color: overlaps ? line : Colors.transparent,
+            width: 0.8,
+          ),
+        ),
+      ),
+      child: Center(child: child),
+    );
+  }
+
+  @override
+  bool shouldRebuild(PinnedChipsHeader old) =>
+      old.height != height ||
+      old.child != child ||
+      old.background != background ||
+      old.line != line;
 }
 
 /// Чипсы категорий — якоря непрерывного скролла, а не фильтр.
@@ -153,7 +234,10 @@ class CategoryChips extends StatelessWidget {
               child: AnimatedContainer(
                 duration: Motion.base,
                 curve: Motion.change,
-                padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 15,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: active ? c.accent : c.fillSoft,
                   borderRadius: R.pill,
@@ -305,32 +389,33 @@ class ProductRow extends StatelessWidget {
                       ),
                     )
                   else if (inCart > 0)
-                    _QtyStepper(
-                      qty: inCart,
-                      onAdd: onAdd,
-                      onRemove: onRemove,
-                    )
+                    _QtyStepper(qty: inCart, onAdd: onAdd, onRemove: onRemove)
                   else
-                    PressScale(
-                      onTap: onAdd,
-                      child: Container(
-                        // Кнопка визуально 34, но тап-зона расширена до 44:
-                        // иначе в неё трудно попасть на ходу
-                        constraints: const BoxConstraints(
-                          minWidth: Hit.min,
-                          minHeight: Hit.min,
-                        ),
-                        alignment: Alignment.center,
+                    Builder(
+                      builder: (btn) => PressScale(
+                        onTap: () {
+                          flyToCart(btn);
+                          onAdd();
+                        },
                         child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 8,
+                          // Кнопка визуально 34, но тап-зона расширена до 44:
+                          // иначе в неё трудно попасть на ходу
+                          constraints: const BoxConstraints(
+                            minWidth: Hit.min,
+                            minHeight: Hit.min,
                           ),
-                          decoration: BoxDecoration(
-                            color: c.accent,
-                            borderRadius: R.pill,
+                          alignment: Alignment.center,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: c.accent,
+                              borderRadius: R.pill,
+                            ),
+                            child: Icon(Icons.add, size: 16, color: c.surface),
                           ),
-                          child: Icon(Icons.add, size: 16, color: c.surface),
                         ),
                       ),
                     ),
@@ -375,7 +460,6 @@ class _Photo extends StatelessWidget {
     );
   }
 }
-
 
 /// Счётчик на месте «+»: минус, количество, плюс.
 ///
@@ -583,7 +667,9 @@ class SearchEmpty extends StatelessWidget {
           const SizedBox(height: Gap.block),
           Text(
             'Ничего не нашли',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 20),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontSize: 20),
           ),
           const SizedBox(height: Gap.sm),
           Text(
