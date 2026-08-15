@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../api/api_client.dart';
@@ -79,6 +80,15 @@ const _productRowHeight = 101.0;
 class _MenuScreenState extends State<MenuScreen> {
   late Future<_CatalogData> _future;
   final _listController = ScrollController();
+
+  /// На сколько список оттянут вниз за свой верх, px.
+  ///
+  /// При оттягивании CustomScrollView открывает то, что под ним, а под ним
+  /// белый Scaffold — и из-под чёрного хедера выезжает белая полоса.
+  /// Закрываем ровно образовавшуюся щель: её высота и есть перетяг.
+  /// Прямоугольник фиксированной высоты тут не годится — прокрученный
+  /// список прозрачен, и чёрное просвечивало бы между строк.
+  final _overscroll = ValueNotifier<double>(0);
   final _chipsController = ScrollController();
 
   final List<_Row> _rows = [];
@@ -101,6 +111,7 @@ class _MenuScreenState extends State<MenuScreen> {
 
   @override
   void dispose() {
+    _overscroll.dispose();
     _listController.dispose();
     _chipsController.dispose();
     _search.dispose();
@@ -193,6 +204,7 @@ class _MenuScreenState extends State<MenuScreen> {
   }
 
   void _onScroll() {
+    _overscroll.value = math.max(0, -_listController.offset);
     if (_programmaticScroll || _categories.isEmpty) return;
     final offset = _listController.offset + 1;
     var current = _categories.first.id;
@@ -293,6 +305,18 @@ class _MenuScreenState extends State<MenuScreen> {
             bottom: false,
             child: Stack(
               children: [
+                // Чёрное «дно» под хедером: видно только когда список
+                // оттянут вниз. Иначе из-под хедера выезжает белый Scaffold.
+                ValueListenableBuilder<double>(
+                  valueListenable: _overscroll,
+                  builder: (context, gap, _) => Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: gap,
+                    child: ColoredBox(color: colors.ink),
+                  ),
+                ),
                 CustomScrollView(
                   controller: _listController,
                   slivers: [

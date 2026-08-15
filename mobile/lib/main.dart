@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'api/api_client.dart';
 import 'state/cart.dart';
@@ -103,12 +104,23 @@ class PizzBurgApp extends StatelessWidget {
         // «растянуть телефонный экран на 1600 px»: миниатюра 76 px рядом
         // со строкой во всю ширину монитора выглядит сломанной. На широком
         // экране прижимаем контент к телефонной колонке по центру.
-        builder: (context, child) => ColoredBox(
-          color: const Color(0xFFF2F2F3),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 460),
-              child: child ?? const SizedBox.shrink(),
+        builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+          // Значения по умолчанию — тёмные иконки статус-бара: почти все
+          // экраны белые. Без этой аннотации система просто оставляет
+          // последний применённый стиль, и светлые иконки чёрного хедера
+          // каталога уезжают на белые экраны, где их не видно.
+          value: const SystemUiOverlayStyle(
+            statusBarBrightness: Brightness.light,
+            statusBarIconBrightness: Brightness.dark,
+            statusBarColor: Colors.transparent,
+          ),
+          child: ColoredBox(
+            color: const Color(0xFFF2F2F3),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
+                child: child ?? const SizedBox.shrink(),
+              ),
             ),
           ),
         ),

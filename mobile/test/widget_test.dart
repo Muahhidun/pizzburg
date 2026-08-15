@@ -1,7 +1,8 @@
 import 'dart:async';
-import 'package:flutter/services.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pizzburg/api/models.dart';
+import 'package:pizzburg/theme/app_theme.dart';
 import 'package:pizzburg/theme/tokens.dart';
 import 'package:pizzburg/utils/haptics.dart';
 import 'package:pizzburg/widgets/motion.dart';
@@ -9,6 +10,7 @@ import 'package:pizzburg/api/api_client.dart';
 import 'package:pizzburg/state/cart.dart';
 import 'package:pizzburg/state/favorites.dart';
 import 'package:pizzburg/utils/input_validation.dart';
+import 'package:pizzburg/widgets/glass_nav_bar.dart';
 
 void main() {
   test('formatTenge разделяет разряды', () {
@@ -470,6 +472,99 @@ void main() {
       favorites.clear();
       expect(favorites.count, 0);
       expect(favorites.contains('pizza-1'), isFalse);
+    });
+  });
+
+  group('стеклянный таб-бар', () {
+    const items = [
+      NavItem(icon: Icons.grid_view_rounded, label: 'Меню'),
+      NavItem(icon: Icons.favorite_border, label: 'Избранное'),
+      NavItem(icon: Icons.shopping_bag_outlined, label: 'Корзина'),
+      NavItem(icon: Icons.receipt_long_outlined, label: 'Заказы'),
+      NavItem(icon: Icons.person_outline, label: 'Профиль'),
+    ];
+
+    Future<double> pumpBar(
+      WidgetTester tester,
+      void Function(int) onChanged, {
+      int index = 0,
+    }) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.build(),
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.bottomCenter,
+              child: GlassNavBar(
+                items: items,
+                index: index,
+                onChanged: onChanged,
+              ),
+            ),
+          ),
+        ),
+      );
+      final bar = tester.getRect(find.byType(GlassNavBar));
+      // Ширина капсулы одной вкладки, за вычетом боковых полей бара
+      return (bar.width - Gap.lg * 2) / items.length;
+    }
+
+    testWidgets('вкладка выбирается там, где отпустили палец', (tester) async {
+      int? picked;
+      final slot = await pumpBar(tester, (i) => picked = i);
+
+      // Нажимаем на «Меню» и, не отпуская, ведём палец до «Заказов»
+      final start = tester.getCenter(find.text('Меню'));
+      final gesture = await tester.startGesture(start);
+      await tester.pump();
+      await gesture.moveBy(Offset(slot * 3, 0));
+      await tester.pump();
+      expect(picked, isNull, reason: 'палец ещё не отпущен');
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(picked, 3);
+    });
+
+    testWidgets('палец вернулся назад — вкладка не меняется', (tester) async {
+      int? picked;
+      final slot = await pumpBar(tester, (i) => picked = i);
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.text('Меню')),
+      );
+      await gesture.moveBy(Offset(slot * 2, 0));
+      await tester.pump();
+      await gesture.moveBy(Offset(-slot * 2, 0));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      // Отпустили там же, откуда начали: выбор не изменился, а значит
+      // и уведомлять родителя не о чем.
+      expect(picked, isNull);
+    });
+
+    testWidgets('обычный тап работает как раньше', (tester) async {
+      int? picked;
+      await pumpBar(tester, (i) => picked = i);
+      await tester.tap(find.text('Профиль'));
+      await tester.pumpAndSettle();
+      expect(picked, 4);
+    });
+
+    testWidgets('за край бара капсула не уезжает', (tester) async {
+      int? picked;
+      final slot = await pumpBar(tester, (i) => picked = i);
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.text('Меню')),
+      );
+      // Уводим палец далеко влево, за пределы бара
+      await gesture.moveBy(Offset(-slot * 10, 0));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(picked, isNull, reason: 'крайняя левая вкладка и так выбрана');
     });
   });
 }

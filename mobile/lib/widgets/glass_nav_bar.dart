@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
@@ -24,13 +25,20 @@ class NavItem {
 /// и есть смысл «стекла» — не эффект ради эффекта, а слой, который не
 /// отрезает нижнюю часть экрана.
 ///
-/// Что делает его именно «жидким»: подсветка активной вкладки не
-/// перерисовывается на новом месте, а **переезжает** к нему. Глаз следит
-/// за движением и не теряет, где он оказался.
+/// **Подсветка следует за пальцем.** Можно нажать на вкладку, не отпускать
+/// и вести палец вдоль бара — капсула едет вместе с пальцем и растягивается
+/// на полпути между вкладками, как капля. Вкладка выбирается там, где палец
+/// отпустили. Без этого «стекло» остаётся картинкой: жест — единственное,
+/// что делает материал живым, потому что он отзывается на руку, а не на
+/// таймер.
+///
+/// Поэтому здесь `Listener`, а не `GestureDetector`: нужны сырые события
+/// указателя. Обычный тап — это тот же жест, у которого нажатие и
+/// отпускание произошли в одной точке, отдельной ветки он не требует.
 ///
 /// Счётчиков на вкладках нет намеренно — в старом приложении они
 /// превращали навигацию в табло (см. `docs/DESIGN_SYSTEM.md`).
-class GlassNavBar extends StatelessWidget {
+class GlassNavBar extends StatefulWidget {
   final List<NavItem> items;
   final int index;
   final ValueChanged<int> onChanged;
@@ -41,6 +49,37 @@ class GlassNavBar extends StatelessWidget {
     required this.index,
     required this.onChanged,
   });
+
+  @override
+  State<GlassNavBar> createState() => _GlassNavBarState();
+}
+
+class _GlassNavBarState extends State<GlassNavBar> {
+  /// Положение пальца внутри бара; null — палец бара не касается
+  double? _dragX;
+
+  /// Вкладка под пальцем: пока палец ведут, подсвечивается именно она,
+  /// а не выбранная. Иначе капсула уезжает, а иконки не отзываются.
+  int _hoverIndex = 0;
+
+  int get _activeIndex => _dragX != null ? _hoverIndex : widget.index;
+
+  void _updateFrom(double dx, double width) {
+    final slot = width / widget.items.length;
+    final index = (dx ~/ slot).clamp(0, widget.items.length - 1);
+    // Щелчок на каждой пересечённой границе — так это ощущается на iOS
+    if (index != _hoverIndex || _dragX == null) Haptics.selection();
+    setState(() {
+      _dragX = dx.clamp(0.0, width);
+      _hoverIndex = index;
+    });
+  }
+
+  void _commit() {
+    final index = _hoverIndex;
+    setState(() => _dragX = null);
+    if (index != widget.index) widget.onChanged(index);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -60,63 +99,88 @@ class GlassNavBar extends StatelessWidget {
         child: BackdropFilter(
           // Размытие делает бар стеклом, а не полупрозрачной плашкой:
           // без него просвечивающий текст читается сквозь панель и мешает.
-          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-          child: Container(
+          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+          child: DecoratedBox(
             decoration: BoxDecoration(
-              color: c.surface.withValues(alpha: 0.72),
               borderRadius: R.pill,
+              // Сверху стекло светлее, снизу темнее — так падает свет,
+              // а ровная заливка выдаёт плоскую плашку.
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  c.surface.withValues(alpha: 0.80),
+                  c.surface.withValues(alpha: 0.60),
+                ],
+              ),
               border: Border.all(
-                color: c.surface.withValues(alpha: 0.65),
-                width: 1,
+                color: c.surface.withValues(alpha: 0.7),
+                width: 0.8,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: c.ink.withValues(alpha: 0.10),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
+                  color: c.ink.withValues(alpha: 0.12),
+                  blurRadius: 28,
+                  offset: const Offset(0, 10),
                 ),
               ],
             ),
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final slot = constraints.maxWidth / items.length;
-                return Stack(
-                  children: [
-                    // Подсветка активной вкладки: переезжает, а не мигает
-                    AnimatedPositioned(
-                      duration: Motion.base,
-                      curve: Motion.benefit,
-                      left: slot * index,
-                      top: 6,
-                      bottom: 6,
-                      width: slot,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: c.accentSoft,
-                            borderRadius: R.pill,
-                          ),
+                final width = constraints.maxWidth;
+                final slot = width / widget.items.length;
+                final dragging = _dragX != null;
+
+                // Насколько капсула отошла от центра своей вкладки: на
+                // полпути между вкладками она растягивается, как капля.
+                final centerOf = (_activeIndex + 0.5) * slot;
+                final offCenter = dragging
+                    ? ((_dragX! - centerOf).abs() / (slot / 2)).clamp(0.0, 1.0)
+                    : 0.0;
+                final pillWidth = slot * (1 + 0.14 * offCenter);
+
+                final pillLeft = dragging
+                    ? (_dragX! - pillWidth / 2).clamp(0.0, width - pillWidth)
+                    : slot * widget.index;
+
+                return Listener(
+                  // opaque, а не deferToChild: сами вкладки для нажатий
+                  // прозрачны, и без этого палец, попавший мимо капсулы,
+                  // не доходил бы до бара вовсе — тап просто не срабатывал.
+                  behavior: HitTestBehavior.opaque,
+                  onPointerDown: (e) => _updateFrom(e.localPosition.dx, width),
+                  onPointerMove: (e) => _updateFrom(e.localPosition.dx, width),
+                  onPointerUp: (_) => _commit(),
+                  onPointerCancel: (_) => setState(() => _dragX = null),
+                  child: Stack(
+                    children: [
+                      AnimatedPositioned(
+                        // Пока палец на баре — никакой анимации: капсула
+                        // обязана быть ровно под пальцем, а не догонять его.
+                        duration: dragging ? Duration.zero : Motion.base,
+                        curve: Motion.benefit,
+                        left: pillLeft,
+                        top: 6,
+                        bottom: 6,
+                        width: dragging ? pillWidth : slot,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: _Pill(pressed: dragging),
                         ),
                       ),
-                    ),
-                    Row(
-                      children: [
-                        for (var i = 0; i < items.length; i++)
-                          Expanded(
-                            child: _Tab(
-                              item: items[i],
-                              active: index == i,
-                              onTap: () {
-                                if (index == i) return;
-                                Haptics.selection();
-                                onChanged(i);
-                              },
+                      Row(
+                        children: [
+                          for (var i = 0; i < widget.items.length; i++)
+                            Expanded(
+                              child: _Tab(
+                                item: widget.items[i],
+                                active: _activeIndex == i,
+                              ),
                             ),
-                          ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 );
               },
             ),
@@ -127,21 +191,51 @@ class GlassNavBar extends StatelessWidget {
   }
 }
 
+/// Сама «капля»: тоже стекло, а не заливка — со светом сверху и контуром
+class _Pill extends StatelessWidget {
+  final bool pressed;
+
+  const _Pill({required this.pressed});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return AnimatedContainer(
+      duration: Motion.fast,
+      curve: Motion.change,
+      decoration: BoxDecoration(
+        borderRadius: R.pill,
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            c.accent.withValues(alpha: pressed ? 0.32 : 0.22),
+            c.accent.withValues(alpha: pressed ? 0.18 : 0.12),
+          ],
+        ),
+        border: Border.all(
+          color: c.accent.withValues(alpha: pressed ? 0.38 : 0.20),
+          width: 0.8,
+        ),
+      ),
+    );
+  }
+}
+
 class _Tab extends StatelessWidget {
   final NavItem item;
   final bool active;
-  final VoidCallback onTap;
 
-  const _Tab({required this.item, required this.active, required this.onTap});
+  const _Tab({required this.item, required this.active});
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     final color = active ? c.accent : c.muted;
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
+    // Нажатия ловит Listener на баре целиком: своих обработчиков у вкладки
+    // нет, иначе они перехватывали бы ведение пальцем.
+    return IgnorePointer(
       child: SizedBox(
         height: Gap.navBar,
         child: Column(
