@@ -14,7 +14,6 @@ import 'screens/legal_screen.dart';
 import 'api/models.dart';
 import 'theme/app_theme.dart';
 import 'utils/haptics.dart';
-import 'widgets/liquid_glass.dart';
 
 final _navigatorKey = GlobalKey<NavigatorState>();
 final _messengerKey = GlobalKey<ScaffoldMessengerState>();
@@ -36,9 +35,6 @@ Future<void> main() async {
     await push.unregisterBeforeLogout();
     favorites.clear();
   };
-  // Компиляция шейдера занимает время: делать её в момент первого касания
-  // бара — значит подвесить жест на ровном месте.
-  await LiquidGlass.warmUp();
   await Haptics.restore();
   await auth.restore();
   if (auth.isAuthenticated) unawaited(favorites.restore());

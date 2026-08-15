@@ -1,9 +1,8 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
-import 'liquid_glass.dart';
-
 import 'package:flutter/material.dart';
+import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../utils/haptics.dart';
@@ -87,7 +86,6 @@ class _GlassNavBarState extends State<GlassNavBar> {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final dpr = MediaQuery.devicePixelRatioOf(context);
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -115,7 +113,9 @@ class _GlassNavBarState extends State<GlassNavBar> {
               ? (_dragX! - pillWidth / 2).clamp(0.0, width - pillWidth)
               : slot * widget.index;
 
-          final lensReady = LiquidGlass.ready && LiquidGlass.supported;
+          // Тот же признак, которым гейтится сам пакет: линза требует
+          // Impeller, на Skia и в вебе остаётся цветная капсула.
+          final lensReady = ImageFilter.isShaderFilterSupported;
           final lensHeight = Gap.navBar + _lensOverhang * 2;
 
           return Listener(
@@ -205,39 +205,50 @@ class _GlassNavBarState extends State<GlassNavBar> {
                   ),
                 ),
 
-                // Линза ПОВЕРХ иконок: её снимок фона содержит сами иконки
-                // и подписи, и кромка стекла зримо гнёт их — вместе с краем
-                // панели, за который линза выступает.
+                // Линза ПОВЕРХ иконок: пакет захватывает всё, что
+                // нарисовано под ней — иконки, подписи и край панели, за
+                // который она выступает, — и честно преломляет по Снеллу.
+                // Своим слоем рендера, а не BackdropFilter: снимок фона у
+                // того отдавался по-разному на симуляторе и на устройстве,
+                // и линза хватала пиксели не оттуда.
+                //
+                // Ширина линзы во время жеста не меняется намеренно: у
+                // Flutter известная утечка при анимации размера шейдерных
+                // фигур (flutter#138627), двигать позицию — безопасно.
                 if (lensReady)
                   AnimatedPositioned(
                     // Пока палец на баре — никакой анимации: линза обязана
                     // быть ровно под пальцем, а не догонять его.
                     duration: dragging ? Duration.zero : Motion.base,
                     curve: Motion.benefit,
-                    left: pillLeft - 5,
+                    left:
+                        (dragging
+                                ? (_dragX! - (slot + 10) / 2).clamp(
+                                    0.0,
+                                    width - slot - 10,
+                                  )
+                                : slot * widget.index - 5)
+                            .toDouble(),
                     top: -_lensOverhang,
-                    width: pillWidth + 10,
+                    width: slot + 10,
                     height: lensHeight,
                     child: IgnorePointer(
-                      child: ClipRRect(
-                        borderRadius: R.pill,
-                        child: BackdropFilter(
-                          filter: LiquidGlass.lensFilter(
-                            // Толщина валика подобрана на симуляторе:
-                            // тоньше — кромка не читается стеклом, толще —
-                            // сдвиг съедает иконку под линзой
-                            thicknessPx: (dragging ? 19.0 : 15.0) * dpr,
-                          )!,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              borderRadius: R.pill,
-                              border: Border.all(
-                                color: c.surface.withValues(alpha: 0.55),
-                                width: 0.6,
-                              ),
-                            ),
-                          ),
+                      child: LiquidGlass.withOwnLayer(
+                        shape: LiquidRoundedSuperellipse(
+                          borderRadius: lensHeight / 2,
                         ),
+                        settings: LiquidGlassSettings(
+                          // Внутри линзы контент остаётся резким — мылит
+                          // только сама панель под ней
+                          blur: 0,
+                          thickness: dragging ? 22 : 17,
+                          glassColor: const Color(0x00FFFFFF),
+                          lightIntensity: 0.6,
+                          chromaticAberration: 0.6,
+                          // Дефолт пакета 1.5 перекрашивал бы иконки
+                          saturation: 1.0,
+                        ),
+                        child: const SizedBox.expand(),
                       ),
                     ),
                   ),
