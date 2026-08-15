@@ -179,7 +179,7 @@ class _OrderScreenState extends State<OrderScreen> {
               Text(
                 'Заказ № ${widget.order.number}',
                 style: TextStyle(
-                  fontSize: 11.5,
+                  fontSize: 12.5,
                   fontWeight: FontWeight.w500,
                   color: c.surface.withValues(alpha: 0.6),
                 ),
@@ -208,7 +208,7 @@ class _OrderScreenState extends State<OrderScreen> {
                     child: Text(
                       status == 'DELIVERED' ? 'доставлен' : 'в работе',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontSize: 14,
+                        fontSize: 15.5,
                         color: c.ink,
                       ),
                     ),
@@ -238,7 +238,7 @@ class _OrderScreenState extends State<OrderScreen> {
                     Text(
                       _summary(),
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 13,
                         height: 1.5,
                         color: c.surface.withValues(alpha: 0.75),
                       ),
@@ -271,7 +271,7 @@ class _OrderScreenState extends State<OrderScreen> {
                     child: Text(
                       _cancelling ? 'Отменяем…' : 'Отменить заказ',
                       style: TextStyle(
-                        fontSize: 12.5,
+                        fontSize: 13.5,
                         fontWeight: FontWeight.w600,
                         color: c.surface,
                       ),
@@ -284,7 +284,7 @@ class _OrderScreenState extends State<OrderScreen> {
                   'Отмена недоступна — заказ уже у курьера',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 13,
                     color: c.surface.withValues(alpha: 0.5),
                   ),
                 ),
@@ -356,7 +356,7 @@ class _StageRow extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: 14.5,
                 fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                 color: c.surface,
               ),
@@ -422,11 +422,11 @@ class _CancelSheetState extends State<_CancelSheet> {
             'Почему отменяете?',
             style: Theme.of(
               context,
-            ).textTheme.titleLarge?.copyWith(fontSize: 20),
+            ).textTheme.titleLarge?.copyWith(fontSize: 21),
           ),
           const SizedBox(height: Gap.lg),
           if (_error != null)
-            Text(_error!, style: TextStyle(color: c.accent, fontSize: 12))
+            Text(_error!, style: TextStyle(color: c.accent, fontSize: 13))
           else if (reasons == null)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: Gap.block),
@@ -452,7 +452,7 @@ class _CancelSheetState extends State<_CancelSheet> {
                     child: Text(
                       reason.label,
                       style: TextStyle(
-                        fontSize: 12.5,
+                        fontSize: 13.5,
                         fontWeight: FontWeight.w600,
                         color: _selected == reason.id ? c.surface : c.ink,
                       ),
@@ -479,7 +479,7 @@ class _CancelSheetState extends State<_CancelSheet> {
               child: Text(
                 'Отменить заказ',
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: 14.5,
                   fontWeight: FontWeight.w600,
                   color: _selected == null ? c.muted : c.surface,
                 ),
@@ -500,7 +500,7 @@ class _CancelSheetState extends State<_CancelSheet> {
               child: Text(
                 'Оставить заказ',
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: 14.5,
                   fontWeight: FontWeight.w600,
                   color: c.ink,
                 ),

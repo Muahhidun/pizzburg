@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
 import '../state/auth.dart';
+import '../theme/app_theme.dart';
+import '../theme/tokens.dart';
+import '../widgets/motion.dart';
 
 /// Чтение одного документа.
 ///
@@ -41,27 +44,64 @@ class _LegalDocumentScreenState extends State<LegalDocumentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final doc = _doc;
     return Scaffold(
-      appBar: AppBar(title: Text(doc?.displayTitle ?? widget.title ?? 'Документ')),
-      body: _error != null
-          ? _LegalMessage(text: _error!, onRetry: _load)
-          : doc == null
-              ? const Center(child: CircularProgressIndicator())
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+      backgroundColor: c.surface,
+      body: SafeArea(
+        child: _error != null
+            ? _LegalMessage(text: _error!, onRetry: _load)
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(
+                  Gap.screen,
+                  Gap.md,
+                  Gap.screen,
+                  Gap.blockWide,
+                ),
+                children: [
+                  Row(
                     children: [
-                      Text(
-                        'Редакция ${doc.version}',
-                        style: Theme.of(context).textTheme.bodySmall,
+                      PressScale(
+                        onTap: () => Navigator.pop(context),
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: c.fillSoft,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(Icons.arrow_back, size: 18, color: c.ink),
+                        ),
                       ),
-                      const SizedBox(height: 12),
-                      SelectableText(doc.content),
                     ],
                   ),
-                ),
+                  const SizedBox(height: Gap.lg),
+                  Text(
+                    doc?.displayTitle ?? widget.title ?? 'Документ',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  if (doc != null) ...[
+                    const SizedBox(height: Gap.sm),
+                    Text(
+                      'Редакция ${doc.version}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: Gap.block),
+                    // Документ читают редко, но читают внимательно:
+                    // межстрочный больше обычного.
+                    SelectableText(
+                      doc.content,
+                      style: const TextStyle(fontSize: 14, height: 1.6),
+                    ),
+                  ] else
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 48),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                ],
+              ),
+      ),
     );
   }
 }

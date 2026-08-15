@@ -47,6 +47,8 @@ export const api = {
       method: 'POST',
       body: body ? JSON.stringify(body) : undefined,
     }),
+  put: <T>(p: string, body: unknown) =>
+    request<T>(p, { method: 'PUT', body: JSON.stringify(body) }),
   upload: <T>(p: string, file: File) => {
     const form = new FormData();
     form.append('file', file);
@@ -296,6 +298,52 @@ export const todayLocal = () => {
     d.getDate(),
   ).padStart(2, '0')}`;
 };
+
+/** Адрес городского справочника */
+export interface CityAddress {
+  id: string;
+  street: string;
+  house: string;
+  lat: number | null;
+  lng: number | null;
+  isDeliverable: boolean;
+  /// OSM — пришёл импортом, MANUAL — завёл оператор
+  source: string;
+}
+
+export interface AddressesResponse {
+  items: CityAddress[];
+  total: number;
+  page: number;
+  pages: number;
+  totalAll: number;
+  undeliverable: number;
+}
+
+/** Заявка «моего адреса нет в списке» */
+export interface AddressRequestRow {
+  id: string;
+  raw: string;
+  phone: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+  customer: { name: string | null; phone: string } | null;
+}
+
+/** Ступень лестницы кэшбэка */
+export interface LoyaltyLevel {
+  level: number;
+  name: string;
+  cashbackPct: number;
+  minSpent: number;
+}
+
+export interface LoyaltyLevelsResponse {
+  levels: LoyaltyLevel[];
+  defaults: LoyaltyLevel[];
+  /// Плоский процент из старых настроек: пока он задан, лестница не работает
+  flatCashbackPct: number | null;
+}
 
 export interface CustomerRow {
   id: string;

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../api/models.dart';
+import '../state/auth.dart';
 import '../state/cart.dart';
+import '../state/favorites.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../utils/haptics.dart';
+import '../widgets/favorite_heart.dart';
 import '../widgets/motion.dart';
 
 /// Карточка товара по прототипу «Сигнал».
@@ -64,10 +67,25 @@ class _ProductScreenState extends State<ProductScreen> {
     Navigator.pop(context);
   }
 
+  Future<void> _toggleFavorite(Favorites favorites) async {
+    try {
+      await favorites.toggle(widget.product.id);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Не удалось сохранить — попробуйте ещё раз'),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     final p = widget.product;
+    final authed = context.watch<AuthState>().isAuthenticated;
+    final favorites = context.watch<Favorites>();
 
     return Scaffold(
       backgroundColor: c.surface,
@@ -91,6 +109,14 @@ class _ProductScreenState extends State<ProductScreen> {
                   ),
                 ),
                 const Spacer(),
+                if (authed) ...[
+                  FavoriteHeart(
+                    active: favorites.contains(p.id),
+                    size: 36,
+                    onTap: () => _toggleFavorite(favorites),
+                  ),
+                  const SizedBox(width: Gap.xs),
+                ],
                 if (p.weightLabel.isNotEmpty)
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -104,7 +130,7 @@ class _ProductScreenState extends State<ProductScreen> {
                     child: Text(
                       p.weightLabel,
                       style: TextStyle(
-                        fontSize: 11.5,
+                        fontSize: 12.5,
                         fontWeight: FontWeight.w500,
                         color: c.muted,
                       ),
@@ -133,7 +159,7 @@ class _ProductScreenState extends State<ProductScreen> {
               const SizedBox(height: Gap.sm),
               Text(
                 p.description,
-                style: TextStyle(fontSize: 12.5, height: 1.55, color: c.muted),
+                style: TextStyle(fontSize: 13.5, height: 1.55, color: c.muted),
               ),
             ],
 
@@ -145,7 +171,7 @@ class _ProductScreenState extends State<ProductScreen> {
                 Text(
                   group.name,
                   style: const TextStyle(
-                    fontSize: 13,
+                    fontSize: 14.5,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -212,7 +238,7 @@ class _ProductScreenState extends State<ProductScreen> {
                           child: Text(
                             'В корзину',
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: 14.5,
                               fontWeight: FontWeight.w600,
                               color: c.surface,
                             ),
@@ -256,7 +282,7 @@ class _OptionChip extends StatelessWidget {
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 12.5,
+            fontSize: 13.5,
             fontWeight: FontWeight.w600,
             color: selected ? c.surface : c.ink,
           ),
@@ -292,13 +318,13 @@ class _StopListBlock extends StatelessWidget {
                 'Сегодня закончилась',
                 style: Theme.of(
                   context,
-                ).textTheme.titleLarge?.copyWith(fontSize: 16),
+                ).textTheme.titleLarge?.copyWith(fontSize: 17),
               ),
               const SizedBox(height: Gap.sm),
               Text(
                 'Вернём в меню, когда привезут продукты. '
                 'Можем написать, как только появится.',
-                style: TextStyle(fontSize: 12.5, height: 1.5, color: c.muted),
+                style: TextStyle(fontSize: 13.5, height: 1.5, color: c.muted),
               ),
               const SizedBox(height: Gap.lg),
               PressScale(
@@ -318,7 +344,7 @@ class _StopListBlock extends StatelessWidget {
                   child: Text(
                     'Сообщить о поступлении',
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: 14.5,
                       fontWeight: FontWeight.w600,
                       color: c.surface,
                     ),
@@ -332,7 +358,7 @@ class _StopListBlock extends StatelessWidget {
           const SizedBox(height: Gap.blockWide),
           const Text(
             'Похожее в наличии',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: Gap.md),
           Row(
@@ -385,14 +411,14 @@ class _AltCard extends StatelessWidget {
               product.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 2),
             Text(
               formatTenge(product.price),
               style: Theme.of(
                 context,
-              ).textTheme.titleMedium?.copyWith(fontSize: 12.5),
+              ).textTheme.titleMedium?.copyWith(fontSize: 13.5),
             ),
           ],
         ),

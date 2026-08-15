@@ -220,6 +220,7 @@ export class OrdersService {
         freeDelivery: false,
         applied: [],
         appliedPromotions: [],
+        nextGift: null,
       };
     }
     const giftProducts =

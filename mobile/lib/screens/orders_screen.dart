@@ -112,11 +112,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
         child: RefreshIndicator(
           onRefresh: auth.refresh,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(
+            padding: EdgeInsets.fromLTRB(
               Gap.screen,
               Gap.lg,
               Gap.screen,
-              Gap.blockWide,
+              // Плавающий бар лежит поверх списка
+              Gap.navBarSpace(context),
             ),
             children: [
               Text('Заказы', style: Theme.of(context).textTheme.headlineMedium),
@@ -196,7 +197,7 @@ class _ActiveCard extends StatelessWidget {
             Text(
               'Активный · № ${order['number']}',
               style: TextStyle(
-                fontSize: 11.5,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w500,
                 color: c.surface.withValues(alpha: 0.6),
               ),
@@ -205,7 +206,7 @@ class _ActiveCard extends StatelessWidget {
             Text(
               stage,
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontSize: 19,
+                fontSize: 20,
                 height: 1.15,
                 color: c.surface,
               ),
@@ -214,7 +215,7 @@ class _ActiveCard extends StatelessWidget {
             Text(
               '$positions ${_positions(positions)} · ${formatTenge((order['total'] as num?)?.toInt() ?? 0)}',
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 13,
                 color: c.surface.withValues(alpha: 0.7),
               ),
             ),
@@ -270,7 +271,7 @@ class _HistoryRow extends StatelessWidget {
                   Text(
                     _date(order['createdAt']),
                     style: const TextStyle(
-                      fontSize: 13,
+                      fontSize: 14.5,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -291,7 +292,7 @@ class _HistoryRow extends StatelessWidget {
                 Text(
                   formatTenge((order['total'] as num?)?.toInt() ?? 0),
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontSize: 13.5,
+                    fontSize: 15,
                   ),
                 ),
                 const SizedBox(height: Gap.sm),
@@ -309,7 +310,7 @@ class _HistoryRow extends StatelessWidget {
                     child: Text(
                       'Повтор',
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: canRepeat ? c.ink : c.muted,
                       ),

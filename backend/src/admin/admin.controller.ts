@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Patch,
+  Put,
   Post,
   Query,
   UploadedFile,
@@ -20,7 +21,10 @@ import {
   ReorderDto,
   UpdateCategoryDto,
   UpdateProductDto,
+  CreateAddressDto,
+  UpdateAddressDto,
   UpdateCancellationDto,
+  UpdateLoyaltyLevelsDto,
   UpdateOrderingDto,
   UpdatePaymentsDto,
   UpdatePreorderDto,
@@ -168,6 +172,48 @@ export class AdminController {
   @Patch('settings/payments')
   updatePayments(@Body() dto: UpdatePaymentsDto) {
     return this.admin.updatePayments(dto);
+  }
+
+  // ─── Адресный справочник города ──────────────────────────────
+
+  @Get('addresses')
+  addresses(
+    @Query('q') q?: string,
+    @Query('page') page?: string,
+  ) {
+    return this.admin.addresses(q ?? '', Number(page) || 1);
+  }
+
+  @Post('addresses')
+  createAddress(@Body() dto: CreateAddressDto) {
+    return this.admin.createAddress(dto);
+  }
+
+  @Patch('addresses/:id')
+  updateAddress(@Param('id') id: string, @Body() dto: UpdateAddressDto) {
+    return this.admin.updateAddress(id, dto);
+  }
+
+  /** Заявки «моего адреса нет в списке» */
+  @Get('address-requests')
+  addressRequests(@Query('resolved') resolved?: string) {
+    return this.admin.addressRequests(resolved === '1');
+  }
+
+  @Post('address-requests/:id/resolve')
+  resolveAddressRequest(@Param('id') id: string) {
+    return this.admin.resolveAddressRequest(id);
+  }
+
+  /** Лестница кэшбэка: 3% новичку … 6% постоянному */
+  @Get('settings/loyalty-levels')
+  loyaltyLevels() {
+    return this.admin.loyaltyLevels();
+  }
+
+  @Put('settings/loyalty-levels')
+  updateLoyaltyLevels(@Body() dto: UpdateLoyaltyLevelsDto) {
+    return this.admin.updateLoyaltyLevels(dto);
   }
 
   @Patch('settings/cancellation')

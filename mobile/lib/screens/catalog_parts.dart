@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../api/models.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
+import '../widgets/favorite_heart.dart';
 import '../widgets/motion.dart';
 
 /// Части экрана каталога, вынесенные из `menu_screen.dart`, чтобы сам
@@ -107,7 +108,7 @@ class _Half extends StatelessWidget {
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 12.5,
+            fontSize: 13.5,
             fontWeight: FontWeight.w600,
             color: text,
           ),
@@ -160,7 +161,7 @@ class CategoryChips extends StatelessWidget {
                 child: Text(
                   category.name,
                   style: TextStyle(
-                    fontSize: 12.5,
+                    fontSize: 13.5,
                     fontWeight: active ? FontWeight.w600 : FontWeight.w500,
                     color: active ? c.surface : c.muted,
                   ),
@@ -191,6 +192,11 @@ class ProductRow extends StatelessWidget {
   final int inCart;
   final VoidCallback? onRemove;
 
+  /// Сердечко показываем только вошедшим: избранное хранится на сервере,
+  /// и гостю кнопка обещала бы сохранение, которого не будет.
+  final bool? favorite;
+  final VoidCallback? onToggleFavorite;
+
   const ProductRow({
     super.key,
     required this.product,
@@ -199,6 +205,8 @@ class ProductRow extends StatelessWidget {
     this.inStopList = false,
     this.inCart = 0,
     this.onRemove,
+    this.favorite,
+    this.onToggleFavorite,
   });
 
   @override
@@ -222,16 +230,34 @@ class ProductRow extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ClipRRect(
-                borderRadius: R.thumb,
-                child: SizedBox(
-                  width: 76,
-                  height: 76,
-                  child: _Photo(
-                    url: product.photoUrl,
-                    grayscale: inStopList,
-                    fallback: c.fillSoft,
-                  ),
+              SizedBox(
+                width: 76,
+                height: 76,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    ClipRRect(
+                      borderRadius: R.thumb,
+                      child: SizedBox(
+                        width: 76,
+                        height: 76,
+                        child: _Photo(
+                          url: product.photoUrl,
+                          grayscale: inStopList,
+                          fallback: c.fillSoft,
+                        ),
+                      ),
+                    ),
+                    if (favorite != null && onToggleFavorite != null)
+                      Positioned(
+                        top: -6,
+                        right: -8,
+                        child: FavoriteHeart(
+                          active: favorite!,
+                          onTap: onToggleFavorite!,
+                        ),
+                      ),
+                  ],
                 ),
               ),
               const SizedBox(width: Gap.md),
@@ -275,7 +301,7 @@ class ProductRow extends StatelessWidget {
                       ),
                       child: Text(
                         'нет',
-                        style: TextStyle(fontSize: 12, color: c.muted),
+                        style: TextStyle(fontSize: 13, color: c.muted),
                       ),
                     )
                   else if (inCart > 0)
@@ -378,7 +404,7 @@ class _QtyStepper extends StatelessWidget {
               '$qty',
               style: TextStyle(
                 fontFamily: 'Unbounded',
-                fontSize: 12.5,
+                fontSize: 13.5,
                 fontWeight: FontWeight.w700,
                 color: c.surface,
               ),
@@ -444,7 +470,7 @@ class FloatingCart extends StatelessWidget {
                 AnimatedMoney(
                   total,
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontSize: 16,
+                    fontSize: 17,
                     color: c.surface,
                   ),
                 ),
@@ -460,7 +486,7 @@ class FloatingCart extends StatelessWidget {
                   child: Text(
                     'Корзина · $count',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: c.ink,
                     ),
@@ -470,6 +496,118 @@ class FloatingCart extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Поиск по меню.
+///
+/// Ищем и по названию, и по составу: человек чаще помнит «с халапеньо»,
+/// чем точное имя блюда. Живёт над списком и не трогает якоря категорий —
+/// пока строка не пуста, список подменяется результатами.
+class MenuSearch extends StatelessWidget {
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onClear;
+
+  const MenuSearch({
+    super.key,
+    required this.controller,
+    required this.onChanged,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Container(
+      padding: const EdgeInsets.only(left: Gap.lg, right: 6),
+      decoration: BoxDecoration(color: c.fillSoft, borderRadius: R.pill),
+      child: Row(
+        children: [
+          Icon(Icons.search, size: 18, color: c.muted),
+          const SizedBox(width: Gap.sm),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              onChanged: onChanged,
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: 'Найти блюдо',
+                hintStyle: TextStyle(fontSize: 14.5, color: c.muted),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              style: const TextStyle(fontSize: 14.5),
+            ),
+          ),
+          if (controller.text.isNotEmpty)
+            PressScale(
+              onTap: onClear,
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Icon(Icons.close, size: 18, color: c.muted),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Ничего не нашлось. Не тупик: предлагаем сбросить и вернуться к меню.
+class SearchEmpty extends StatelessWidget {
+  final String query;
+  final VoidCallback onClear;
+
+  const SearchEmpty({super.key, required this.query, required this.onClear});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 48),
+      child: Column(
+        children: [
+          Container(
+            width: 92,
+            height: 92,
+            decoration: BoxDecoration(
+              color: c.accentSoft,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.search_off, size: 34, color: c.accent),
+          ),
+          const SizedBox(height: Gap.block),
+          Text(
+            'Ничего не нашли',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 20),
+          ),
+          const SizedBox(height: Gap.sm),
+          Text(
+            'По запросу «$query» блюд нет. Проверьте написание или посмотрите меню целиком.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: Gap.block),
+          PressScale(
+            onTap: onClear,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+              decoration: BoxDecoration(color: c.accent, borderRadius: R.pill),
+              child: Text(
+                'Показать всё меню',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                  color: c.surface,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

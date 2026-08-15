@@ -78,7 +78,7 @@ class CatalogHeader extends StatelessWidget {
                       Text(
                         mode == 'PICKUP' ? 'Заберёте из' : 'Доставим на',
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 13,
                           height: 1.35,
                           fontWeight: FontWeight.w500,
                           color: c.surface.withValues(alpha: 0.7),
@@ -92,7 +92,7 @@ class CatalogHeader extends StatelessWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                fontSize: 13.5,
+                                fontSize: 15,
                                 fontWeight: FontWeight.w600,
                                 color: c.surface,
                               ),
@@ -119,7 +119,7 @@ class CatalogHeader extends StatelessWidget {
                 child: Text(
                   etaLabel,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: c.surface,
                   ),
@@ -148,7 +148,7 @@ class CatalogHeader extends StatelessWidget {
                         ? 'Доставка закрыта'
                         : 'Сейчас закрыто',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontSize: 15,
+                      fontSize: 16.5,
                       color: c.accent,
                     ),
                   ),
@@ -156,7 +156,7 @@ class CatalogHeader extends StatelessWidget {
                   Text(
                     availability.message!,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 13,
                       height: 1.4,
                       color: c.surface.withValues(alpha: 0.8),
                     ),
@@ -339,7 +339,7 @@ class CatalogError extends StatelessWidget {
             const SizedBox(height: Gap.block),
             Text(
               'Меню не загрузилось',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 20),
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 21),
             ),
             const SizedBox(height: Gap.sm),
             Text(
@@ -356,7 +356,7 @@ class CatalogError extends StatelessWidget {
                 child: Text(
                   'Повторить',
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 14.5,
                     fontWeight: FontWeight.w600,
                     color: c.surface,
                   ),

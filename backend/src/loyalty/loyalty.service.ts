@@ -81,11 +81,22 @@ export class LoyaltyService {
         0,
         order.discount - order.pointsSpent,
       );
-      const policy = this.policy(order.tenant.settings, 1);
+
+      // Процент берём по уровню КЛИЕНТА, а не по первому уровню: иначе
+      // вся лестница уровней ничего не меняет и существует только на
+      // карточке в профиле.
+      const customer = await tx.customer.findUnique({
+        where: { id: order.customerId },
+        select: { loyaltyLevel: true, lifetimeSpent: true },
+      });
+      const level = customer?.loyaltyLevel ?? 1;
+
+      const policy = this.policy(order.tenant.settings, level);
       const amount = this.cashbackAmount(order.tenant.settings, {
         subtotal: order.subtotal,
         pointsSpent: order.pointsSpent,
         promotionalDiscount,
+        loyaltyLevel: level,
       });
       if (amount <= 0) return 0;
 
@@ -105,10 +116,23 @@ export class LoyaltyService {
         },
       });
 
+      // Оборот и уровень обновляем здесь же: заказ выполнен — значит
+      // деньги получены, и это единственный момент, когда уровень может
+      // измениться.
+      const nextSpent = (customer?.lifetimeSpent ?? 0) + order.total;
+      const nextLevel = this.levelFor(
+        order.tenant.settings,
+        nextSpent,
+      ).current.level;
+
       await Promise.all([
         tx.customer.update({
           where: { id: order.customerId },
-          data: { pointsBalance: { increment: amount } },
+          data: {
+            pointsBalance: { increment: amount },
+            lifetimeSpent: nextSpent,
+            loyaltyLevel: nextLevel,
+          },
         }),
         tx.order.update({ where: { id: order.id }, data: { pointsEarned: amount } }),
       ]);
@@ -191,13 +215,60 @@ export class LoyaltyService {
     return 0;
   }
 
+  /// Уровни кэшбэка по умолчанию (решение владельца 15.08.2026).
+  ///
+  /// Порог — оборот выполненных заказов **за всё время**. Уровень никогда
+  /// не понижается: понижение читается клиентом как наказание и стоит
+  /// дороже, чем выигрыш в активности. У арендатора список настраивается
+  /// в `settings.loyalty.levels`.
+  static readonly defaultLevels = [
+    { level: 1, name: 'Новичок', cashbackPct: 3, minSpent: 0 },
+    { level: 2, name: 'Свой', cashbackPct: 4, minSpent: 50_000 },
+    { level: 3, name: 'Частый', cashbackPct: 5, minSpent: 100_000 },
+    { level: 4, name: 'Постоянный', cashbackPct: 6, minSpent: 150_000 },
+  ];
+
+  levels(settings: Prisma.JsonValue) {
+    const configured = (settings as any)?.loyalty?.levels;
+    const list = Array.isArray(configured) && configured.length
+      ? configured.map((item: any, index: number) => ({
+          level: Number(item.level ?? index + 1),
+          name: String(item.name ?? `Уровень ${index + 1}`),
+          cashbackPct: Number(item.cashbackPct ?? 3),
+          minSpent: Number(item.minSpent ?? 0),
+        }))
+      : LoyaltyService.defaultLevels;
+    return [...list].sort((a, b) => a.minSpent - b.minSpent);
+  }
+
+  /// Какой уровень соответствует обороту. Возвращает и следующий уровень,
+  /// чтобы приложение могло показать «ещё N ₸ — и кэшбэк станет X%».
+  levelFor(settings: Prisma.JsonValue, lifetimeSpent: number) {
+    const levels = this.levels(settings);
+    let current = levels[0];
+    for (const level of levels) {
+      if (lifetimeSpent >= level.minSpent) current = level;
+    }
+    const next = levels.find((l) => l.minSpent > lifetimeSpent) ?? null;
+    return {
+      current,
+      next,
+      toNext: next ? Math.max(0, next.minSpent - lifetimeSpent) : 0,
+      total: levels.length,
+    };
+  }
+
   cashbackPct(settings: Prisma.JsonValue, loyaltyLevel = 1) {
     const loyalty = (settings as any)?.loyalty ?? {};
+
+    // Плоский процент для всех — если арендатор не хочет лестницу вообще
     const direct = Number(loyalty.cashbackPct);
     if (Number.isFinite(direct) && direct >= 0 && direct <= 100) return direct;
-    const level = Array.isArray(loyalty.levels)
-      ? loyalty.levels.find((item: any) => Number(item.level) === loyaltyLevel)
-      : null;
+
+    // Ищем в лестнице — той же, что и levelFor(). Раньше здесь читались
+    // только настройки арендатора, и при пустых настройках любой уровень
+    // давал 3%: лестница существовала лишь на карточке в профиле.
+    const level = this.levels(settings).find((l) => l.level === loyaltyLevel);
     const fromLevel = Number(level?.cashbackPct);
     return Number.isFinite(fromLevel) && fromLevel >= 0 && fromLevel <= 100
       ? fromLevel

@@ -1,14 +1,23 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
-import '../utils/haptics.dart';
+import '../widgets/glass_nav_bar.dart';
 import '../widgets/motion.dart';
 import 'cart_screen.dart';
+import 'favorites_screen.dart';
 import 'menu_screen.dart';
 import 'orders_screen.dart';
 import 'profile_screen.dart';
 
-/// Оболочка с таб-баром: Меню / Корзина / Заказы / Профиль.
+/// Оболочка с таб-баром: Меню / Избранное / Корзина / Заказы / Профиль.
+///
+/// Бар не приклеен к нижнему краю, а висит над контентом капсулой: список
+/// уходит под стекло и видно, что он продолжается. Поэтому экраны внутри
+/// сами оставляют внизу `Gap.navBarSpace` — иначе последняя строка окажется
+/// под баром.
+///
+/// Корзина стоит по центру: это главное действие, и до центра большой палец
+/// достаёт легче, чем до краёв.
 ///
 /// **Счётчиков суммы и баллов в табах нет намеренно.** В старом приложении
 /// вкладки одновременно служили навигацией и табло («1006 баллов»,
@@ -27,11 +36,22 @@ class _AppShellState extends State<AppShell> {
   int _index = 0;
 
   static const _tabs = [
-    (icon: Icons.grid_view_rounded, label: 'Меню'),
-    (icon: Icons.shopping_bag_outlined, label: 'Корзина'),
-    (icon: Icons.receipt_long_outlined, label: 'Заказы'),
-    (icon: Icons.person_outline, label: 'Профиль'),
+    NavItem(icon: Icons.grid_view_rounded, label: 'Меню'),
+    NavItem(
+      icon: Icons.favorite_border,
+      activeIcon: Icons.favorite,
+      label: 'Избранное',
+    ),
+    NavItem(
+      icon: Icons.shopping_bag_outlined,
+      activeIcon: Icons.shopping_bag,
+      label: 'Корзина',
+    ),
+    NavItem(icon: Icons.receipt_long_outlined, label: 'Заказы'),
+    NavItem(icon: Icons.person_outline, label: 'Профиль'),
   ];
+
+  void _go(int index) => setState(() => _index = index);
 
   @override
   Widget build(BuildContext context) {
@@ -39,93 +59,29 @@ class _AppShellState extends State<AppShell> {
 
     return Scaffold(
       backgroundColor: colors.surface,
-      body: IndexedStack(
-        index: _index,
-        children: const [
-          MenuScreen(),
-          CartScreen(embedded: true),
-          OrdersScreen(),
-          ProfileScreen(),
-        ],
-      ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: colors.surface,
-          border: Border(top: BorderSide(color: colors.line)),
-        ),
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.only(top: 10, bottom: 8),
-            child: Row(
-              children: [
-                for (var i = 0; i < _tabs.length; i++)
-                  Expanded(
-                    child: _Tab(
-                      icon: _tabs[i].icon,
-                      label: _tabs[i].label,
-                      active: _index == i,
-                      onTap: () {
-                        if (_index == i) return;
-                        Haptics.selection();
-                        setState(() => _index = i);
-                      },
-                    ),
-                  ),
-              ],
+      // Бар должен лежать поверх контента, а не отрезать ему низ, поэтому
+      // Stack, а не bottomNavigationBar.
+      body: Stack(
+        children: [
+          IndexedStack(
+            index: _index,
+            children: [
+              const MenuScreen(),
+              FavoritesScreen(onOpenMenu: () => _go(0)),
+              const CartScreen(embedded: true),
+              const OrdersScreen(),
+              const ProfileScreen(),
+            ],
+          ),
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: GlassNavBar(
+              items: _tabs,
+              index: _index,
+              onChanged: _go,
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Tab extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  const _Tab({
-    required this.icon,
-    required this.label,
-    required this.active,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final color = active ? c.accent : c.muted;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: SizedBox(
-        height: 46,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            AnimatedScale(
-              scale: active ? 1.08 : 1,
-              duration: Motion.base,
-              curve: Motion.change,
-              child: Icon(icon, size: 20, color: color),
-            ),
-            const SizedBox(height: 3),
-            AnimatedDefaultTextStyle(
-              duration: Motion.base,
-              style: TextStyle(
-                fontFamily: 'Golos Text',
-                fontSize: 10.5,
-                height: 1,
-                fontWeight: active ? FontWeight.w600 : FontWeight.w500,
-                color: color,
-              ),
-              child: Text(label),
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -163,7 +119,7 @@ class EmptyCart extends StatelessWidget {
             const SizedBox(height: Gap.block),
             Text(
               'Пока пусто',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 19),
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 20),
             ),
             const SizedBox(height: Gap.sm),
             Text(
@@ -187,7 +143,7 @@ class EmptyCart extends StatelessWidget {
                 child: Text(
                   'Открыть меню',
                   style: TextStyle(
-                    fontSize: 12.5,
+                    fontSize: 13.5,
                     fontWeight: FontWeight.w600,
                     color: c.ink,
                   ),

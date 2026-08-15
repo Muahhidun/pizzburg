@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pizzburg/api/models.dart';
 import 'package:pizzburg/theme/tokens.dart';
 import 'package:pizzburg/utils/haptics.dart';
 import 'package:pizzburg/widgets/motion.dart';
+import 'package:pizzburg/api/api_client.dart';
 import 'package:pizzburg/state/cart.dart';
+import 'package:pizzburg/state/favorites.dart';
 import 'package:pizzburg/utils/input_validation.dart';
 
 void main() {
@@ -429,4 +432,56 @@ void main() {
       expect(apply('+7 (70', '+7 (708'), '+7 (708)');
     });
   });
+
+  group('избранное', () {
+    test('сердце закрашивается до ответа сервера', () async {
+      final api = _SlowFavoritesApi();
+      final favorites = Favorites(api);
+
+      final pending = favorites.toggle('pizza-1');
+      // Ответ ещё не пришёл, а сердце уже должно быть закрашено: иначе
+      // человек нажимает второй раз, решив, что не сработало.
+      expect(favorites.contains('pizza-1'), isTrue);
+
+      api.complete(true);
+      await pending;
+      expect(favorites.contains('pizza-1'), isTrue);
+    });
+
+    test('ошибка сети откатывает сердце, а не врёт о сохранении', () async {
+      final api = _SlowFavoritesApi();
+      final favorites = Favorites(api);
+
+      final pending = favorites.toggle('pizza-1');
+      expect(favorites.contains('pizza-1'), isTrue);
+
+      api.fail();
+      await expectLater(pending, throwsA(anything));
+      expect(favorites.contains('pizza-1'), isFalse);
+    });
+
+    test('выход стирает чужие сердечки', () async {
+      final api = _SlowFavoritesApi();
+      final favorites = Favorites(api);
+      final pending = favorites.toggle('pizza-1');
+      api.complete(true);
+      await pending;
+
+      favorites.clear();
+      expect(favorites.count, 0);
+      expect(favorites.contains('pizza-1'), isFalse);
+    });
+  });
+}
+
+/// Клиент, у которого ответ приходит по команде теста: только так видно,
+/// что состояние меняется до ответа, а не после.
+class _SlowFavoritesApi extends ApiClient {
+  final _completer = Completer<bool>();
+
+  void complete(bool value) => _completer.complete(value);
+  void fail() => _completer.completeError(Exception('нет сети'));
+
+  @override
+  Future<bool> toggleFavorite(String productId) => _completer.future;
 }

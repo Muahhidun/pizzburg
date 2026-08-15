@@ -44,12 +44,18 @@ abstract final class AppTheme {
     );
   }
 
-  /// Размеры взяты из таблицы типографики хендоффа один в один.
+  /// Типографика по хендоффу, но на ступень крупнее.
+  ///
+  /// Исходная таблица рассчитана на макет 390 pt и ставит нижнюю границу
+  /// 10.5 — на реальном телефоне названия блюд и цены читались мелко.
+  /// Подняты **главные** размеры: названия, цены, суммы, заголовки.
+  /// Второстепенное (состав, микроподписи) поднято на пол-ступени —
+  /// иерархия должна сохраниться, иначе экран превращается в кашу.
   static TextTheme _textTheme(AppColors c) => TextTheme(
     // Баланс баллов
     displayLarge: TextStyle(
       fontFamily: _display,
-      fontSize: 40,
+      fontSize: 42,
       height: 1,
       fontWeight: FontWeight.w700,
       letterSpacing: -1.6,
@@ -58,7 +64,7 @@ abstract final class AppTheme {
     // Заголовок этапа на экране статуса
     displayMedium: TextStyle(
       fontFamily: _display,
-      fontSize: 30,
+      fontSize: 32,
       height: 1.05,
       fontWeight: FontWeight.w700,
       letterSpacing: -1.2,
@@ -67,7 +73,7 @@ abstract final class AppTheme {
     // «Тот же заказ?» в хедере каталога
     displaySmall: TextStyle(
       fontFamily: _display,
-      fontSize: 27,
+      fontSize: 29,
       height: 1.1,
       fontWeight: FontWeight.w700,
       letterSpacing: -0.81,
@@ -76,7 +82,7 @@ abstract final class AppTheme {
     // Заголовки экранов
     headlineMedium: TextStyle(
       fontFamily: _display,
-      fontSize: 24,
+      fontSize: 26,
       height: 1.1,
       fontWeight: FontWeight.w700,
       letterSpacing: -0.72,
@@ -85,7 +91,7 @@ abstract final class AppTheme {
     // Сумма в кнопке
     titleLarge: TextStyle(
       fontFamily: _display,
-      fontSize: 18,
+      fontSize: 19,
       height: 1,
       fontWeight: FontWeight.w700,
       letterSpacing: -0.36,
@@ -94,39 +100,39 @@ abstract final class AppTheme {
     // Цена в строке списка
     titleMedium: TextStyle(
       fontFamily: _display,
-      fontSize: 14,
+      fontSize: 16,
       height: 1,
       fontWeight: FontWeight.w700,
       color: c.ink,
     ),
     // Название товара
     bodyLarge: TextStyle(
-      fontSize: 14.5,
-      height: 1.2,
+      fontSize: 16,
+      height: 1.25,
       fontWeight: FontWeight.w600,
       color: c.ink,
     ),
     // Строка корзины
     bodyMedium: TextStyle(
-      fontSize: 13,
-      height: 1.25,
+      fontSize: 15,
+      height: 1.3,
       fontWeight: FontWeight.w400,
       color: c.ink,
     ),
     // Подписи
-    bodySmall: TextStyle(fontSize: 12, height: 1.35, color: c.muted),
+    bodySmall: TextStyle(fontSize: 13, height: 1.4, color: c.muted),
     // Кнопки и пилюли
     labelLarge: TextStyle(
-      fontSize: 12.5,
+      fontSize: 13.5,
       height: 1,
       fontWeight: FontWeight.w600,
       color: c.ink,
     ),
     // Состав товара
-    labelMedium: TextStyle(fontSize: 11, height: 1.45, color: c.muted),
+    labelMedium: TextStyle(fontSize: 12, height: 1.45, color: c.muted),
     // Микроподписи — нижняя граница читаемости, мельче не опускаться
     labelSmall: TextStyle(
-      fontSize: 10.5,
+      fontSize: 11.5,
       height: 1,
       fontWeight: FontWeight.w500,
       color: c.muted,

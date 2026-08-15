@@ -96,6 +96,9 @@ export class CartController {
       // Денежная скидка уменьшает, поэтому идёт отдельным полем.
       promoDiscount: promo.giftValue,
       moneyDiscount: promo.moneyDiscount,
+      // «Добавьте ещё на N ₸ — подарок». Порог считает сервер: приложение
+      // не должно знать условия акций и заново их сравнивать.
+      nextGift: promo.nextGift,
       freeDelivery: promo.freeDelivery,
       loyalty: {
         ...loyaltyPolicy,

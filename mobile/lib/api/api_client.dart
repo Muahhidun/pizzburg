@@ -144,6 +144,84 @@ class ApiClient {
     return RepeatResult.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
   }
 
+  /// id избранных товаров — для сердечек в каталоге
+  Future<List<String>> fetchFavoriteIds() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/favorites/ids'),
+      headers: _headers,
+    );
+    _ensureOk(res);
+    return (jsonDecode(utf8.decode(res.bodyBytes)) as List).cast<String>();
+  }
+
+  /// Избранное с актуальными ценой и стоп-листом
+  Future<List<FavoriteProduct>> fetchFavorites() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/favorites'),
+      headers: _headers,
+    );
+    _ensureOk(res);
+    return (jsonDecode(utf8.decode(res.bodyBytes)) as List)
+        .map((f) => FavoriteProduct.fromJson(f))
+        .toList();
+  }
+
+  /// Сердечко — один переключатель: клиенту не нужно знать текущее
+  /// состояние, чтобы его нажать. Возвращает новое состояние.
+  Future<bool> toggleFavorite(String productId) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/favorites/$productId/toggle'),
+      headers: _headers,
+    );
+    _ensureOk(res);
+    return jsonDecode(utf8.decode(res.bodyBytes))['favorite'] == true;
+  }
+
+  /// Подсказки адресов из 2ГИС через наш бэкенд.
+  ///
+  /// Ключ живёт на сервере, а не в сборке приложения, и город фиксируется
+  /// там же — иначе в подсказках всплывают одноимённые улицы Павлодара.
+  Future<List<AddressSuggestion>> suggestAddress(String query) async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/geo/suggest?q=${Uri.encodeQueryComponent(query)}'),
+    );
+    _ensureOk(res);
+    final data = jsonDecode(utf8.decode(res.bodyBytes));
+    return ((data['items'] ?? []) as List)
+        .map((i) => AddressSuggestion.fromJson(i))
+        .toList();
+  }
+
+  /// Дома выбранной улицы. Второй шаг: сначала улица, потом номер —
+  /// на улице Беркимбаева 217 домов, списком их не показать.
+  Future<List<AddressSuggestion>> fetchHouses(String street, String q) async {
+    final res = await http.get(
+      Uri.parse(
+        '$baseUrl/geo/houses?street=${Uri.encodeQueryComponent(street)}'
+        '&q=${Uri.encodeQueryComponent(q)}',
+      ),
+    );
+    _ensureOk(res);
+    final data = jsonDecode(utf8.decode(res.bodyBytes));
+    return ((data['items'] ?? []) as List)
+        .map((i) => AddressSuggestion.fromJson(i))
+        .toList();
+  }
+
+  /// «Моего адреса нет в списке».
+  ///
+  /// Заявка уходит оператору, а заказ при этом не блокируется: закрытый
+  /// справочник рано или поздно не найдёт реальный дом реального человека,
+  /// и упереться в это он должен не на этапе оплаты.
+  Future<void> requestAddress(String raw, {String? phone}) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/geo/address-request'),
+      headers: _headers,
+      body: jsonEncode({'raw': raw, 'phone': ?phone}),
+    );
+    _ensureOk(res);
+  }
+
   /// Сохранённые адреса клиента, самый свежий сверху.
   /// Заводить их вручную не нужно — они накапливаются при оформлении.
   Future<List<SavedAddress>> fetchAddresses() async {

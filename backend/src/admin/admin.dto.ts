@@ -160,6 +160,34 @@ export class UpdateCancellationDto {
   @IsInt() @Min(0) @Max(120) customerWindowMinutes: number;
 }
 
+export class CreateAddressDto {
+  @IsString() @Length(2, 120) street: string;
+  @IsString() @Length(1, 20) house: string;
+}
+
+export class UpdateAddressDto {
+  @IsOptional() @IsBoolean() isDeliverable?: boolean;
+}
+
+export class LoyaltyLevelDto {
+  @IsString() @Length(2, 40) name: string;
+
+  /// Потолок 20% — не «на всякий случай», а защита от опечатки: «60»
+  /// вместо «6» раздаст шестьдесят процентов оборота до первой сверки.
+  @IsInt() @Min(0) @Max(20) cashbackPct: number;
+
+  /// Порог — оборот выполненных заказов за всё время
+  @IsInt() @Min(0) @Max(100_000_000) minSpent: number;
+}
+
+export class UpdateLoyaltyLevelsDto {
+  @IsArray()
+  @ArrayMaxSize(8)
+  @ValidateNested({ each: true })
+  @Type(() => LoyaltyLevelDto)
+  levels: LoyaltyLevelDto[];
+}
+
 export class PublishLegalDto {
   @IsEnum(['OFFER', 'PRIVACY', 'REQUISITES'])
   type: 'OFFER' | 'PRIVACY' | 'REQUISITES';

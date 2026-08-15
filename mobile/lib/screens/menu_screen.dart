@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
 import '../state/cart.dart';
+import '../state/favorites.dart';
 import '../state/auth.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
@@ -88,6 +89,8 @@ class _MenuScreenState extends State<MenuScreen> {
   String _mode = 'DELIVERY';
   int _attempt = 1;
   MenuResponse? _menu;
+  final _search = TextEditingController();
+  String _query = '';
 
   @override
   void initState() {
@@ -100,7 +103,22 @@ class _MenuScreenState extends State<MenuScreen> {
   void dispose() {
     _listController.dispose();
     _chipsController.dispose();
+    _search.dispose();
     super.dispose();
+  }
+
+  /// Ищем и по названию, и по составу: человек чаще помнит «с халапеньо»,
+  /// чем точное имя блюда.
+  List<Product> _found(MenuResponse menu) {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) return const [];
+    return [
+      for (final category in menu.categories)
+        for (final product in category.products)
+          if (product.name.toLowerCase().contains(q) ||
+              product.description.toLowerCase().contains(q))
+            product,
+    ];
   }
 
   Future<_CatalogData> _load() async {
@@ -244,6 +262,10 @@ class _MenuScreenState extends State<MenuScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    // Сердечки показываем только вошедшим: избранное хранится на сервере,
+    // и гостю кнопка обещала бы сохранение, которого не будет.
+    final favorites = context.watch<Favorites>();
+    final authed = context.watch<AuthState>().isAuthenticated;
     return Scaffold(
       backgroundColor: colors.surface,
       body: FutureBuilder<_CatalogData>(
@@ -338,6 +360,27 @@ class _MenuScreenState extends State<MenuScreen> {
                     ),
                     SliverToBoxAdapter(
                       child: Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          Gap.screen,
+                          Gap.md,
+                          Gap.screen,
+                          0,
+                        ),
+                        child: MenuSearch(
+                          controller: _search,
+                          onChanged: (v) => setState(() => _query = v),
+                          onClear: () => setState(() {
+                            _search.clear();
+                            _query = '';
+                          }),
+                        ),
+                      ),
+                    ),
+                    // Пока идёт поиск, категории не нужны: они относятся
+                    // к полному меню, а не к результатам.
+                    if (_query.trim().isEmpty)
+                    SliverToBoxAdapter(
+                      child: Padding(
                         padding: const EdgeInsets.only(top: Gap.lg),
                         child: CategoryChips(
                           categories: _categories,
@@ -347,12 +390,79 @@ class _MenuScreenState extends State<MenuScreen> {
                         ),
                       ),
                     ),
+                    if (_query.trim().isNotEmpty)
+                      SliverPadding(
+                        padding: EdgeInsets.fromLTRB(
+                          Gap.screen,
+                          Gap.md,
+                          Gap.screen,
+                          _bottomSpace(context),
+                        ),
+                        sliver: Builder(
+                          builder: (context) {
+                            final found = _found(data.menu);
+                            if (found.isEmpty) {
+                              return SliverToBoxAdapter(
+                                child: SearchEmpty(
+                                  query: _query.trim(),
+                                  onClear: () => setState(() {
+                                    _search.clear();
+                                    _query = '';
+                                  }),
+                                ),
+                              );
+                            }
+                            return SliverList.builder(
+                              itemCount: found.length,
+                              itemBuilder: (context, index) {
+                                final product = found[index];
+                                return SizedBox(
+                                  height: _productRowHeight,
+                                  child: Consumer<Cart>(
+                                    builder: (context, cart, _) => ProductRow(
+                                      product: product,
+                                      favorite: authed ? favorites.contains(product.id) : null,
+                                      onToggleFavorite: () =>
+                                          _toggleFavorite(product.id),
+                                      inCart: cart.qtyOf(product),
+                                      onRemove: () =>
+                                          cart.decrementProduct(product),
+                                      onTap: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              ProductScreen(product: product),
+                                        ),
+                                      ),
+                                      onAdd: () {
+                                        if (product.hasChoices) {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => ProductScreen(
+                                                product: product,
+                                              ),
+                                            ),
+                                          );
+                                          return;
+                                        }
+                                        cart.add(product);
+                                      },
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      )
+                    else
                     SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(
+                      padding: EdgeInsets.fromLTRB(
                         Gap.screen,
                         Gap.sm,
                         Gap.screen,
-                        120,
+                        _bottomSpace(context),
                       ),
                       sliver: SliverList.builder(
                         itemCount: _rows.length,
@@ -382,6 +492,9 @@ class _MenuScreenState extends State<MenuScreen> {
                               height: _productRowHeight,
                               child: Consumer<Cart>(
                                 builder: (context, cart, _) => ProductRow(
+                                favorite: authed ? favorites.contains(product.id) : null,
+                                onToggleFavorite: () =>
+                                    _toggleFavorite(product.id),
                                 inCart: cart.qtyOf(product),
                                 onRemove: () =>
                                     cart.decrementProduct(product),
@@ -419,7 +532,7 @@ class _MenuScreenState extends State<MenuScreen> {
                 Positioned(
                   left: Gap.screen,
                   right: Gap.screen,
-                  bottom: MediaQuery.of(context).padding.bottom + Gap.lg,
+                  bottom: Gap.navBarSpace(context) - Gap.sm,
                   child: Consumer<Cart>(
                     builder: (_, cart, _) => FloatingCart(
                       total: cart.subtotal,
@@ -435,6 +548,25 @@ class _MenuScreenState extends State<MenuScreen> {
       ),
     );
   }
+
+  /// Ошибку показываем, но состояние не откатываем руками: этим занимается
+  /// сам `Favorites`, иначе сердце дважды дёрнется.
+  Future<void> _toggleFavorite(String productId) async {
+    try {
+      await context.read<Favorites>().toggle(productId);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось сохранить — попробуйте ещё раз')),
+      );
+    }
+  }
+
+  /// Низ каталога занят двумя плавающими слоями: стеклянным баром и
+  /// кнопкой корзины над ним. Без этого запаса последняя позиция меню
+  /// оказывается под ними — и человек решает, что список кончился раньше.
+  double _bottomSpace(BuildContext context) =>
+      Gap.navBarSpace(context) + 64;
 
   void _openCart() {
     Haptics.tap();

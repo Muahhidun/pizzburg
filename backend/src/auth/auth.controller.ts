@@ -10,7 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { IsIn, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
-import { PushPlatform } from '@prisma/client';
+import { Prisma, PushPlatform } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from './auth.service';
 import { CustomerAuthGuard } from './customer-auth.guard';
@@ -145,6 +145,22 @@ export class AuthController {
     });
   }
 
+  /// Баллы и уровень одним блоком: процент, название уровня, сколько
+  /// осталось до следующего.
+  private loyaltyBlock(settings: Prisma.JsonValue, lifetimeSpent: number) {
+    const info = this.loyalty.levelFor(settings, lifetimeSpent);
+    return {
+      cashbackPct: info.current.cashbackPct,
+      level: info.current.level,
+      levelName: info.current.name,
+      levelsTotal: info.total,
+      lifetimeSpent,
+      nextLevelName: info.next?.name ?? null,
+      nextCashbackPct: info.next?.cashbackPct ?? null,
+      toNextLevel: info.toNext,
+    };
+  }
+
   /** Обязательные документы, которых клиент ещё не принял */
   private async pendingConsent(customerId: string, tenantId: string) {
     const customer = await this.prisma.customer.findUnique({
@@ -166,6 +182,7 @@ export class AuthController {
         name: true,
         pointsBalance: true,
         loyaltyLevel: true,
+        lifetimeSpent: true,
       },
     });
     const [orders, loyaltyTransactions, tenant, consent] = await Promise.all([
@@ -200,12 +217,13 @@ export class AuthController {
       customer,
       orders,
       loyaltyTransactions,
-      loyalty: {
-        cashbackPct: this.loyalty.cashbackPct(
-          tenant?.settings ?? {},
-          customer?.loyaltyLevel ?? 1,
-        ),
-      },
+      // Уровень считаем на сервере целиком: приложение не должно знать
+      // пороги и заново их сравнивать — иначе старая сборка покажет
+      // неверный процент после изменения лестницы.
+      loyalty: this.loyaltyBlock(
+        tenant?.settings ?? {},
+        customer?.lifetimeSpent ?? 0,
+      ),
       // Каких редакций не хватает — решает сервер, а не приложение: клиент
       // не должен сам сравнивать номера версий, иначе новая редакция оферты
       // тихо разойдётся со старой сборкой.

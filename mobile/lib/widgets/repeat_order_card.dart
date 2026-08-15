@@ -103,7 +103,7 @@ class RepeatOrderCard extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 11.5,
+                    fontSize: 12.5,
                     height: 1.35,
                     fontWeight: FontWeight.w500,
                   ),
@@ -112,7 +112,7 @@ class RepeatOrderCard extends StatelessWidget {
                 Text(
                   formatTenge(order.total),
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontSize: 13.5,
+                    fontSize: 15,
                   ),
                 ),
               ],
@@ -132,7 +132,7 @@ class RepeatOrderCard extends StatelessWidget {
               child: Text(
                 'Повторить',
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 13,
                   fontWeight: FontWeight.w600,
                   color: ready ? colors.surface : colors.muted,
                 ),

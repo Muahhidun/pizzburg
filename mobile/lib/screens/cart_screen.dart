@@ -36,6 +36,13 @@ class _CartScreenState extends State<CartScreen> {
   String? _promoError;
   final _pointsHaptic = SteppedHaptic();
 
+  /// Слепок состава, по которому уже посчитано превью.
+  ///
+  /// Во вкладке экран создаётся один раз — при пустой корзине — и больше
+  /// не пересоздаётся. Без сравнения состава превью так и осталось бы
+  /// пустым, а вместе с ним пропала бы кнопка «Оформить».
+  String? _previewedFor;
+
   @override
   void initState() {
     super.initState();
@@ -53,10 +60,12 @@ class _CartScreenState extends State<CartScreen> {
     if (cart.isEmpty) {
       setState(() {
         _preview = null;
+        _previewedFor = null;
         _loading = false;
       });
       return;
     }
+    final signature = _signatureOf(cart);
     setState(() => _loading = true);
     try {
       final preview = await context.read<ApiClient>().previewCart(
@@ -66,6 +75,7 @@ class _CartScreenState extends State<CartScreen> {
       if (!mounted) return;
       setState(() {
         _preview = preview;
+        _previewedFor = signature;
         _loading = false;
         _error = null;
         // Состав изменился — списание сбрасываем: иначе оно может
@@ -110,11 +120,24 @@ class _CartScreenState extends State<CartScreen> {
     }
   }
 
+  /// Состав корзины строкой: товар, модификаторы, количество
+  static String _signatureOf(Cart cart) =>
+      cart.lines.map((l) => '${l.key}x${l.qty}').join('|');
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     final cart = context.watch<Cart>();
     final preview = _preview;
+
+    // Состав изменился на другом экране — пересчитываем после кадра:
+    // setState во время build запрещён.
+    if (!cart.isEmpty && !_loading && _previewedFor != _signatureOf(cart)) {
+      _previewedFor = _signatureOf(cart);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _refresh();
+      });
+    }
 
     return Scaffold(
       backgroundColor: c.surface,
@@ -180,8 +203,12 @@ class _CartScreenState extends State<CartScreen> {
                     for (final gift in preview.gifts)
                       BenefitReveal(child: _GiftRow(gift: gift)),
 
-                    if (preview.gifts.isEmpty && _giftHint(preview) != null)
-                      _Hint(text: _giftHint(preview)!),
+                    if (preview.nextGift != null)
+                      _Hint(
+                        text:
+                            'Добавьте ещё на ${formatTenge(preview.nextGift!.missing)} — '
+                            '${preview.nextGift!.giftName.toLowerCase()} в подарок',
+                      ),
 
                     const SizedBox(height: Gap.lg),
                     _PromoField(
@@ -222,7 +249,7 @@ class _CartScreenState extends State<CartScreen> {
                       padding: const EdgeInsets.only(top: Gap.block),
                       child: Text(
                         _error!,
-                        style: TextStyle(color: c.accent, fontSize: 12),
+                        style: TextStyle(color: c.accent, fontSize: 13),
                       ),
                     ),
                 ],
@@ -232,11 +259,13 @@ class _CartScreenState extends State<CartScreen> {
           ? null
           : SafeArea(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(
+                // Внутри оболочки кнопка «Оформить» встаёт над стеклянным
+                // баром: перекрыть главное действие нельзя.
+                padding: EdgeInsets.fromLTRB(
                   Gap.screen,
                   0,
                   Gap.screen,
-                  Gap.md,
+                  widget.embedded ? Gap.navBar + Gap.lg : Gap.md,
                 ),
                 child: PressScale(
                   onTap: () async {
@@ -277,7 +306,7 @@ class _CartScreenState extends State<CartScreen> {
                           child: Text(
                             'Оформить',
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: 14.5,
                               fontWeight: FontWeight.w600,
                               color: c.ink,
                             ),
@@ -295,9 +324,6 @@ class _CartScreenState extends State<CartScreen> {
   int _total(CartPreview p) =>
       p.subtotal + p.deliveryFee - _points.clamp(0, p.subtotal);
 
-  /// «Добавьте ещё на N ₸ — подарок». Порог берём из акции на сумму;
-  /// пока бэкенд его не отдаёт отдельным полем, подсказку не выдумываем.
-  String? _giftHint(CartPreview preview) => null;
 }
 
 class _CartRow extends StatelessWidget {
@@ -346,7 +372,7 @@ class _CartRow extends StatelessWidget {
                 Text(
                   line.product.name,
                   style: const TextStyle(
-                    fontSize: 13,
+                    fontSize: 14.5,
                     height: 1.25,
                     fontWeight: FontWeight.w600,
                   ),
@@ -355,7 +381,7 @@ class _CartRow extends StatelessWidget {
                   Text(
                     config,
                     style: TextStyle(
-                      fontSize: 10.5,
+                      fontSize: 11.5,
                       height: 1.3,
                       color: c.muted,
                     ),
@@ -365,7 +391,7 @@ class _CartRow extends StatelessWidget {
                   line.total,
                   style: Theme.of(
                     context,
-                  ).textTheme.titleMedium?.copyWith(fontSize: 13),
+                  ).textTheme.titleMedium?.copyWith(fontSize: 14.5),
                 ),
               ],
             ),
@@ -386,7 +412,7 @@ class _CartRow extends StatelessWidget {
                   child: Text(
                     '${line.qty}',
                     style: const TextStyle(
-                      fontSize: 13,
+                      fontSize: 14.5,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -436,7 +462,7 @@ class _GiftRow extends StatelessWidget {
                 Text(
                   gift.name,
                   style: const TextStyle(
-                    fontSize: 13,
+                    fontSize: 14.5,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -444,7 +470,7 @@ class _GiftRow extends StatelessWidget {
                 Text(
                   '0 ₸',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontSize: 13,
+                    fontSize: 14.5,
                     color: c.benefit,
                   ),
                 ),
@@ -460,7 +486,7 @@ class _GiftRow extends StatelessWidget {
             child: Text(
               'Подарок',
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 11,
                 fontWeight: FontWeight.w600,
                 color: c.benefit,
               ),
@@ -485,7 +511,7 @@ class _Hint extends StatelessWidget {
       decoration: BoxDecoration(color: c.warnSoft, borderRadius: R.field),
       child: Text(
         text,
-        style: TextStyle(fontSize: 12, height: 1.4, color: c.warnText),
+        style: TextStyle(fontSize: 13, height: 1.4, color: c.warnText),
       ),
     );
   }
@@ -525,7 +551,7 @@ class _PromoField extends StatelessWidget {
                     isDense: true,
                   ),
                   style: const TextStyle(
-                    fontSize: 12.5,
+                    fontSize: 13.5,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -544,7 +570,7 @@ class _PromoField extends StatelessWidget {
                   child: Text(
                     'Применить',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: c.surface,
                     ),
@@ -559,7 +585,7 @@ class _PromoField extends StatelessWidget {
             padding: const EdgeInsets.only(top: Gap.sm, left: Gap.xs),
             child: Text(
               'Промокод $applied применён',
-              style: TextStyle(fontSize: 12, color: c.benefit),
+              style: TextStyle(fontSize: 13, color: c.benefit),
             ),
           ),
         if (error != null)
@@ -567,7 +593,7 @@ class _PromoField extends StatelessWidget {
             padding: const EdgeInsets.only(top: Gap.sm, left: Gap.xs),
             child: Text(
               error!,
-              style: TextStyle(fontSize: 12, color: c.accent),
+              style: TextStyle(fontSize: 13, color: c.accent),
             ),
           ),
       ],
@@ -607,7 +633,7 @@ class _PointsBlock extends StatelessWidget {
               Text(
                 'Списать баллы',
                 style: TextStyle(
-                  fontSize: 12.5,
+                  fontSize: 13.5,
                   fontWeight: FontWeight.w600,
                   color: c.surface,
                 ),
@@ -615,7 +641,7 @@ class _PointsBlock extends StatelessWidget {
               Text(
                 '$balance доступно',
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   color: c.surface.withValues(alpha: 0.6),
                 ),
               ),
@@ -651,14 +677,14 @@ class _PointsBlock extends StatelessWidget {
               Text(
                 '0',
                 style: TextStyle(
-                  fontSize: 10.5,
+                  fontSize: 11.5,
                   color: c.surface.withValues(alpha: 0.55),
                 ),
               ),
               Text(
                 '$max',
                 style: TextStyle(
-                  fontSize: 10.5,
+                  fontSize: 11.5,
                   color: c.surface.withValues(alpha: 0.55),
                 ),
               ),
@@ -708,7 +734,7 @@ class _DarkButton extends StatelessWidget {
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 11.5,
+            fontSize: 12.5,
             fontWeight: FontWeight.w600,
             color: c.surface,
           ),
@@ -729,7 +755,7 @@ class _Totals extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     TextStyle line([Color? color]) => TextStyle(
-      fontSize: 12,
+      fontSize: 13,
       height: 1.7,
       fontWeight: FontWeight.w500,
       color: color ?? c.muted,
@@ -801,7 +827,7 @@ class _Empty extends StatelessWidget {
               'Пока пусто',
               style: Theme.of(
                 context,
-              ).textTheme.titleLarge?.copyWith(fontSize: 19),
+              ).textTheme.titleLarge?.copyWith(fontSize: 20),
             ),
             const SizedBox(height: Gap.sm),
             Text(

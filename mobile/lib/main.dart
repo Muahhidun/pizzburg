@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'api/api_client.dart';
 import 'state/cart.dart';
+import 'state/favorites.dart';
 import 'screens/app_shell.dart';
 import 'state/auth.dart';
 import 'services/push_notifications.dart';
@@ -21,10 +22,21 @@ Future<void> main() async {
   final api = ApiClient();
   final auth = AuthState(api);
   final push = PushNotificationsService(api);
-  auth.afterLogin = push.syncAfterLogin;
-  auth.beforeLogout = push.unregisterBeforeLogout;
+  final favorites = Favorites(api);
+  // Избранное живёт на сервере и привязано к клиенту: при входе подтягиваем,
+  // при выходе гасим — иначе следующий человек на этом телефоне увидит
+  // чужие сердечки.
+  auth.afterLogin = () async {
+    await push.syncAfterLogin();
+    await favorites.restore();
+  };
+  auth.beforeLogout = () async {
+    await push.unregisterBeforeLogout();
+    favorites.clear();
+  };
   await Haptics.restore();
   await auth.restore();
+  if (auth.isAuthenticated) unawaited(favorites.restore());
   push.onForegroundMessage = (title, body) {
     _messengerKey.currentState
       ?..hideCurrentSnackBar()
@@ -51,7 +63,7 @@ Future<void> main() async {
       ),
     );
   };
-  runApp(PizzBurgApp(api: api, auth: auth, push: push));
+  runApp(PizzBurgApp(api: api, auth: auth, push: push, favorites: favorites));
   unawaited(push.initialize());
 }
 
@@ -59,11 +71,13 @@ class PizzBurgApp extends StatelessWidget {
   final ApiClient api;
   final AuthState auth;
   final PushNotificationsService push;
+  final Favorites favorites;
   const PizzBurgApp({
     super.key,
     required this.api,
     required this.auth,
     required this.push,
+    required this.favorites,
   });
 
   @override
@@ -73,6 +87,7 @@ class PizzBurgApp extends StatelessWidget {
         Provider.value(value: api),
         ChangeNotifierProvider.value(value: auth),
         ChangeNotifierProvider.value(value: push),
+        ChangeNotifierProvider.value(value: favorites),
         ChangeNotifierProvider(create: (_) => Cart()),
       ],
       child: MaterialApp(

@@ -96,7 +96,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     'Войдите по телефону',
                     style: Theme.of(
                       context,
-                    ).textTheme.titleLarge?.copyWith(fontSize: 19),
+                    ).textTheme.titleLarge?.copyWith(fontSize: 20),
                   ),
                   const SizedBox(height: Gap.sm),
                   Text(
@@ -119,11 +119,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: RefreshIndicator(
           onRefresh: auth.refresh,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(
+            padding: EdgeInsets.fromLTRB(
               Gap.screen,
               Gap.lg,
               Gap.screen,
-              Gap.blockWide,
+              // Плавающий бар лежит поверх списка
+              Gap.navBarSpace(context),
             ),
             children: [
               Text(
@@ -136,7 +137,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _PointsCard(
                 balance: auth.pointsBalance,
                 cashbackPct: auth.cashbackPct,
+                levelName: auth.levelName,
+                level: auth.loyaltyLevel,
+                levelsTotal: auth.levelsTotal,
               ),
+
+              if (auth.toNextLevel > 0 && auth.nextCashbackPct != null) ...[
+                const SizedBox(height: Gap.md),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(Gap.lg),
+                  decoration: BoxDecoration(
+                    color: c.accentSoft,
+                    borderRadius: R.thumb,
+                  ),
+                  child: Text(
+                    'Ещё ${formatTenge(auth.toNextLevel)} заказов — '
+                    'и кэшбэк станет ${auth.nextCashbackPct}%',
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.4,
+                      fontWeight: FontWeight.w500,
+                      color: c.accent,
+                    ),
+                  ),
+                ),
+              ],
 
               const SizedBox(height: Gap.block),
               _NotificationsCard(push: push),
@@ -145,7 +171,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: Gap.blockWide),
                 const Text(
                   'Заказы',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: Gap.sm),
                 for (var i = 0; i < orders.length && i < 5; i++)
@@ -176,7 +202,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: Gap.blockWide),
               const Text(
                 'История баллов',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: Gap.sm),
               if (auth.transactions.isEmpty)
@@ -202,7 +228,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: Text(
                     'Выйти',
                     style: TextStyle(
-                      fontSize: 12.5,
+                      fontSize: 13.5,
                       fontWeight: FontWeight.w600,
                       color: c.ink,
                     ),
@@ -220,8 +246,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
 class _PointsCard extends StatelessWidget {
   final int balance;
   final int cashbackPct;
+  final String levelName;
+  final int level;
+  final int levelsTotal;
 
-  const _PointsCard({required this.balance, required this.cashbackPct});
+  const _PointsCard({
+    required this.balance,
+    required this.cashbackPct,
+    required this.levelName,
+    required this.level,
+    required this.levelsTotal,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -239,7 +274,7 @@ class _PointsCard extends StatelessWidget {
           Text(
             'Баллы',
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 13,
               fontWeight: FontWeight.w600,
               color: c.ink.withValues(alpha: 0.65),
             ),
@@ -256,7 +291,7 @@ class _PointsCard extends StatelessWidget {
           Text(
             '1 балл = 1 ₸, списывайте любой суммой',
             style: TextStyle(
-              fontSize: 11.5,
+              fontSize: 12.5,
               height: 1.4,
               color: c.ink.withValues(alpha: 0.8),
             ),
@@ -264,13 +299,28 @@ class _PointsCard extends StatelessWidget {
           const SizedBox(height: Gap.lg),
           Divider(color: c.ink.withValues(alpha: 0.16), height: 1),
           const SizedBox(height: Gap.md),
-          Text(
-            'Кэшбэк $cashbackPct%',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: c.ink,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Кэшбэк $cashbackPct%',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: c.ink,
+                ),
+              ),
+              Text(
+                levelName.isEmpty
+                    ? 'Уровень $level из $levelsTotal'
+                    : '$levelName · $level из $levelsTotal',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: c.ink,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -313,7 +363,7 @@ class _OrderRow extends StatelessWidget {
                   Text(
                     _date(order['createdAt']),
                     style: const TextStyle(
-                      fontSize: 13,
+                      fontSize: 14.5,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -335,7 +385,7 @@ class _OrderRow extends StatelessWidget {
                   formatTenge((order['total'] as num?)?.toInt() ?? 0),
                   style: Theme.of(
                     context,
-                  ).textTheme.titleMedium?.copyWith(fontSize: 13.5),
+                  ).textTheme.titleMedium?.copyWith(fontSize: 15),
                 ),
                 const SizedBox(height: Gap.sm),
                 PressScale(
@@ -352,7 +402,7 @@ class _OrderRow extends StatelessWidget {
                     child: Text(
                       'Повтор',
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: canRepeat ? c.ink : c.muted,
                       ),
@@ -397,14 +447,14 @@ class _PointsRow extends StatelessWidget {
           Expanded(
             child: Text(
               '${earned ? 'Начислено' : 'Списано'} · ${_date(txn['createdAt'])}',
-              style: const TextStyle(fontSize: 12.5),
+              style: const TextStyle(fontSize: 13.5),
             ),
           ),
           Text(
             '${earned ? '+' : ''}$amount',
             style: TextStyle(
               fontFamily: 'Unbounded',
-              fontSize: 13,
+              fontSize: 14.5,
               fontWeight: FontWeight.w700,
               color: earned ? c.benefit : c.ink,
             ),
@@ -457,7 +507,7 @@ class _LegalLinks extends StatelessWidget {
                   Expanded(
                     child: Text(
                       label,
-                      style: const TextStyle(fontSize: 12.5),
+                      style: const TextStyle(fontSize: 13.5),
                     ),
                   ),
                   Icon(Icons.chevron_right, size: 18, color: c.muted),
@@ -465,6 +515,15 @@ class _LegalLinks extends StatelessWidget {
               ),
             ),
           ),
+        // Требование лицензии ODbL: адресный справочник города собран из
+        // данных OpenStreetMap, и указать это обязательно.
+        Padding(
+          padding: const EdgeInsets.only(top: Gap.md),
+          child: Text(
+            'Адреса города — данные © участников OpenStreetMap, ODbL',
+            style: TextStyle(fontSize: 11, color: c.muted),
+          ),
+        ),
       ],
     );
   }
@@ -489,7 +548,7 @@ class _NotificationsCard extends StatelessWidget {
                 const Text(
                   'Вибрация',
                   style: TextStyle(
-                    fontSize: 12.5,
+                    fontSize: 13.5,
                     fontWeight: FontWeight.w600,
                   ),
                 ),

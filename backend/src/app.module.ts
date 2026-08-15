@@ -10,6 +10,8 @@ import { AuthModule } from './auth/auth.module';
 import { AdminModule } from './admin/admin.module';
 import { LoyaltyModule } from './loyalty/loyalty.module';
 import { AvailabilityModule } from './availability/availability.module';
+import { FavoritesModule } from './favorites/favorites.module';
+import { GeoModule } from './geo/geo.module';
 import { LegalModule } from './legal/legal.module';
 
 @Controller()
@@ -48,6 +50,8 @@ class RootController {
     PrismaModule,
     AvailabilityModule,
     LegalModule,
+    GeoModule,
+    FavoritesModule,
     PosterModule,
     MenuModule,
     OrdersModule,

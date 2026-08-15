@@ -130,6 +130,9 @@ class CartPreview {
   final bool earnOnPromotionalOrders;
   final Availability availability;
 
+  /// «Добавьте ещё на N ₸ — подарок». Порог считает сервер.
+  final NextGift? nextGift;
+
   CartPreview({
     required this.subtotal,
     required this.promoDiscount,
@@ -144,6 +147,7 @@ class CartPreview {
     required this.allowPointsWithPromotions,
     required this.earnOnPromotionalOrders,
     required this.availability,
+    this.nextGift,
   });
 
   factory CartPreview.fromJson(Map<String, dynamic> json) {
@@ -167,8 +171,24 @@ class CartPreview {
       earnOnPromotionalOrders:
           json['loyalty']?['earnOnPromotionalOrders'] == true,
       availability: Availability.fromJson(json['availability']),
+      nextGift: json['nextGift'] == null
+          ? null
+          : NextGift.fromJson(json['nextGift']),
     );
   }
+}
+
+/// Ближайшая невыполненная акция на сумму
+class NextGift {
+  final String giftName;
+  final int missing;
+
+  const NextGift({required this.giftName, required this.missing});
+
+  factory NextGift.fromJson(Map<String, dynamic> json) => NextGift(
+    giftName: json['giftName']?.toString() ?? '',
+    missing: (json['missing'] as num?)?.toInt() ?? 0,
+  );
 }
 
 /// Режим приёма заказов: что сейчас можно предложить клиенту.
@@ -365,6 +385,70 @@ class RepeatMissing {
     name: json['name']?.toString() ?? '',
     reason: json['reason']?.toString() ?? '',
   );
+}
+
+/// Товар в избранном. Цена и стоп-лист — актуальные, а не на момент
+/// добавления: иначе человек увидит цену прошлого месяца.
+class FavoriteProduct {
+  final String id;
+  final String name;
+  final String description;
+  final String? photoUrl;
+  final String weightLabel;
+  final int price;
+  final bool inStopList;
+
+  const FavoriteProduct({
+    required this.id,
+    required this.name,
+    required this.description,
+    this.photoUrl,
+    this.weightLabel = '',
+    required this.price,
+    this.inStopList = false,
+  });
+
+  factory FavoriteProduct.fromJson(Map<String, dynamic> json) =>
+      FavoriteProduct(
+        id: json['id']?.toString() ?? '',
+        name: json['name']?.toString() ?? '',
+        description: json['description']?.toString() ?? '',
+        photoUrl: json['photoUrl']?.toString(),
+        weightLabel: json['weightLabel']?.toString() ?? '',
+        price: (json['price'] as num?)?.toInt() ?? 0,
+        inStopList: json['inStopList'] == true,
+      );
+
+  /// Для повторного использования строки каталога
+  Product toProduct() => Product(
+    id: id,
+    name: name,
+    description: description,
+    photoUrl: photoUrl,
+    weightLabel: weightLabel,
+    price: price,
+    modifierGroups: const [],
+  );
+}
+
+/// Подсказка адреса из 2ГИС
+class AddressSuggestion {
+  final String label;
+  final String street;
+  final String house;
+
+  const AddressSuggestion({
+    required this.label,
+    required this.street,
+    required this.house,
+  });
+
+  factory AddressSuggestion.fromJson(Map<String, dynamic> json) =>
+      AddressSuggestion(
+        label: json['label']?.toString() ?? '',
+        street: json['street']?.toString() ?? '',
+        house: json['house']?.toString() ?? '',
+      );
 }
 
 /// Сохранённый адрес клиента.

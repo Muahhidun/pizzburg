@@ -35,6 +35,10 @@ export interface PromoResult {
   applied: string[];
   /// Что именно сработало — нужно для записи в PromotionUse
   appliedPromotions: { id: string; name: string; discount: number }[];
+
+  /// Ближайшая невыполненная акция на сумму: «добавьте ещё на N ₸».
+  /// Считает сервер — приложение не должно знать пороги акций.
+  nextGift: { name: string; missing: number; giftName: string } | null;
 }
 
 const EMPTY: PromoResult = {
@@ -44,6 +48,7 @@ const EMPTY: PromoResult = {
   freeDelivery: false,
   applied: [],
   appliedPromotions: [],
+  nextGift: null,
 };
 
 /**
@@ -103,6 +108,7 @@ export class PromotionsService {
       freeDelivery: false,
       applied: [],
       appliedPromotions: [],
+      nextGift: null,
     };
 
     for (const promo of active) {
@@ -139,7 +145,54 @@ export class PromotionsService {
       }
     }
 
+    result.nextGift = await this.nearestGift(active, context, result);
     return result;
+  }
+
+  /**
+   * До какой акции на сумму человеку не хватило немного.
+   *
+   * Показываем только **ближайшую** и только если подарок ещё не получен:
+   * список «до чего вам не хватило» превращает корзину в рекламный щит,
+   * а один конкретный шаг человек действительно делает.
+   */
+  private async nearestGift(
+    active: Promotion[],
+    context: PromoContext,
+    result: PromoResult,
+  ) {
+    const candidates = active
+      .filter(
+        (promo) =>
+          promo.kind === 'GIFT_FOR_SUM' &&
+          promo.minOrderSum != null &&
+          promo.minOrderSum > context.subtotal &&
+          promo.giftProductId != null &&
+          // Акцию, подарок по которой уже в корзине, не предлагаем снова
+          !result.gifts.some((g) => g.promotionId === promo.id),
+      )
+      .sort((a, b) => (a.minOrderSum ?? 0) - (b.minOrderSum ?? 0));
+
+    const promo = candidates[0];
+    if (!promo?.giftProductId || promo.minOrderSum == null) return null;
+
+    const gift = await this.prisma.product.findUnique({
+      where: { id: promo.giftProductId },
+      select: {
+        name: true,
+        displayName: true,
+        isActive: true,
+        category: { select: { isActive: true } },
+      },
+    });
+    // Обещать подарок, которого сегодня нет в кассе, нельзя
+    if (!gift?.isActive || !gift.category.isActive) return null;
+
+    return {
+      name: promo.name,
+      missing: promo.minOrderSum - context.subtotal,
+      giftName: gift.displayName ?? gift.name,
+    };
   }
 
   /** Ограничения акции: тип заказа, порог суммы, лимиты применений */

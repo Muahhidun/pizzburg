@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 /// Токены направления «Сигнал» из `design_handoff_pizzburg_app/README.md`.
@@ -111,6 +113,17 @@ abstract final class Gap {
   static const double sm = 8;
   static const double md = 12;
   static const double lg = 16;
+
+  /// Высота плавающего таб-бара
+  static const double navBar = 62;
+
+  /// Сколько нужно оставить внизу прокручиваемого экрана, чтобы плавающий
+  /// бар не перекрыл последнюю строку. Считаем от системного отступа, а не
+  /// константой: на iPhone с домашней полоской и без неё низ разный.
+  static double navBarSpace(BuildContext context) =>
+      navBar +
+      math.max(MediaQuery.paddingOf(context).bottom + sm, lg) +
+      block;
 }
 
 /// Радиусы из хендоффа. `pill` — капсула для всего интерактивного.

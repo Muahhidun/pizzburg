@@ -9,7 +9,10 @@ import { ObjectStorageService } from '../storage/object-storage.service';
 import {
   PosterAccountDto,
   PromotionDto,
+  CreateAddressDto,
+  UpdateAddressDto,
   UpdateCancellationDto,
+  UpdateLoyaltyLevelsDto,
   UpdateCategoryDto,
   UpdateOrderingDto,
   UpdatePaymentsDto,
@@ -28,6 +31,8 @@ import { LegalService } from '../legal/legal.service';
 import { CancelReasonsService } from '../orders/cancel-reasons.service';
 import { PromotionsService } from '../promotions/promotions.service';
 import { OrderStatus } from '@prisma/client';
+import { GeoService } from '../geo/geo.service';
+import { streetKey } from '../geo/address-search';
 
 /**
  * Период отчёта из строк «ГГГГ-ММ-ДД».
@@ -67,6 +72,48 @@ export function reportRange(fromStr?: string, toStr?: string) {
 }
 
 /**
+ * Приводит лестницу кэшбэка к виду, пригодному для хранения, и отвергает
+ * заведомо сломанные варианты.
+ *
+ * Номера ступеней проставляются заново по возрастанию порога: `loyaltyLevel`
+ * у клиента — это номер в лестнице, и если сохранить пришедшие номера, после
+ * перестановки строк клиент с уровнем 3 получит процент чужой ступени.
+ */
+export function normalizeLoyaltyLevels(
+  input: { name: string; cashbackPct: number; minSpent: number }[],
+) {
+  if (input.length === 0) throw new BadRequestException('Нужен хотя бы один уровень');
+
+  const sorted = [...input].sort((a, b) => a.minSpent - b.minSpent);
+  if (sorted[0].minSpent !== 0) {
+    throw new BadRequestException(
+      'Первый уровень должен начинаться с 0 ₸ — иначе новый клиент окажется без уровня',
+    );
+  }
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].minSpent === sorted[i - 1].minSpent) {
+      throw new BadRequestException(
+        `Два уровня с одинаковым порогом ${sorted[i].minSpent} ₸`,
+      );
+    }
+    // Лестница, которая идёт вниз, читается клиентом как обман:
+    // «трачу больше — получаю меньше».
+    if (sorted[i].cashbackPct < sorted[i - 1].cashbackPct) {
+      throw new BadRequestException(
+        `«${sorted[i].name}» даёт меньший кэшбэк, чем предыдущий уровень`,
+      );
+    }
+  }
+
+  return sorted.map((l, i) => ({
+    level: i + 1,
+    name: l.name.trim(),
+    cashbackPct: l.cashbackPct,
+    minSpent: l.minSpent,
+  }));
+}
+
+/**
  * Админка владельца. Правит ТОЛЬКО витринные поля — данные, приходящие
  * синком из Poster (name, price, isActive, категория кассы), неизменны.
  */
@@ -82,6 +129,7 @@ export class AdminService {
     private readonly legal: LegalService,
     private readonly reasons: CancelReasonsService,
     private readonly promoEngine: PromotionsService,
+    private readonly geo: GeoService,
   ) {}
 
   private async tenant(slug = 'pizzburg') {
@@ -646,6 +694,146 @@ export class AdminService {
       where: { id: tenant.id },
       data: { settings: { ...current, delivery, loyalty } },
       select: { settings: true },
+    });
+  }
+
+  /** Лестница кэшбэка: что действует сейчас и что стоит по умолчанию */
+  async loyaltyLevels() {
+    const tenant = await this.tenant();
+    return {
+      levels: this.loyalty.levels(tenant.settings),
+      defaults: LoyaltyService.defaultLevels,
+      // Плоский процент перекрывает лестницу целиком — владелец должен
+      // видеть, что уровни в этом случае не работают
+      flatCashbackPct:
+        (tenant.settings as any)?.loyalty?.cashbackPct ?? null,
+    };
+  }
+
+  /** Перезаписывает лестницу целиком */
+  async updateLoyaltyLevels(dto: UpdateLoyaltyLevelsDto) {
+    const levels = normalizeLoyaltyLevels(dto.levels);
+
+    const tenant = await this.tenant();
+    const current = (tenant.settings as any) ?? {};
+    const loyalty = { ...(current.loyalty ?? {}), levels };
+    // Плоский процент имеет приоритет над лестницей в cashbackPct():
+    // оставить его — значит сохранить уровни, которые ни на что не влияют.
+    delete loyalty.cashbackPct;
+
+    await this.prisma.tenant.update({
+      where: { id: tenant.id },
+      data: { settings: { ...current, loyalty } },
+    });
+    return { levels };
+  }
+
+  // ─── Адресный справочник города ──────────────────────────────
+
+  /**
+   * Справочник с поиском. Отдаём страницами: адресов около 7 700, и
+   * выгружать их целиком в браузер незачем.
+   */
+  async addresses(query = '', page = 1, take = 50) {
+    const tenant = await this.tenant();
+    const q = query.trim();
+    const where = {
+      tenantId: tenant.id,
+      ...(q
+        ? {
+            OR: [
+              { street: { contains: q, mode: 'insensitive' as const } },
+              { house: { startsWith: q, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+    };
+    const [items, total, undeliverable] = await Promise.all([
+      this.prisma.address.findMany({
+        where,
+        orderBy: [{ street: 'asc' }, { house: 'asc' }],
+        skip: (page - 1) * take,
+        take,
+      }),
+      this.prisma.address.count({ where }),
+      this.prisma.address.count({
+        where: { tenantId: tenant.id, isDeliverable: false },
+      }),
+    ]);
+    return {
+      items,
+      total,
+      page,
+      pages: Math.max(1, Math.ceil(total / take)),
+      totalAll: await this.prisma.address.count({
+        where: { tenantId: tenant.id },
+      }),
+      undeliverable,
+    };
+  }
+
+  /**
+   * Адрес, заведённый оператором.
+   *
+   * Улицу подтягиваем к уже существующему написанию: если в справочнике
+   * «улица Абая», а оператор напечатал «Абая», в подсказках появятся две
+   * строки на одну улицу, и человек прочитает это как ошибку.
+   */
+  async createAddress(dto: CreateAddressDto) {
+    const tenant = await this.tenant();
+    const key = streetKey(dto.street);
+    const streets = await this.prisma.address.findMany({
+      where: { tenantId: tenant.id },
+      select: { street: true },
+      distinct: ['street'],
+    });
+    const existing = streets.find((s) => streetKey(s.street) === key);
+
+    const address = await this.prisma.address.upsert({
+      where: {
+        tenantId_street_house: {
+          tenantId: tenant.id,
+          street: existing?.street ?? dto.street.trim(),
+          house: dto.house.trim(),
+        },
+      },
+      update: { isDeliverable: true },
+      create: {
+        tenantId: tenant.id,
+        street: existing?.street ?? dto.street.trim(),
+        house: dto.house.trim(),
+        source: 'MANUAL',
+      },
+    });
+    this.geo.invalidate();
+    return address;
+  }
+
+  /** Куда не возим. Адрес не удаляем — следующий импорт вернул бы его назад */
+  async updateAddress(id: string, dto: UpdateAddressDto) {
+    const address = await this.prisma.address.update({
+      where: { id },
+      data: dto,
+    });
+    this.geo.invalidate();
+    return address;
+  }
+
+  /** Заявки «моего адреса нет в списке» */
+  async addressRequests(resolved = false) {
+    const tenant = await this.tenant();
+    return this.prisma.addressRequest.findMany({
+      where: { tenantId: tenant.id, resolvedAt: resolved ? { not: null } : null },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      include: { customer: { select: { name: true, phone: true } } },
+    });
+  }
+
+  async resolveAddressRequest(id: string) {
+    return this.prisma.addressRequest.update({
+      where: { id },
+      data: { resolvedAt: new Date() },
     });
   }
 

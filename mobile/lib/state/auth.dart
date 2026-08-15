@@ -15,8 +15,17 @@ class AuthState extends ChangeNotifier {
       api.token != null && _profile?['customer'] != null;
   Map<String, dynamic>? get customer => _profile?['customer'];
   int get pointsBalance => (customer?['pointsBalance'] as num?)?.toInt() ?? 0;
-  int get cashbackPct =>
-      (_profile?['loyalty']?['cashbackPct'] as num?)?.toInt() ?? 3;
+  Map<String, dynamic> get _loyalty =>
+      (_profile?['loyalty'] as Map?)?.cast<String, dynamic>() ?? const {};
+
+  int get cashbackPct => (_loyalty['cashbackPct'] as num?)?.toInt() ?? 3;
+  int get loyaltyLevel => (_loyalty['level'] as num?)?.toInt() ?? 1;
+  String get levelName => _loyalty['levelName']?.toString() ?? '';
+  int get levelsTotal => (_loyalty['levelsTotal'] as num?)?.toInt() ?? 1;
+
+  /// Сколько ₸ оборота осталось до следующего уровня; 0 — уровень последний
+  int get toNextLevel => (_loyalty['toNextLevel'] as num?)?.toInt() ?? 0;
+  int? get nextCashbackPct => (_loyalty['nextCashbackPct'] as num?)?.toInt();
   String get phone => customer?['phone']?.toString() ?? '';
   String get name => customer?['name']?.toString() ?? '';
   List<dynamic> get transactions =>
