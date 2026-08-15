@@ -7,6 +7,7 @@ import { StorageModule } from '../storage/storage.module';
 import { LoyaltyModule } from '../loyalty/loyalty.module';
 import { PromotionsModule } from '../promotions/promotions.module';
 import { OrdersModule } from '../orders/orders.module';
+import { MessagesModule } from '../messages/messages.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { OrdersModule } from '../orders/orders.module';
     LoyaltyModule,
     OrdersModule,
     PromotionsModule,
+    MessagesModule,
   ],
   controllers: [AdminController],
   providers: [AdminService, AdminGuard],
