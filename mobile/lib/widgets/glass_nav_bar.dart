@@ -7,6 +7,10 @@ import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../utils/haptics.dart';
 
+/// Сборочный флаг для подбора оптики линзы: держит стекло на экране без
+/// пальца. Включается только руками: --dart-define=LENS_DEBUG=true
+const _debugLens = bool.fromEnvironment('LENS_DEBUG');
+
 class NavItem {
   final IconData icon;
   final IconData activeIcon;
@@ -104,17 +108,18 @@ class _GlassNavBarState extends State<GlassNavBar> {
         builder: (context, constraints) {
           final width = constraints.maxWidth;
           final slot = width / widget.items.length;
-          final dragging = _dragX != null;
+          final dragging = _dragX != null || _debugLens;
+          final dragX = _dragX ?? slot * (widget.index + 0.5);
 
           // Насколько капсула отошла от центра своей вкладки: на полпути
           // между вкладками она растягивается, как капля.
           final centerOf = (_activeIndex + 0.5) * slot;
           final offCenter = dragging
-              ? ((_dragX! - centerOf).abs() / (slot / 2)).clamp(0.0, 1.0)
+              ? ((dragX - centerOf).abs() / (slot / 2)).clamp(0.0, 1.0)
               : 0.0;
           final pillWidth = slot * (1 + 0.14 * offCenter);
           final pillLeft = dragging
-              ? (_dragX! - pillWidth / 2).clamp(0.0, width - pillWidth)
+              ? (dragX - pillWidth / 2).clamp(0.0, width - pillWidth)
               : slot * widget.index;
 
           // Тот же признак, которым гейтится сам пакет: линза требует
@@ -251,7 +256,7 @@ class _GlassNavBarState extends State<GlassNavBar> {
                     // подпись — гнуть ей нечего. Широкая накрывает буквы
                     // соседней вкладки, и преломление видно.
                     left:
-                        ((dragging ? _dragX! : slot * (widget.index + 0.5)) -
+                        ((dragging ? dragX : slot * (widget.index + 0.5)) -
                                 slot * 0.75)
                             .clamp(-6.0, width - slot * 1.5 + 6),
                     top: -_lensOverhang,
@@ -278,13 +283,13 @@ class _GlassNavBarState extends State<GlassNavBar> {
                             // Толще и преломление сильнее, чем раньше:
                             // стекло теперь видно только в движении, и
                             // деформация иконок — весь его смысл
-                            thickness: 30,
-                            refractiveIndex: 1.3,
+                            thickness: 35,
+                            refractiveIndex: 1.45,
                             // Едва заметная дымка: на ровном белом
                             // преломлению не за что зацепиться
                             glassColor: Color(0x0D000000),
                             lightIntensity: 0.7,
-                            chromaticAberration: 0.5,
+                            chromaticAberration: 0.22,
                             // Дефолт пакета 1.5 перекрашивал бы иконки
                             saturation: 1.0,
                           ),
