@@ -126,6 +126,14 @@ class _GlassNavBarState extends State<GlassNavBar> {
           // Impeller, на Skia и в вебе остаётся цветная капсула.
           final lensReady = ImageFilter.isShaderFilterSupported;
           final lensHeight = Gap.navBar + _lensOverhang * 2;
+          final lensWidth = slot * 1.5;
+          final lensLeft =
+              ((dragging ? dragX : slot * (widget.index + 0.5)) - slot * 0.75)
+                  .clamp(-6.0, width - lensWidth + 6);
+          // Пока стеклянная линза на экране, перекраску вкладок делает она:
+          // базовый ряд весь приглушён, акцент появляется только сквозь
+          // маску — ровно настолько, насколько линза накрыла иконку.
+          final lensDrag = dragging && lensReady;
 
           return Listener(
             // opaque, а не deferToChild: вкладки для нажатий прозрачны,
@@ -222,7 +230,7 @@ class _GlassNavBarState extends State<GlassNavBar> {
                                   Expanded(
                                     child: _Tab(
                                       item: widget.items[i],
-                                      active: _activeIndex == i,
+                                      active: !lensDrag && _activeIndex == i,
                                     ),
                                   ),
                               ],
@@ -233,6 +241,44 @@ class _GlassNavBarState extends State<GlassNavBar> {
                     ),
                   ),
                 ),
+
+                // Перекраска сквозь линзу, как в системном баре iOS 26:
+                // вторая копия вкладок в акцентном цвете, обрезанная по
+                // контуру линзы. Геометрия копии обязана до пикселя
+                // совпадать с базовым рядом — поэтому обе рисуются в
+                // «неактивной» геометрии (без масштаба и смены начертания),
+                // различие только в цвете. Иначе на кромке маски двоится.
+                if (lensDrag)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: 0,
+                    height: Gap.navBar,
+                    child: IgnorePointer(
+                      child: ClipPath(
+                        clipper: _LensClipper(
+                          rect: Rect.fromLTWH(
+                            lensLeft.toDouble(),
+                            -_lensOverhang,
+                            lensWidth,
+                            lensHeight,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            for (final item in widget.items)
+                              Expanded(
+                                child: _Tab(
+                                  item: item,
+                                  active: false,
+                                  overrideColor: c.accent,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
 
                 // Линза ПОВЕРХ иконок: пакет захватывает всё, что
                 // нарисовано под ней — иконки, подписи и край панели, за
@@ -255,12 +301,9 @@ class _GlassNavBarState extends State<GlassNavBar> {
                     // стадион вырождается в круг, а кромка почти не задевает
                     // подпись — гнуть ей нечего. Широкая накрывает буквы
                     // соседней вкладки, и преломление видно.
-                    left:
-                        ((dragging ? dragX : slot * (widget.index + 0.5)) -
-                                slot * 0.75)
-                            .clamp(-6.0, width - slot * 1.5 + 6),
+                    left: lensLeft,
                     top: -_lensOverhang,
-                    width: slot * 1.5,
+                    width: lensWidth,
                     height: lensHeight,
                     child: IgnorePointer(
                       child: AnimatedOpacity(
@@ -334,12 +377,15 @@ class _Tab extends StatelessWidget {
   final NavItem item;
   final bool active;
 
-  const _Tab({required this.item, required this.active});
+  /// Цвет для слоя перекраски под линзой; геометрия при этом неактивная
+  final Color? overrideColor;
+
+  const _Tab({required this.item, required this.active, this.overrideColor});
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final color = active ? c.accent : c.muted;
+    final color = overrideColor ?? (active ? c.accent : c.muted);
 
     // Нажатия ловит Listener на баре целиком: своих обработчиков у вкладки
     // нет, иначе они перехватывали бы ведение пальцем.
@@ -381,4 +427,19 @@ class _Tab extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Вырез по контуру линзы для слоя перекраски. Пересчитывается каждый
+/// кадр жеста — прямоугольник приходит от позиции пальца.
+class _LensClipper extends CustomClipper<Path> {
+  final Rect rect;
+
+  const _LensClipper({required this.rect});
+
+  @override
+  Path getClip(Size size) => Path()
+    ..addRRect(RRect.fromRectAndRadius(rect, Radius.circular(rect.height / 2)));
+
+  @override
+  bool shouldReclip(_LensClipper oldClipper) => oldClipper.rect != rect;
 }
