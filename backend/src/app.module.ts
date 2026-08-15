@@ -11,6 +11,7 @@ import { AdminModule } from './admin/admin.module';
 import { LoyaltyModule } from './loyalty/loyalty.module';
 import { AvailabilityModule } from './availability/availability.module';
 import { FavoritesModule } from './favorites/favorites.module';
+import { MessagesModule } from './messages/messages.module';
 import { GeoModule } from './geo/geo.module';
 import { LegalModule } from './legal/legal.module';
 
@@ -52,6 +53,7 @@ class RootController {
     LegalModule,
     GeoModule,
     FavoritesModule,
+    MessagesModule,
     PosterModule,
     MenuModule,
     OrdersModule,

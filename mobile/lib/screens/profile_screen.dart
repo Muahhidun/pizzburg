@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
 import '../services/push_notifications.dart';
@@ -9,6 +10,7 @@ import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../utils/haptics.dart';
 import '../widgets/motion.dart';
+import 'messages_screen.dart';
 import 'legal_screen.dart';
 import 'order_screen.dart';
 
@@ -104,6 +106,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     'после входа',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  // Лента публичная: гость тоже должен видеть акции
+                  const SizedBox(height: Gap.blockWide),
+                  PressScale(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const MessagesScreen(),
+                      ),
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 14,
+                      ),
+                      decoration: BoxDecoration(
+                        color: c.fillSoft,
+                        borderRadius: R.pill,
+                      ),
+                      child: Text(
+                        'Акции и новости',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: c.ink,
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -214,6 +244,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _PointsRow(txn: raw as Map<String, dynamic>),
 
               const SizedBox(height: Gap.blockWide),
+              const _MessagesRow(),
               const _LegalLinks(),
               const SizedBox(height: Gap.lg),
               PressScale(
@@ -472,6 +503,82 @@ class _PointsRow extends StatelessWidget {
       'июл', 'авг', 'сен', 'окт', 'ноя', 'дек',
     ];
     return '${date.day} ${months[date.month - 1]}';
+  }
+}
+
+/// Строка «Сообщения» с точкой непрочитанного.
+///
+/// Точка маджентовая — новое сообщение для клиента выгода (акция), а не
+/// действие. Прочитанность считается локально по дате свежего сообщения:
+/// серверного счётчика нет намеренно, лента общая для всех.
+class _MessagesRow extends StatefulWidget {
+  const _MessagesRow();
+
+  @override
+  State<_MessagesRow> createState() => _MessagesRowState();
+}
+
+class _MessagesRowState extends State<_MessagesRow> {
+  bool _unread = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
+  }
+
+  Future<void> _check() async {
+    try {
+      final items = await context.read<ApiClient>().fetchMessages();
+      if (items.isEmpty) return;
+      final prefs = await SharedPreferences.getInstance();
+      final readAt = DateTime.tryParse(
+        prefs.getString(MessagesScreen.readAtKey) ?? '',
+      );
+      final unread =
+          readAt == null || items.first.createdAt.isAfter(readAt);
+      if (mounted && unread != _unread) setState(() => _unread = unread);
+    } catch (_) {
+      // Лента — не критичный путь: без сети строка просто без точки
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return PressScale(
+      onTap: () async {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const MessagesScreen()),
+        );
+        if (mounted) _check();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: c.line)),
+        ),
+        child: Row(
+          children: [
+            const Expanded(
+              child: Text('Акции и новости', style: TextStyle(fontSize: 13.5)),
+            ),
+            if (_unread)
+              Container(
+                width: 8,
+                height: 8,
+                margin: const EdgeInsets.only(right: Gap.sm),
+                decoration: BoxDecoration(
+                  color: c.benefit,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            Icon(Icons.chevron_right, size: 18, color: c.muted),
+          ],
+        ),
+      ),
+    );
   }
 }
 

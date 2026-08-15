@@ -13,6 +13,7 @@ const links = [
   { href: '/promotions', label: 'Акции' },
   { href: '/loyalty', label: 'Кэшбэк' },
   { href: '/addresses', label: 'Адреса' },
+  { href: '/messages', label: 'Сообщения' },
   { href: '/operations', label: 'Режим работы' },
   { href: '/cancellations', label: 'Отмены' },
   { href: '/legal', label: 'Документы' },

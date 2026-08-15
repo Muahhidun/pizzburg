@@ -192,6 +192,15 @@ class ApiClient {
         .toList();
   }
 
+  /// Лента сообщений заведения — публичная, гости тоже видят
+  Future<List<FeedMessage>> fetchMessages() async {
+    final res = await http.get(Uri.parse('$baseUrl/messages/$tenant'));
+    _ensureOk(res);
+    return (jsonDecode(utf8.decode(res.bodyBytes)) as List)
+        .map((m) => FeedMessage.fromJson(m))
+        .toList();
+  }
+
   /// Дома выбранной улицы. Второй шаг: сначала улица, потом номер —
   /// на улице Беркимбаева 217 домов, списком их не показать.
   Future<List<AddressSuggestion>> fetchHouses(String street, String q) async {

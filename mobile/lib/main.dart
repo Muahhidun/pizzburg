@@ -9,6 +9,7 @@ import 'state/favorites.dart';
 import 'screens/app_shell.dart';
 import 'state/auth.dart';
 import 'services/push_notifications.dart';
+import 'screens/messages_screen.dart';
 import 'screens/order_screen.dart';
 import 'screens/legal_screen.dart';
 import 'api/models.dart';
@@ -46,6 +47,14 @@ Future<void> main() async {
       );
   };
   push.onNotificationOpened = (data) {
+    // Пуш рассылки ведёт в ленту: клиент должен найти сообщение, а не
+    // гадать, к чему было уведомление
+    if (data['type'] == 'message') {
+      _navigatorKey.currentState?.push(
+        MaterialPageRoute(builder: (_) => const MessagesScreen()),
+      );
+      return;
+    }
     if (data['type'] != 'order_status') return;
     final id = data['orderId']?.toString();
     final number = int.tryParse(data['orderNumber']?.toString() ?? '');

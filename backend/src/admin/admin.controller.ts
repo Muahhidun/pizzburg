@@ -15,6 +15,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AdminGuard } from './admin.guard';
 import { AdminService } from './admin.service';
+import { MessagesService } from '../messages/messages.service';
 import {
   PosterAccountDto,
   PromotionDto,
@@ -22,6 +23,8 @@ import {
   UpdateCategoryDto,
   UpdateProductDto,
   CreateAddressDto,
+  CreateMessageDto,
+  UpdateMessageDto,
   UpdateAddressDto,
   UpdateCancellationDto,
   UpdateLoyaltyLevelsDto,
@@ -41,7 +44,10 @@ import {
 @Controller('admin')
 @UseGuards(AdminGuard)
 export class AdminController {
-  constructor(private readonly admin: AdminService) {}
+  constructor(
+    private readonly admin: AdminService,
+    private readonly messages: MessagesService,
+  ) {}
 
   @Get('storefront')
   storefront(@Query('tenant') tenant?: string) {
@@ -172,6 +178,24 @@ export class AdminController {
   @Patch('settings/payments')
   updatePayments(@Body() dto: UpdatePaymentsDto) {
     return this.admin.updatePayments(dto);
+  }
+
+  // ─── Лента сообщений ─────────────────────────────────────────
+
+  @Get('messages')
+  listMessages() {
+    return this.messages.list();
+  }
+
+  /** Создаёт сообщение; с sendPush — сразу рассылает всем устройствам */
+  @Post('messages')
+  createMessage(@Body() dto: CreateMessageDto) {
+    return this.messages.create(dto);
+  }
+
+  @Patch('messages/:id')
+  updateMessage(@Param('id') id: string, @Body() dto: UpdateMessageDto) {
+    return this.messages.setPublished(id, dto.isPublished);
   }
 
   // ─── Адресный справочник города ──────────────────────────────

@@ -431,6 +431,33 @@ class FavoriteProduct {
   );
 }
 
+/// Сообщение ленты: акция, новость, объявление заведения
+class FeedMessage {
+  final String id;
+  final String title;
+  final String body;
+  final String? imageUrl;
+  final DateTime createdAt;
+
+  const FeedMessage({
+    required this.id,
+    required this.title,
+    required this.body,
+    this.imageUrl,
+    required this.createdAt,
+  });
+
+  factory FeedMessage.fromJson(Map<String, dynamic> json) => FeedMessage(
+    id: json['id']?.toString() ?? '',
+    title: json['title']?.toString() ?? '',
+    body: json['body']?.toString() ?? '',
+    imageUrl: json['imageUrl']?.toString(),
+    createdAt:
+        DateTime.tryParse(json['createdAt']?.toString() ?? '')?.toLocal() ??
+        DateTime.now(),
+  );
+}
+
 /// Подсказка адреса из 2ГИС
 class AddressSuggestion {
   final String label;

@@ -169,6 +169,21 @@ export class UpdateAddressDto {
   @IsOptional() @IsBoolean() isDeliverable?: boolean;
 }
 
+export class CreateMessageDto {
+  @IsString() @Length(2, 120) title: string;
+  @IsString() @Length(2, 4_000) body: string;
+  @IsOptional()
+  @IsString()
+  @MaxLength(2_048)
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
+  imageUrl?: string | null;
+  @IsOptional() @IsBoolean() sendPush?: boolean;
+}
+
+export class UpdateMessageDto {
+  @IsBoolean() isPublished: boolean;
+}
+
 export class LoyaltyLevelDto {
   @IsString() @Length(2, 40) name: string;
 

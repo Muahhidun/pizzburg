@@ -118,6 +118,58 @@ export class NotificationsService implements OnModuleInit {
     }
   }
 
+  /**
+   * Рассылка сообщения ленты всем устройствам.
+   *
+   * Возвращает, скольким устройствам ушло: владелец должен видеть охват,
+   * а не гадать, дошла ли акция хоть до кого-то. Мёртвые токены гасятся
+   * так же, как в статусах заказа.
+   */
+  async broadcast(messageId: string, title: string, body: string) {
+    const messaging = this.messaging;
+    if (!messaging) return { sent: 0, configured: false };
+
+    const devices = await this.prisma.pushDevice.findMany({
+      where: { isEnabled: true },
+      select: { token: true },
+    });
+    const tokens = [...new Set(devices.map((d) => d.token))];
+    let sent = 0;
+
+    for (let offset = 0; offset < tokens.length; offset += 500) {
+      const batch = tokens.slice(offset, offset + 500);
+      try {
+        const response = await messaging.sendEachForMulticast({
+          tokens: batch,
+          notification: { title, body },
+          data: { type: 'message', messageId },
+          android: {
+            priority: 'high',
+            notification: { channelId: 'news', sound: 'default' },
+          },
+          apns: { payload: { aps: { sound: 'default' } } },
+        });
+        sent += response.successCount;
+
+        const invalid = response.responses.flatMap((result, index) => {
+          const code = result.error?.code;
+          return code && INVALID_TOKEN_CODES.has(code) ? [batch[index]] : [];
+        });
+        if (invalid.length > 0) {
+          await this.prisma.pushDevice.updateMany({
+            where: { token: { in: invalid } },
+            data: { isEnabled: false },
+          });
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Рассылка ${messageId}: пачка не ушла: ${this.errorMessage(error)}`,
+        );
+      }
+    }
+    return { sent, configured: true };
+  }
+
   private async deliverOrderStatus(
     messaging: Messaging,
     orderId: string,
