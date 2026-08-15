@@ -18,12 +18,28 @@ export default function LoginPage() {
     e.preventDefault();
     setBusy(true);
     setError('');
-    setToken(value.trim());
+    const token = value.trim();
+    // Проверяем токен до записи в localStorage: иначе неверный оседает в
+    // хранилище, а редирект внутри api.request перезагружает эту же страницу
+    // и стирает сообщение об ошибке.
     try {
-      await api.get('/admin/settings');
+      const res = await fetch(`${api.raw}/admin/settings`, {
+        headers: { 'X-Admin-Token': token },
+      });
+      if (res.status === 401) {
+        setError('Неверный токен');
+        setBusy(false);
+        return;
+      }
+      if (!res.ok) {
+        setError(`Сервер ответил ошибкой ${res.status}`);
+        setBusy(false);
+        return;
+      }
+      setToken(token);
       router.replace('/dashboard');
     } catch {
-      setError('Неверный токен');
+      setError('Сервер недоступен');
       setBusy(false);
     }
   }
@@ -36,8 +52,26 @@ export default function LoginPage() {
       >
         <h1 className="mb-1 text-xl font-bold">PizzBurg</h1>
         <p className="mb-5 text-sm text-neutral-500">Админка доставки</p>
+        {/*
+          Менеджеру паролей нужна пара «логин + пароль»: по одному полю
+          Keychain и Chrome сохраняют запись через раз и потом не подставляют
+          её обратно. Логин у нас общий, поэтому поле скрыто и readOnly —
+          оно существует только как якорь для автозаполнения. Прятать его
+          через display:none нельзя, такие поля менеджеры игнорируют.
+        */}
+        <input
+          type="text"
+          name="username"
+          autoComplete="username"
+          value="PizzBurg админка"
+          readOnly
+          tabIndex={-1}
+          className="sr-only"
+        />
         <input
           type="password"
+          name="password"
+          autoComplete="current-password"
           value={value}
           onChange={(e) => setValue(e.target.value)}
           maxLength={500}
