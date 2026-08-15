@@ -146,13 +146,25 @@ class _GlassNavBarState extends State<GlassNavBar> {
                         gradient: LinearGradient(
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
+                          // Не чисто белые: на белой странице белая панель
+                          // сливается с фоном, и линзе не на чем читаться.
+                          // Лёгкий серый — как системные панели iOS в
+                          // светлой теме.
                           colors: [
-                            c.surface.withValues(alpha: 0.72),
-                            c.surface.withValues(alpha: 0.55),
+                            Color.lerp(
+                              c.surface,
+                              c.ink,
+                              0.045,
+                            )!.withValues(alpha: 0.80),
+                            Color.lerp(
+                              c.surface,
+                              c.ink,
+                              0.07,
+                            )!.withValues(alpha: 0.62),
                           ],
                         ),
                         border: Border.all(
-                          color: c.surface.withValues(alpha: 0.7),
+                          color: c.ink.withValues(alpha: 0.05),
                           width: 0.8,
                         ),
                         boxShadow: [
@@ -221,16 +233,16 @@ class _GlassNavBarState extends State<GlassNavBar> {
                     // быть ровно под пальцем, а не догонять его.
                     duration: dragging ? Duration.zero : Motion.base,
                     curve: Motion.benefit,
+                    // Пилюля в полтора слота: при почти квадратной линзе
+                    // стадион вырождается в круг, а кромка почти не задевает
+                    // подпись — гнуть ей нечего. Широкая накрывает буквы
+                    // соседней вкладки, и преломление видно.
                     left:
-                        (dragging
-                                ? (_dragX! - (slot + 10) / 2).clamp(
-                                    0.0,
-                                    width - slot - 10,
-                                  )
-                                : slot * widget.index - 5)
-                            .toDouble(),
+                        ((dragging ? _dragX! : slot * (widget.index + 0.5)) -
+                                slot * 0.75)
+                            .clamp(-6.0, width - slot * 1.5 + 6),
                     top: -_lensOverhang,
-                    width: slot + 10,
+                    width: slot * 1.5,
                     height: lensHeight,
                     child: IgnorePointer(
                       child: LiquidGlass.withOwnLayer(
@@ -241,10 +253,13 @@ class _GlassNavBarState extends State<GlassNavBar> {
                           // Внутри линзы контент остаётся резким — мылит
                           // только сама панель под ней
                           blur: 0,
-                          thickness: dragging ? 22 : 17,
-                          glassColor: const Color(0x00FFFFFF),
-                          lightIntensity: 0.6,
-                          chromaticAberration: 0.6,
+                          thickness: dragging ? 26 : 20,
+                          // Едва заметная дымка: на ровном белом преломлению
+                          // не за что зацепиться, и без неё линза между
+                          // подписями пропадает целиком
+                          glassColor: const Color(0x0D000000),
+                          lightIntensity: 0.7,
+                          chromaticAberration: 0.5,
                           // Дефолт пакета 1.5 перекрашивал бы иконки
                           saturation: 1.0,
                         ),
