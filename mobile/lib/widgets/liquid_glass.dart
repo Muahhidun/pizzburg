@@ -48,36 +48,33 @@ class LiquidGlass {
     }
   }
 
-  /// Фильтр преломления для `BackdropFilter`.
+  /// Фильтр линзы для `BackdropFilter`, натянутой на капсулу-подсветку.
   ///
-  /// Размытие сюда НЕ композится намеренно. `ImageFilter.compose` с
-  /// размытием внутри расширяет снимок фона на радиус размытия, движок
-  /// кладёт в `uSize` размер уже расширенной текстуры — и линза,
-  /// посчитанная в долях бара, уезжает к его краю. Проверено на симуляторе:
-  /// преломление появлялось у правой кромки вместо выбранной вкладки.
-  /// Поэтому размытие вешается отдельным слоем снаружи.
+  /// Линза вешается ПОВЕРХ ряда иконок, а не под ним: снимок фона тогда
+  /// содержит сами иконки и подписи, и кромка стекла зримо их гнёт — как
+  /// в системном таб-баре iOS 26. Прошлая версия читала фон ЗА баром, а
+  /// он почти всегда белый список: преломлять было нечего.
   ///
-  /// [center] и [half] задаются в долях от размера бара, [aspect] — его
-  /// ширина, делённая на высоту.
-  static ui.ImageFilter? filter({
-    required Offset center,
-    required Size half,
-    required double aspect,
-    required double strength,
+  /// Всё в физических пикселях снимка (умножайте на devicePixelRatio):
+  /// нормированные доли, растянутые на широкий бар, размазывали профиль
+  /// кромки горизонтальными полосами.
+  static ui.ImageFilter? lensFilter({
+    required double thicknessPx,
+    double eta = 1.5,
+    double chroma = 1.1,
+    double light = 0.55,
   }) {
     final program = _program;
     if (program == null || !supported) return null;
 
     final shader = program.fragmentShader();
     // Порядок обязан совпадать с объявлением uniform в .frag: движок
-    // кладёт размер текстуры в первые два числа сам, поэтому начинаем с 2.
+    // кладёт размер снимка в первые два числа сам, поэтому начинаем с 2.
     shader
-      ..setFloat(2, center.dx)
-      ..setFloat(3, center.dy)
-      ..setFloat(4, half.width)
-      ..setFloat(5, half.height)
-      ..setFloat(6, aspect)
-      ..setFloat(7, strength);
+      ..setFloat(2, thicknessPx)
+      ..setFloat(3, eta)
+      ..setFloat(4, chroma)
+      ..setFloat(5, light);
 
     return ui.ImageFilter.shader(shader);
   }

@@ -1,91 +1,115 @@
 #include <flutter/runtime_effect.glsl>
 
-// Линза «жидкого стекла» для таб-бара.
+// Линза «жидкого стекла» — капсула на весь снимок фона.
 //
-// Apple описывает материал тремя свойствами: он преломляет содержимое под
-// собой, отражает свет вокруг и даёт «отзывчивое линзирование по краям»
-// (developer.apple.com, Liquid Glass). Ровное размытие даёт только третью
-// часть — матовость. Здесь добавлены две недостающие: преломление и блик.
+// Математика повторяет liquid_glass_renderer (whynotmake.it, MIT), который
+// в свою очередь построен на shadertoy.com/view/wccSDf: у кромки капсулы
+// стекло образует «валик» круглого сечения, по нему строится 3D-нормаль,
+// и луч преломляется по закону Снелла (refract). Длинное плечо хода луча
+// (thickness * 8) превращает лёгкий наклон поверхности в заметный сдвиг —
+// это и есть «затягивание» контента в кромку, по которому глаз узнаёт
+// линзу. В плоской середине нормаль вертикальна, луч не отклоняется, и
+// контент остаётся резким — как у настоящего стекла и у Apple.
 //
-// Преломление считается не по всей капсуле, а по её КРАЮ: в середине стекло
-// плоское и ничего не искажает, у кромки толщина растёт, и луч уходит в
-// сторону. Поэтому радужная каёмка появляется именно по контуру, как на
-// настоящем стекле.
+// Всё считается в ПИКСЕЛЯХ снимка, а не в нормированных долях: прошлая
+// версия работала в долях, растянутых на весь бар (aspect ~7), и профиль
+// кромки размазывался горизонтальными полосами через всю панель.
 //
-// Контракт ImageFilter.shader: первый uniform обязан быть vec2 (движок
-// кладёт туда размер текстуры), первый sampler2D — вход фильтра, то есть
-// то, что нарисовано под баром.
+// Контракт ImageFilter.shader: первый uniform — vec2 (движок кладёт туда
+// размер снимка), первый sampler2D — сам снимок фона под фильтром.
 
 uniform vec2 uSize;
 
-// Центр и полуразмеры линзы в долях бара (0..1)
-uniform vec2 uCenter;
-uniform vec2 uHalf;
+/// Толщина стеклянного валика у кромки, физические пиксели
+uniform float uThickness;
 
-// Ширина бара, делённая на высоту. Без этого круглая линза растянулась бы
-// вместе с баром в горизонтальный овал.
-uniform float uAspect;
+/// Показатель преломления (стекло ~1.5)
+uniform float uEta;
 
-// Сила преломления и блика; на 0 линза выключается целиком
-uniform float uStrength;
+/// Сила хроматической аберрации (0 — выключена)
+uniform float uChroma;
+
+/// Яркость канта по кромке
+uniform float uLight;
 
 uniform sampler2D uTexture;
 
 out vec4 fragColor;
 
-/// Расстояние до скруглённого прямоугольника: <0 внутри, >0 снаружи
-float sdRoundedBox(vec2 p, vec2 b, float r) {
-  vec2 q = abs(p) - b + r;
-  return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
-}
-
+// Капсула-«стадион»: отрезок оси с радиусом. В отличие от скруглённого
+// прямоугольника у неё нет внутреннего шва, где градиент ломается:
+// экранные производные (dFdx) на таком изломе дают мусорные нормали, и
+// по линзе шла диагональная цветная рябь. Здесь градиент аналитический
+// и гладкий везде.
 void main() {
-  vec2 uv = FlutterFragCoord().xy / uSize;
+  vec2 f = FlutterFragCoord().xy;
+  vec2 uv = f / uSize;
 #ifdef IMPELLER_TARGET_OPENGLES
   uv.y = 1.0 - uv.y;
 #endif
 
-  if (uStrength <= 0.0) {
-    fragColor = texture(uTexture, uv);
+  vec4 bg = texture(uTexture, uv);
+
+  // Стадион вписан в снимок с полем в 1px под сглаживание клипа
+  float radius = uSize.y * 0.5 - 1.0;
+  float axisHalf = uSize.x * 0.5 - 1.0 - radius;
+  vec2 p = f - uSize * 0.5;
+  vec2 toAxis = vec2(p.x - clamp(p.x, -axisHalf, axisHalf), p.y);
+  float dist = length(toAxis);
+  float sd = dist - radius;
+
+  float alpha = 1.0 - smoothstep(-2.0, 0.0, sd);
+  if (alpha < 0.01 || uThickness < 1.0) {
+    fragColor = bg;
     return;
   }
 
-  // Пропорциональные координаты: по x растягиваем на соотношение сторон
-  vec2 aspect = vec2(uAspect, 1.0);
-  vec2 p = (uv - uCenter) * aspect;
-  // не `half`: это зарезервированное слово GLSL
-  vec2 lens = uHalf * aspect;
-  float radius = min(lens.x, lens.y);
-  float d = sdRoundedBox(p, lens, radius);
+  float t = min(uThickness, radius);
 
-  // Нормаль к поверхности линзы — градиент поля расстояний
-  vec2 e = vec2(0.002, 0.0);
-  vec2 n = vec2(
-    sdRoundedBox(p + e.xy, lens, radius) - sdRoundedBox(p - e.xy, lens, radius),
-    sdRoundedBox(p + e.yx, lens, radius) - sdRoundedBox(p - e.yx, lens, radius)
+  // Высота валика: 0 на кромке, t на глубине t, дальше стекло плоское —
+  // середина линзы ничего не искажает, как у настоящего стекла
+  float x = t + max(sd, -t);
+  float height = sd < -t ? t : sqrt(max(0.0, t * t - x * x));
+
+  // 3D-нормаль: у кромки горизонтальна и смотрит наружу, в глубине
+  // вертикальна. Наружу — вдоль аналитического градиента стадиона.
+  float ncos = clamp((t + sd) / t, 0.0, 1.0);
+  float nsin = sqrt(max(0.0, 1.0 - ncos * ncos));
+  vec2 grad = dist > 1e-4 ? toAxis / dist : vec2(0.0, 1.0);
+  vec3 nrm = normalize(vec3(grad * ncos, nsin));
+
+  // Снелл: луч сверху вниз преломляется на поверхности валика. Плечо хода
+  // луча укорочено против эталонного t*8: наша линза мала, и на длинном
+  // плече сдвиг съедал иконку целиком.
+  vec3 refr = refract(vec3(0.0, 0.0, -1.0), nrm, 1.0 / uEta);
+  float travel = (height + t * 3.0) / max(abs(refr.z), 1e-3);
+  vec2 disp = refr.xy * travel;
+
+  // Страховка у самой кромки, где ход луча уходит в бесконечность
+  float maxDisp = t * 1.5;
+  float dispLen = length(disp);
+  if (dispLen > maxDisp) disp *= maxDisp / dispLen;
+
+  // Красный преломляется сильнее синего — цветная кайма по кромке
+  float d = uChroma * 0.5;
+  vec2 uvR = clamp(uv + disp * (1.0 + d) / uSize, vec2(0.001), vec2(0.999));
+  vec2 uvG = clamp(uv + disp / uSize, vec2(0.001), vec2(0.999));
+  vec2 uvB = clamp(uv + disp * (1.0 - d) / uSize, vec2(0.001), vec2(0.999));
+  vec3 col = vec3(
+    texture(uTexture, uvR).r,
+    texture(uTexture, uvG).g,
+    texture(uTexture, uvB).b
   );
-  n = normalize(n + vec2(1e-6));
 
-  // Профиль толщины: 0 в середине линзы, максимум у самой кромки, 0 снаружи
-  float inside = 1.0 - smoothstep(-0.02, 0.01, d);
-  float rim = smoothstep(-0.30, -0.01, d) * inside;
+  // Узкий яркий кант по самой кромке: основной свет сверху-слева и слабый
+  // ответный снизу-справа, как у эталона. Ровная подсветка по всему
+  // контуру выдала бы нарисованный градиент.
+  float rimX = sd / 2.0;
+  float rim = 1.0 / (1.0 + 0.89 * rimX * rimX);
+  vec2 lightDir = normalize(vec2(-0.6, -1.0));
+  float mainL = max(0.0, dot(nrm.xy, lightDir));
+  float oppL = max(0.0, dot(nrm.xy, -lightDir));
+  col += (mainL * mainL + oppL * oppL * 0.6) * rim * uLight;
 
-  vec2 offset = n * rim * uStrength;
-
-  // Хроматическая аберрация: стекло преломляет красный сильнее синего,
-  // отсюда цветная кайма по контуру — она и читается глазом как стекло.
-  vec4 cr = texture(uTexture, uv - offset * 1.16);
-  vec4 cg = texture(uTexture, uv - offset * 1.00);
-  vec4 cb = texture(uTexture, uv - offset * 0.84);
-  vec3 col = vec3(cr.r, cg.g, cb.b);
-
-  // Блик: свет падает сверху-слева, поэтому верхняя кромка светится, а
-  // нижняя — нет. Ровная подсветка по кругу выдаёт нарисованный градиент.
-  float spec = pow(max(dot(n, normalize(vec2(0.55, 1.0))), 0.0), 5.0) * rim;
-  col += spec * 0.55;
-
-  // Внутри линзы содержимое чуть светлее — стекло собирает свет
-  col += inside * 0.04;
-
-  fragColor = vec4(col, cg.a);
+  fragColor = mix(bg, vec4(col, bg.a), alpha);
 }
