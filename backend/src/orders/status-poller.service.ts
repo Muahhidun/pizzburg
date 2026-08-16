@@ -29,12 +29,28 @@ export class StatusPollerService {
       },
       select: { id: true, number: true, status: true },
     });
+    // Раньше цикл молчал, пока статус не менялся, и «опрос не видит заказ»
+    // выглядело в логах ровно как «Poster ещё не принял». Отличить одно от
+    // другого было нечем, поэтому пишем сам факт круга и что ответил Poster
+    // по каждой части.
+    if (active.length === 0) return;
+    this.logger.log(
+      `Опрос: активных заказов ${active.length} (${active
+        .map((o) => `№${o.number}/${o.status}`)
+        .join(', ')})`,
+    );
     for (const o of active) {
       try {
         const res = await this.orders.syncStatus(o.id);
         if (res.status !== o.status) {
           this.logger.log(
             `Заказ №${o.number}: ${o.status} → ${res.status}`,
+          );
+        } else {
+          this.logger.log(
+            `Заказ №${o.number}: без изменений (${res.parts
+              .map((p) => `${p.department}=${p.posterStatus ?? 'нет ответа'}`)
+              .join(', ')})`,
           );
         }
       } catch (e) {
