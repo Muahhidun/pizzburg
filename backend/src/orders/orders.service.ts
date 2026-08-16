@@ -733,7 +733,14 @@ export class OrdersService {
     return this.setStatus(order.id, 'CANCELLED', tenantId);
   }
 
-  async setStatus(orderId: string, next: OrderStatus, tenantId?: string) {
+  async setStatus(
+    orderId: string,
+    next: OrderStatus,
+    tenantId?: string,
+    /// `notify: false` — молчаливое закрытие: автозакрытие через три часа
+    /// не повод писать клиенту, он к этому времени давно поел.
+    options?: { notify?: boolean },
+  ) {
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, ...(tenantId ? { tenantId } : {}) },
     });
@@ -763,7 +770,9 @@ export class OrdersService {
       data: { status: next },
     });
     await this.loyalty.onStatusChanged(order.id, next);
-    await this.notifications.sendOrderStatus(order.id, next);
+    if (options?.notify !== false) {
+      await this.notifications.sendOrderStatus(order.id, next);
+    }
     return this.prisma.order.findUniqueOrThrow({ where: { id: updated.id } });
   }
 
