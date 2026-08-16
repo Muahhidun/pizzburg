@@ -5,7 +5,7 @@ import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../widgets/motion.dart';
 
-/// Тёмный хедер каталога: куда везём, за сколько, и блок повтора.
+/// Акцентный хедер каталога: куда везём, за сколько, и блок повтора.
 ///
 /// Хендофф ставит сюда «Тот же заказ?» первым экраном не случайно:
 /// ключевой сценарий заведения — повторный заказ, и он должен занимать
@@ -41,7 +41,7 @@ class CatalogHeader extends StatelessWidget {
     final c = context.colors;
     final closed = !availability.deliveryAvailable || !availability.isOpenNow;
 
-    // Статус-бар лежит поверх чёрного хедера: без светлых иконок время и
+    // Статус-бар лежит поверх цветного хедера: без светлых иконок время и
     // батарея сливаются с фоном. Оборачиваем именно хедер, а не весь экран,
     // иначе на других вкладках со светлым фоном иконки пропадут.
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -52,143 +52,154 @@ class CatalogHeader extends StatelessWidget {
       ),
       child: Container(
         width: double.infinity,
-        // Высоту статус-бара сверху больше не добавляем: её занимает
-        // отдельная закреплённая чернильная полоса перед хедером. Она же
-        // держит статус-бар тёмным, когда хедер уже уехал вверх, — иначе
-        // светлые часы оказались бы на белом списке.
-        padding: const EdgeInsets.fromLTRB(Gap.screen, 10, Gap.screen, 26),
-        decoration: BoxDecoration(color: c.ink, borderRadius: R.headerBottom),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: PressScale(
-                  onTap: onAddressTap,
-                  scale: 0.98,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        mode == 'PICKUP' ? 'Заберёте из' : 'Доставим на',
-                        style: TextStyle(
-                          fontSize: 13,
-                          height: 1.35,
-                          fontWeight: FontWeight.w500,
-                          color: c.surface.withValues(alpha: 0.7),
+        // Хедер заходит ПОД статус-бар, поэтому сверху добавляем его высоту.
+        // Иначе над цветным блоком остаётся белая полоса с часами.
+        padding: EdgeInsets.fromLTRB(
+          Gap.screen,
+          MediaQuery.of(context).padding.top + 10,
+          Gap.screen,
+          26,
+        ),
+        decoration: BoxDecoration(
+          color: c.accent,
+          borderRadius: R.headerBottom,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: PressScale(
+                    onTap: onAddressTap,
+                    scale: 0.98,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          mode == 'PICKUP' ? 'Заберёте из' : 'Доставим на',
+                          style: TextStyle(
+                            fontSize: 13,
+                            height: 1.35,
+                            fontWeight: FontWeight.w500,
+                            color: c.surface.withValues(alpha: 0.7),
+                          ),
                         ),
-                      ),
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              addressLabel,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                color: c.surface,
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                addressLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: c.surface,
+                                ),
                               ),
                             ),
-                          ),
-                          Icon(
-                            Icons.keyboard_arrow_down,
-                            size: 16,
-                            color: c.surface,
-                          ),
-                        ],
-                      ),
-                    ],
+                            Icon(
+                              Icons.keyboard_arrow_down,
+                              size: 16,
+                              color: c.surface,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: Gap.md),
+                const SizedBox(width: Gap.md),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: c.surface.withValues(alpha: 0.14),
+                    borderRadius: R.pill,
+                  ),
+                  child: Text(
+                    etaLabel,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: c.surface,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            // Предупреждение о закрытой доставке — до блока повтора: сначала
+            // объясняем, почему всё выглядит иначе, потом предлагаем действие.
+            if (closed && availability.message != null) ...[
+              const SizedBox(height: Gap.lg),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                width: double.infinity,
+                padding: const EdgeInsets.all(Gap.lg),
+                // Хедер теперь сам акцентный, поэтому предупреждение внутри
+                // него набирается светлым по акценту, а не акцентом по тёмному:
+                // акцент на акценте не читался бы вовсе.
                 decoration: BoxDecoration(
                   color: c.surface.withValues(alpha: 0.14),
-                  borderRadius: R.pill,
+                  borderRadius: R.field,
+                  border: Border.all(color: c.surface.withValues(alpha: 0.35)),
                 ),
-                child: Text(
-                  etaLabel,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: c.surface,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      availability.isOpenNow
+                          ? 'Доставка закрыта'
+                          : 'Сейчас закрыто',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontSize: 16.5,
+                        color: c.surface,
+                      ),
+                    ),
+                    const SizedBox(height: Gap.xs),
+                    Text(
+                      availability.message!,
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.4,
+                        color: c.surface.withValues(alpha: 0.8),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
-          ),
 
-          // Предупреждение о закрытой доставке — до блока повтора: сначала
-          // объясняем, почему всё выглядит иначе, потом предлагаем действие.
-          if (closed && availability.message != null) ...[
-            const SizedBox(height: Gap.lg),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(Gap.lg),
-              decoration: BoxDecoration(
-                color: c.accent.withValues(alpha: 0.14),
-                borderRadius: R.field,
-                border: Border.all(color: c.accent.withValues(alpha: 0.4)),
+            // Активный заказ вытесняет блок повтора: пока еда едет, человек
+            // заходит в приложение посмотреть «где мой заказ», а не заказать
+            // ещё раз.
+            if (activeOrderBlock != null) ...[
+              const SizedBox(height: 20),
+              Text(
+                'Ваш заказ',
+                style: Theme.of(
+                  context,
+                ).textTheme.displaySmall?.copyWith(color: c.surface),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    availability.isOpenNow
-                        ? 'Доставка закрыта'
-                        : 'Сейчас закрыто',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontSize: 16.5,
-                      color: c.accent,
-                    ),
-                  ),
-                  const SizedBox(height: Gap.xs),
-                  Text(
-                    availability.message!,
-                    style: TextStyle(
-                      fontSize: 13,
-                      height: 1.4,
-                      color: c.surface.withValues(alpha: 0.8),
-                    ),
-                  ),
-                ],
+              const SizedBox(height: Gap.md),
+              BenefitReveal(child: activeOrderBlock!),
+            ] else if (repeatBlock != null) ...[
+              const SizedBox(height: 20),
+              Text(
+                'Тот же заказ?',
+                style: Theme.of(
+                  context,
+                ).textTheme.displaySmall?.copyWith(color: c.surface),
               ),
-            ),
+              const SizedBox(height: Gap.md),
+              BenefitReveal(child: repeatBlock!),
+            ],
           ],
-
-          // Активный заказ вытесняет блок повтора: пока еда едет, человек
-          // заходит в приложение посмотреть «где мой заказ», а не заказать
-          // ещё раз.
-          if (activeOrderBlock != null) ...[
-            const SizedBox(height: 20),
-            Text(
-              'Ваш заказ',
-              style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                color: c.surface,
-              ),
-            ),
-            const SizedBox(height: Gap.md),
-            BenefitReveal(child: activeOrderBlock!),
-          ] else if (repeatBlock != null) ...[
-            const SizedBox(height: 20),
-            Text(
-              'Тот же заказ?',
-              style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                color: c.surface,
-              ),
-            ),
-            const SizedBox(height: Gap.md),
-            BenefitReveal(child: repeatBlock!),
-          ],
-
-        ],
-      ),
+        ),
       ),
     );
   }
@@ -215,23 +226,48 @@ class CatalogSkeleton extends StatelessWidget {
               26,
             ),
             decoration: BoxDecoration(
-              color: c.ink,
+              color: c.accent,
               borderRadius: R.headerBottom,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _Bar(width: 120, height: 12, color: c.surface.withValues(alpha: 0.15)),
+                _Bar(
+                  width: 120,
+                  height: 12,
+                  color: c.surface.withValues(alpha: 0.15),
+                ),
                 const SizedBox(height: Gap.sm),
-                _Bar(width: 180, height: 16, color: c.surface.withValues(alpha: 0.15)),
+                _Bar(
+                  width: 180,
+                  height: 16,
+                  color: c.surface.withValues(alpha: 0.15),
+                ),
                 const SizedBox(height: 24),
-                _Bar(width: double.infinity, height: 68, color: c.surface.withValues(alpha: 0.08), radius: 24),
+                _Bar(
+                  width: double.infinity,
+                  height: 68,
+                  color: c.surface.withValues(alpha: 0.08),
+                  radius: 24,
+                ),
                 const SizedBox(height: Gap.block),
                 Row(
                   children: [
-                    Expanded(child: _Bar(height: 40, color: c.surface.withValues(alpha: 0.12), radius: 999)),
+                    Expanded(
+                      child: _Bar(
+                        height: 40,
+                        color: c.surface.withValues(alpha: 0.12),
+                        radius: 999,
+                      ),
+                    ),
                     const SizedBox(width: 7),
-                    Expanded(child: _Bar(height: 40, color: c.surface.withValues(alpha: 0.12), radius: 999)),
+                    Expanded(
+                      child: _Bar(
+                        height: 40,
+                        color: c.surface.withValues(alpha: 0.12),
+                        radius: 999,
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -252,7 +288,12 @@ class CatalogSkeleton extends StatelessWidget {
           const SizedBox(height: Gap.block),
           for (var i = 0; i < 3; i++)
             Padding(
-              padding: const EdgeInsets.fromLTRB(Gap.screen, 0, Gap.screen, Gap.block),
+              padding: const EdgeInsets.fromLTRB(
+                Gap.screen,
+                0,
+                Gap.screen,
+                Gap.block,
+              ),
               child: Row(
                 children: [
                   _Bar(width: 80, height: 80, color: c.fillSoft, radius: 22),
@@ -335,7 +376,9 @@ class CatalogError extends StatelessWidget {
             const SizedBox(height: Gap.block),
             Text(
               'Меню не загрузилось',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 21),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontSize: 21),
             ),
             const SizedBox(height: Gap.sm),
             Text(
@@ -347,8 +390,14 @@ class CatalogError extends StatelessWidget {
             PressScale(
               onTap: onRetry,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 15),
-                decoration: BoxDecoration(color: c.accent, borderRadius: R.pill),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 28,
+                  vertical: 15,
+                ),
+                decoration: BoxDecoration(
+                  color: c.accent,
+                  borderRadius: R.pill,
+                ),
                 child: Text(
                   'Повторить',
                   style: TextStyle(

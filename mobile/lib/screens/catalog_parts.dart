@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import '../api/models.dart';
 import '../theme/app_theme.dart';
@@ -122,81 +124,77 @@ class _Half extends StatelessWidget {
   }
 }
 
-/// Сплошная полоса фиксированной высоты для закреплённого слоя.
+/// Плавающий стеклянный островок с категориями.
 ///
-/// Держит статус-бар на чернилах, пока каталог прокручивается: хедер
-/// уезжает, а иконки часов остаются светлыми на тёмном. Иначе пришлось бы
-/// переключать их яркость по порогу прокрутки — и ловить моменты, когда
-/// белый текст оказывается на белом.
-class SolidStripHeader extends SliverPersistentHeaderDelegate {
-  final double height;
-  final Color color;
-
-  const SolidStripHeader({required this.height, required this.color});
-
-  @override
-  double get minExtent => height;
-
-  @override
-  double get maxExtent => height;
-
-  @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlaps) =>
-      ColoredBox(color: color, child: const SizedBox.expand());
-
-  @override
-  bool shouldRebuild(SolidStripHeader old) =>
-      old.height != height || old.color != color;
-}
-
-/// Закреплённая строка категорий.
-///
-/// Прокрутка уводит шапку, но не якоря: без этого, чтобы сменить раздел,
-/// пришлось бы возвращаться в начало списка. Подложка непрозрачная —
-/// строки меню проезжают под ней, а не сквозь.
-class PinnedChipsHeader extends SliverPersistentHeaderDelegate {
-  final double height;
+/// Тот же материал, что у нижнего бара, и по той же причине: список должен
+/// уходить под него, а не упираться в непрозрачную панель. Прошлый вариант
+/// был закреплённой полосой во всю ширину, и над ней приходилось держать
+/// чернильную заглушку под статус-бар — та съедала иконки часов, потому что
+/// стиль статус-бара к тому моменту уже переключался на тёмный.
+class GlassChipsBar extends StatelessWidget {
   final Widget child;
-  final Color background;
-  final Color line;
 
-  const PinnedChipsHeader({
-    required this.height,
-    required this.child,
-    required this.background,
-    required this.line,
-  });
+  /// Островок появляется, только когда строка категорий из потока ушла под
+  /// верх экрана: до этого он дублировал бы её.
+  final bool visible;
+
+  const GlassChipsBar({super.key, required this.child, required this.visible});
 
   @override
-  double get minExtent => height;
-
-  @override
-  double get maxExtent => height;
-
-  @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlaps) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: background,
-        // Волосяная линия только когда под строкой действительно едет
-        // список: в покое она превратила бы якоря в отдельную панель.
-        border: Border(
-          bottom: BorderSide(
-            color: overlaps ? line : Colors.transparent,
-            width: 0.8,
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return IgnorePointer(
+      ignoring: !visible,
+      child: AnimatedSlide(
+        offset: visible ? Offset.zero : const Offset(0, -0.45),
+        duration: Motion.base,
+        curve: Motion.change,
+        child: AnimatedOpacity(
+          opacity: visible ? 1 : 0,
+          duration: Motion.fast,
+          child: ClipRRect(
+            borderRadius: R.pill,
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: R.pill,
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color.lerp(
+                        c.surface,
+                        c.ink,
+                        0.045,
+                      )!.withValues(alpha: 0.80),
+                      Color.lerp(
+                        c.surface,
+                        c.ink,
+                        0.07,
+                      )!.withValues(alpha: 0.62),
+                    ],
+                  ),
+                  border: Border.all(
+                    color: c.ink.withValues(alpha: 0.05),
+                    width: 0.8,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: c.ink.withValues(alpha: 0.12),
+                      blurRadius: 28,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: SizedBox(height: Hit.min + Gap.sm * 2, child: child),
+              ),
+            ),
           ),
         ),
       ),
-      child: Center(child: child),
     );
   }
-
-  @override
-  bool shouldRebuild(PinnedChipsHeader old) =>
-      old.height != height ||
-      old.child != child ||
-      old.background != background ||
-      old.line != line;
 }
 
 /// Чипсы категорий — якоря непрерывного скролла, а не фильтр.

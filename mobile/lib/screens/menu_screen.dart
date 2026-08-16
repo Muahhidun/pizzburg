@@ -113,6 +113,16 @@ class _MenuScreenState extends State<MenuScreen> {
   final _listAnchorKey = GlobalKey();
   double _listTop = 0;
 
+  /// Строка категорий в потоке и её позиция: как только она уходит под верх
+  /// экрана, её подхватывает плавающий островок.
+  final _chipsAnchorKey = GlobalKey();
+  double _chipsTop = 0;
+  bool _chipsFloating = false;
+
+  /// У островка свой контроллер горизонтальной прокрутки: тот же самый
+  /// нельзя — один ScrollController не обслуживает два живых списка.
+  final _floatingChipsController = ScrollController();
+
   final List<_Row> _rows = [];
   final Map<String, double> _offsets = {};
   List<MenuCategory> _categories = [];
@@ -138,6 +148,7 @@ class _MenuScreenState extends State<MenuScreen> {
     _listController.removeListener(_onScroll);
     _ownedController?.dispose();
     _chipsController.dispose();
+    _floatingChipsController.dispose();
     _search.dispose();
     super.dispose();
   }
@@ -229,16 +240,28 @@ class _MenuScreenState extends State<MenuScreen> {
 
   /// Сколько сверху занято закреплёнными слоями: под ними список не виден,
   /// поэтому и заголовок категории должен вставать ровно под ними.
-  double _pinnedTop() =>
-      MediaQuery.paddingOf(context).top + (_query.trim().isEmpty ? _chipsExtent : 0);
+  /// Низ плавающего островка: под ним список не виден, поэтому заголовок
+  /// категории при переходе должен вставать ровно под ним.
+  double _pinnedTop() {
+    final top = MediaQuery.paddingOf(context).top + Gap.sm;
+    if (_query.trim().isNotEmpty) return top;
+    return top + Hit.min + Gap.sm * 2 + Gap.md;
+  }
+
+  double? _offsetOf(GlobalKey key) {
+    final box = key.currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return null;
+    final viewport = RenderAbstractViewport.maybeOf(box);
+    if (viewport == null) return null;
+    final top = viewport.getOffsetToReveal(box, 0).offset;
+    return top.isFinite ? top : null;
+  }
 
   void _measureListTop() {
-    final box = _listAnchorKey.currentContext?.findRenderObject();
-    if (box is! RenderBox || !box.hasSize) return;
-    final viewport = RenderAbstractViewport.maybeOf(box);
-    if (viewport == null) return;
-    final top = viewport.getOffsetToReveal(box, 0).offset;
-    if (top.isFinite && (top - _listTop).abs() > 0.5) _listTop = top;
+    final top = _offsetOf(_listAnchorKey);
+    if (top != null && (top - _listTop).abs() > 0.5) _listTop = top;
+    final chips = _offsetOf(_chipsAnchorKey);
+    if (chips != null && (chips - _chipsTop).abs() > 0.5) _chipsTop = chips;
   }
 
   void _onScroll() {
@@ -254,6 +277,13 @@ class _MenuScreenState extends State<MenuScreen> {
         break;
       }
     }
+    // Островок поднимается ровно тогда, когда строка из потока уходит под
+    // его собственное место — иначе на экране было бы две одинаковых строки.
+    final floating =
+        _chipsTop > 0 &&
+        _listController.offset > _chipsTop - MediaQuery.paddingOf(context).top;
+    if (floating != _chipsFloating) setState(() => _chipsFloating = floating);
+
     if (current != _activeCategory) {
       setState(() => _activeCategory = current);
       _scrollChipsTo(current);
@@ -262,12 +292,17 @@ class _MenuScreenState extends State<MenuScreen> {
 
   void _scrollChipsTo(String categoryId) {
     final index = _categories.indexWhere((c) => c.id == categoryId);
-    if (index < 0 || !_chipsController.hasClients) return;
-    _chipsController.animateTo(
-      (index * 110.0 - 60).clamp(0.0, _chipsController.position.maxScrollExtent),
-      duration: Motion.base,
-      curve: Motion.change,
-    );
+    if (index < 0) return;
+    // Обе строки — в потоке и в островке — держим на одной позиции: между
+    // ними переключаются прокруткой, и разъехавшиеся якоря сбивали бы.
+    for (final controller in [_chipsController, _floatingChipsController]) {
+      if (!controller.hasClients) continue;
+      controller.animateTo(
+        (index * 110.0 - 60).clamp(0.0, controller.position.maxScrollExtent),
+        duration: Motion.base,
+        curve: Motion.change,
+      );
+    }
   }
 
   Future<void> _jumpToCategory(String categoryId) async {
@@ -280,8 +315,10 @@ class _MenuScreenState extends State<MenuScreen> {
     _scrollChipsTo(categoryId);
     _measureListTop();
     await _listController.animateTo(
-      (_listTop + offset - _pinnedTop())
-          .clamp(0.0, _listController.position.maxScrollExtent),
+      (_listTop + offset - _pinnedTop()).clamp(
+        0.0,
+        _listController.position.maxScrollExtent,
+      ),
       duration: Motion.page,
       curve: Motion.enter,
     );
@@ -355,20 +392,12 @@ class _MenuScreenState extends State<MenuScreen> {
                     left: 0,
                     right: 0,
                     height: gap,
-                    child: ColoredBox(color: colors.ink),
+                    child: ColoredBox(color: colors.accent),
                   ),
                 ),
                 CustomScrollView(
                   controller: _listController,
                   slivers: [
-                    // Статус-бар остаётся на чернилах и когда хедер уехал
-                    SliverPersistentHeader(
-                      pinned: true,
-                      delegate: SolidStripHeader(
-                        height: MediaQuery.paddingOf(context).top,
-                        color: colors.ink,
-                      ),
-                    ),
                     SliverToBoxAdapter(
                       child: CatalogHeader(
                         addressLabel: _addressLabel(data),
@@ -391,8 +420,8 @@ class _MenuScreenState extends State<MenuScreen> {
                                                 .toInt(),
                                         total:
                                             (data.activeOrder!['total'] as num?)
-                                                    ?.toInt() ??
-                                                0,
+                                                ?.toInt() ??
+                                            0,
                                         pointsSpent: 0,
                                       ),
                                     ),
@@ -403,14 +432,15 @@ class _MenuScreenState extends State<MenuScreen> {
                         // предлагать действие, которое сейчас не выполнить,
                         // хуже, чем не предлагать.
                         repeatBlock:
-                            data.lastOrder != null && data.availability.isOpenNow
-                                ? RepeatOrderCard(
-                                    order: data.lastOrder!,
-                                    menu: _menu,
-                                    onDark: true,
-                                    onRepeated: _openCart,
-                                  )
-                                : null,
+                            data.lastOrder != null &&
+                                data.availability.isOpenNow
+                            ? RepeatOrderCard(
+                                order: data.lastOrder!,
+                                menu: _menu,
+                                onDark: true,
+                                onRepeated: _openCart,
+                              )
+                            : null,
                       ),
                     ),
                     // Переключатель на белом фоне, как в прототипе: внутри
@@ -452,17 +482,17 @@ class _MenuScreenState extends State<MenuScreen> {
                     // Пока идёт поиск, категории не нужны: они относятся
                     // к полному меню, а не к результатам.
                     if (_query.trim().isEmpty)
-                      SliverPersistentHeader(
-                        pinned: true,
-                        delegate: PinnedChipsHeader(
+                      SliverToBoxAdapter(
+                        child: SizedBox(
+                          key: _chipsAnchorKey,
                           height: _chipsExtent,
-                          background: colors.surface,
-                          line: colors.line,
-                          child: CategoryChips(
-                            categories: _categories,
-                            activeId: _activeCategory,
-                            controller: _chipsController,
-                            onTap: _jumpToCategory,
+                          child: Center(
+                            child: CategoryChips(
+                              categories: _categories,
+                              activeId: _activeCategory,
+                              controller: _chipsController,
+                              onTap: _jumpToCategory,
+                            ),
                           ),
                         ),
                       ),
@@ -503,7 +533,9 @@ class _MenuScreenState extends State<MenuScreen> {
                                   child: Consumer<Cart>(
                                     builder: (context, cart, _) => ProductRow(
                                       product: product,
-                                      favorite: authed ? favorites.contains(product.id) : null,
+                                      favorite: authed
+                                          ? favorites.contains(product.id)
+                                          : null,
                                       onToggleFavorite: () =>
                                           _toggleFavorite(product.id),
                                       inCart: cart.qtyOf(product),
@@ -539,77 +571,96 @@ class _MenuScreenState extends State<MenuScreen> {
                         ),
                       )
                     else
-                    SliverPadding(
-                      padding: EdgeInsets.fromLTRB(
-                        Gap.screen,
-                        Gap.sm,
-                        Gap.screen,
-                        _bottomSpace(context),
-                      ),
-                      sliver: SliverList.builder(
-                        itemCount: _rows.length,
-                        itemBuilder: (context, index) {
-                          final row = _rows[index];
-                          if (row is _HeaderRow) {
-                            return SizedBox(
-                              height: _categoryTitleHeight,
-                              child: Align(
-                                alignment: Alignment.bottomLeft,
-                                child: Padding(
-                                  padding: const EdgeInsets.only(bottom: Gap.md),
-                                  child: Text(
-                                    row.title,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.headlineMedium,
+                      SliverPadding(
+                        padding: EdgeInsets.fromLTRB(
+                          Gap.screen,
+                          Gap.sm,
+                          Gap.screen,
+                          _bottomSpace(context),
+                        ),
+                        sliver: SliverList.builder(
+                          itemCount: _rows.length,
+                          itemBuilder: (context, index) {
+                            final row = _rows[index];
+                            if (row is _HeaderRow) {
+                              return SizedBox(
+                                height: _categoryTitleHeight,
+                                child: Align(
+                                  alignment: Alignment.bottomLeft,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(
+                                      bottom: Gap.md,
+                                    ),
+                                    child: Text(
+                                      row.title,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.headlineMedium,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            );
-                          }
-                          final product = (row as _ProductRowItem).product;
-                          return StaggeredEntrance(
-                            index: index,
-                            child: SizedBox(
-                              height: _productRowHeight,
-                              child: Consumer<Cart>(
-                                builder: (context, cart, _) => ProductRow(
-                                favorite: authed ? favorites.contains(product.id) : null,
-                                onToggleFavorite: () =>
-                                    _toggleFavorite(product.id),
-                                inCart: cart.qtyOf(product),
-                                onRemove: () =>
-                                    cart.decrementProduct(product),
-                                product: product,
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => ProductScreen(product: product),
-                                  ),
-                                ),
-                                onAdd: () {
-                                  // Товар с выбором нельзя добавить одним
-                                  // тапом: сначала нужно собрать состав.
-                                  if (product.hasChoices) {
-                                    Navigator.push(
+                              );
+                            }
+                            final product = (row as _ProductRowItem).product;
+                            return StaggeredEntrance(
+                              index: index,
+                              child: SizedBox(
+                                height: _productRowHeight,
+                                child: Consumer<Cart>(
+                                  builder: (context, cart, _) => ProductRow(
+                                    favorite: authed
+                                        ? favorites.contains(product.id)
+                                        : null,
+                                    onToggleFavorite: () =>
+                                        _toggleFavorite(product.id),
+                                    inCart: cart.qtyOf(product),
+                                    onRemove: () =>
+                                        cart.decrementProduct(product),
+                                    product: product,
+                                    onTap: () => Navigator.push(
                                       context,
                                       MaterialPageRoute(
                                         builder: (_) =>
                                             ProductScreen(product: product),
                                       ),
-                                    );
-                                    return;
-                                  }
-                                  context.read<Cart>().add(product);
-                                },
+                                    ),
+                                    onAdd: () {
+                                      // Товар с выбором нельзя добавить одним
+                                      // тапом: сначала нужно собрать состав.
+                                      if (product.hasChoices) {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) =>
+                                                ProductScreen(product: product),
+                                          ),
+                                        );
+                                        return;
+                                      }
+                                      context.read<Cart>().add(product);
+                                    },
+                                  ),
                                 ),
                               ),
-                            ),
-                          );
-                        },
+                            );
+                          },
+                        ),
                       ),
-                    ),
                   ],
+                ),
+                Positioned(
+                  top: MediaQuery.paddingOf(context).top + Gap.sm,
+                  left: Gap.lg,
+                  right: Gap.lg,
+                  child: GlassChipsBar(
+                    visible: _chipsFloating,
+                    child: CategoryChips(
+                      categories: _categories,
+                      activeId: _activeCategory,
+                      controller: _floatingChipsController,
+                      onTap: _jumpToCategory,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -627,7 +678,9 @@ class _MenuScreenState extends State<MenuScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Не удалось сохранить — попробуйте ещё раз')),
+        const SnackBar(
+          content: Text('Не удалось сохранить — попробуйте ещё раз'),
+        ),
       );
     }
   }
