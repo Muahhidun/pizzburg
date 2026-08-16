@@ -72,9 +72,14 @@ class _OrderScreenState extends State<OrderScreen> {
     // Сначала подтягиваем состояние из Poster, потом читаем заказ: иначе
     // экран показывает снимок базы, который мог отстать на круг опроса.
     // Молча переживаем неудачу — заказ всё равно покажем, просто прежним.
-    try {
-      await api.syncOrderStatus(widget.order.id);
-    } catch (_) {}
+    // Завершённый заказ Poster уже не изменит: синк для него — лишний
+    // запрос и лишняя задержка при открытии из истории.
+    final known = _data?['status']?.toString();
+    if (known != 'DELIVERED' && known != 'CANCELLED') {
+      try {
+        await api.syncOrderStatus(widget.order.id);
+      } catch (_) {}
+    }
     try {
       final data = await api.orderStatus(widget.order.id);
       if (!mounted) return;
@@ -145,6 +150,11 @@ class _OrderScreenState extends State<OrderScreen> {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    // Пока ответ не пришёл, статуса мы не знаем. Раньше здесь стояло NEW
+    // по умолчанию, и любой заказ — даже отменённый неделю назад — на
+    // первую секунду показывался как «Заказ отправлен». Выглядело так,
+    // будто история пересчитывается заново при каждом открытии.
+    final loaded = _data != null;
     final status = _data?['status']?.toString() ?? 'NEW';
     final current = _stageIndex(status);
     final cancelled = status == 'CANCELLED';
@@ -198,13 +208,15 @@ class _OrderScreenState extends State<OrderScreen> {
               ),
               const SizedBox(height: Gap.sm),
               Text(
-                _headlines[status] ?? status,
-                style: Theme.of(
-                  context,
-                ).textTheme.displayMedium?.copyWith(color: c.surface),
+                loaded ? (_headlines[status] ?? status) : 'Загружаем…',
+                style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                  color: loaded
+                      ? c.surface
+                      : c.surface.withValues(alpha: 0.35),
+                ),
               ),
 
-              if (!cancelled) ...[
+              if (loaded && !cancelled) ...[
                 const SizedBox(height: Gap.lg),
                 Align(
                   alignment: Alignment.centerLeft,
