@@ -282,6 +282,23 @@ class _HistoryRow extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.labelMedium,
                   ),
+                  // Чем закончился заказ, видно по списку без открытия:
+                  // отменённый и завершённый выглядели одинаково, а
+                  // разница между ними для человека самая важная.
+                  const SizedBox(height: 5),
+                  Builder(
+                    builder: (_) {
+                      final cancelled = order['status'] == 'CANCELLED';
+                      return Text(
+                        cancelled ? 'Отменён' : 'Завершён',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: cancelled ? c.danger : c.muted,
+                        ),
+                      );
+                    },
+                  ),
                 ],
               ),
             ),

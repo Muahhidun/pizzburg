@@ -61,6 +61,12 @@ class AppColors extends ThemeExtension<AppColors> {
   /// Текст на `warnSoft`
   final Color warnText;
 
+  /// Отказ: отменённый заказ. Единственная роль вне трёх основных — ни
+  /// действием, ни выгодой отмена не является, а гасить её до серого
+  /// нельзя: человек должен отличить отменённый заказ от завершённого
+  /// одним взглядом по списку.
+  final Color danger;
+
   const AppColors._({
     required this.ink,
     required this.accent,
@@ -75,6 +81,7 @@ class AppColors extends ThemeExtension<AppColors> {
     required this.benefitSoft,
     required this.warnSoft,
     required this.warnText,
+    required this.danger,
   });
 
   factory AppColors({
@@ -98,6 +105,7 @@ class AppColors extends ThemeExtension<AppColors> {
     // Подпись на бледной подложке акцента: сам акцент на ней сливается,
     // поэтому берём его же, приглушённый чернилами до читаемого.
     warnText: Color.lerp(accent, ink, 0.35)!,
+    danger: const Color(0xFFD92D20),
   );
 
   @override
@@ -125,6 +133,7 @@ class AppColors extends ThemeExtension<AppColors> {
       benefitSoft: Color.lerp(benefitSoft, other.benefitSoft, t)!,
       warnSoft: Color.lerp(warnSoft, other.warnSoft, t)!,
       warnText: Color.lerp(warnText, other.warnText, t)!,
+      danger: Color.lerp(danger, other.danger, t)!,
     );
   }
 }
