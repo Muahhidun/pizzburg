@@ -68,8 +68,15 @@ class _OrderScreenState extends State<OrderScreen> {
   }
 
   Future<void> _load() async {
+    final api = context.read<ApiClient>();
+    // Сначала подтягиваем состояние из Poster, потом читаем заказ: иначе
+    // экран показывает снимок базы, который мог отстать на круг опроса.
+    // Молча переживаем неудачу — заказ всё равно покажем, просто прежним.
     try {
-      final data = await context.read<ApiClient>().orderStatus(widget.order.id);
+      await api.syncOrderStatus(widget.order.id);
+    } catch (_) {}
+    try {
+      final data = await api.orderStatus(widget.order.id);
       if (!mounted) return;
       final stage = _stageIndex(data['status']?.toString() ?? 'NEW');
       // Переход на следующий этап — маджентовый момент: он единственный,

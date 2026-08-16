@@ -329,6 +329,18 @@ class ApiClient {
     _ensureOk(res);
   }
 
+  /// Спрашивает Poster о статусе прямо сейчас.
+  ///
+  /// `orderStatus` читает только нашу базу, а её двигает фоновый опрос раз
+  /// в минуту. Пока экран статуса открыт, ждать этот круг незачем — и, если
+  /// опрос почему-то не отработал, экран не должен оставаться слепым.
+  Future<void> syncOrderStatus(String orderId) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/orders/by-id/$orderId/sync-status'),
+    );
+    _ensureOk(res);
+  }
+
   Future<Map<String, dynamic>> orderStatus(String orderId) async {
     final res = await http.get(Uri.parse('$baseUrl/orders/by-id/$orderId'));
     _ensureOk(res);
