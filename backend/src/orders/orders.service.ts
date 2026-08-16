@@ -608,7 +608,19 @@ export class OrdersService {
     // Главный отдел = первый по sortOrder среди частей заказа
     const main = fresh[0];
     let orderStatus = order.status;
-    if (fresh.every((d) => d.posterStatus === 'REJECTED')) {
+    // Отказ основного отдела отменяет заказ целиком, вместе со второй
+    // частью: через него идёт большинство позиций, и без них заказ обычно
+    // не имеет смысла. Раньше условием было «отказались все», и отказ
+    // одного отдела оставлял заказ живым — клиент ждал полный состав, а
+    // приехала бы половина.
+    //
+    // Обратный случай — отказ второго отдела при живом основном — здесь
+    // намеренно не трогаем: там заказ должен не отменяться, а спросить
+    // клиента, оставить ли остальное. Это отдельная работа.
+    if (
+      main?.posterStatus === 'REJECTED' ||
+      fresh.every((d) => d.posterStatus === 'REJECTED')
+    ) {
       orderStatus = 'CANCELLED';
     } else if (main?.posterStatus === 'ACCEPTED' && order.status === 'NEW') {
       orderStatus = 'ACCEPTED';
