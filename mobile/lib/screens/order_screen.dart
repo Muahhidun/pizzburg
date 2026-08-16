@@ -231,7 +231,15 @@ class _OrderScreenState extends State<OrderScreen> {
                 for (var i = 0; i < _stages.length; i++)
                   _StageRow(
                     label: _stages[i].$2,
-                    done: i < current,
+                    // Последний этап на шкале — «принят кухней», и дальше
+                    // мы не узнаём ничего. Пока правило было «галочка у
+                    // всего, что позади текущего», он навсегда оставался
+                    // кольцом: за ним просто нет следующего этапа. Для
+                    // человека это читается как незавершённое действие,
+                    // хотя кухня заказ уже подтвердила.
+                    done:
+                        i < current ||
+                        (i == current && i == _stages.length - 1),
                     active: i == current,
                     isLast: i == _stages.length - 1,
                   ),
