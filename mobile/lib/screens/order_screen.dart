@@ -31,12 +31,16 @@ class _OrderScreenState extends State<OrderScreen> {
   bool _cancelling = false;
   int _lastStage = -1;
 
+  /// Только два этапа — ровно столько, сколько мы знаем на самом деле.
+  ///
+  /// Poster по своему API отдаёт три состояния входящего заказа: новый,
+  /// принят, отклонён. Готовку, выдачу и «курьер в пути» никто не
+  /// проставляет: заставлять кассира отмечать их вручную — добавить ей
+  /// работы ради шкалы. Обещать клиенту этапы, до которых заказ никогда не
+  /// дойдёт, хуже, чем честно сказать «принят, ждите».
   static const _stages = [
     ('NEW', 'Заказ отправлен'),
     ('ACCEPTED', 'Принят кухней'),
-    ('COOKING', 'Готовится'),
-    ('ON_WAY', 'Курьер в пути'),
-    ('DELIVERED', 'Доставлен'),
   ];
 
   static const _headlines = {
@@ -89,9 +93,10 @@ class _OrderScreenState extends State<OrderScreen> {
   }
 
   int _stageIndex(String status) {
-    if (status == 'READY') return 2; // «готов» показываем как готовку
-    final i = _stages.indexWhere((s) => s.$1 == status);
-    return i < 0 ? 0 : i;
+    if (status == 'NEW') return 0;
+    // Всё, что дальше приёма, показываем как «принят»: кухня и доставка до
+    // нас не отчитываются, а откатывать шкалу назад нельзя.
+    return 1;
   }
 
   bool get _canCancel {
@@ -223,6 +228,23 @@ class _OrderScreenState extends State<OrderScreen> {
                     active: i == current,
                     isLast: i == _stages.length - 1,
                   ),
+
+                // Дальше шкалы нет, поэтому вместо неё — что будет
+                // происходить. Пустое ожидание без объяснения читается как
+                // «о заказе забыли».
+                if (current >= 1) ...[
+                  const SizedBox(height: 18),
+                  Text(
+                    _data?['type'] == 'PICKUP'
+                        ? 'Заказ приняли и готовят. Мы позвоним, когда его можно будет забрать.'
+                        : 'Заказ приняли и готовят. Как только он будет готов, курьер привезёт его и занесёт до двери.',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      height: 1.45,
+                      color: c.surface.withValues(alpha: 0.75),
+                    ),
+                  ),
+                ],
               ],
 
               const SizedBox(height: 28),

@@ -482,7 +482,7 @@ export class OrdersService {
             `${d.posterAccount.name}: ${items.map((x) => `${x.name}×${x.qty}`).join(', ')}${partNote}` +
             // Комментарий кассира целиком: по нему проверяем сдачу,
             // предзаказ и пометки подарков перед боевым тестом
-            `\n  комментарий кассиру: ${payNote}.${order.comment ? ` ${order.comment}` : ''}${scheduledNote}${giftNote}${pointsNote}`,
+            `\n  комментарий в Poster: №${order.number}.${order.comment ? ` ПОЖЕЛАНИЕ: ${order.comment}.` : ''} — КАССЕ: ${payNote}.${scheduledNote}${giftNote}${pointsNote}`,
         );
         await this.prisma.orderDispatch.update({
           where: { id: d.id },
@@ -498,9 +498,16 @@ export class OrdersService {
             spot_id: 1,
             phone: order.customer?.phone ?? '',
             service_mode: order.type === 'DELIVERY' ? 3 : 2,
+            // Порядок частей — не косметика. Poster отдаёт один-единственный
+            // текст комментария и на кассовый чек, и на бегунок повару,
+            // разделить их на стороне API нельзя. Поэтому первым идёт то,
+            // что нужно кухне — пожелание клиента, — а логистика кассира
+            // уходит за разделитель: повар читает свою строку сразу и не
+            // разбирает способ оплаты.
             comment:
-              `Заказ из приложения №${order.number}. ${payNote}.` +
-              (order.comment ? ` ${order.comment}` : '') +
+              `№${order.number}.` +
+              (order.comment ? ` ПОЖЕЛАНИЕ: ${order.comment}.` : '') +
+              ` — КАССЕ: ${payNote}.` +
               scheduledNote +
               giftNote +
               pointsNote +
