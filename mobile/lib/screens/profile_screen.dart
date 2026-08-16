@@ -5,6 +5,7 @@ import '../api/api_client.dart';
 import '../api/models.dart';
 import '../services/push_notifications.dart';
 import '../state/auth.dart';
+import 'login_screen.dart';
 import '../state/cart.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
@@ -107,8 +108,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
-                  // Лента публичная: гость тоже должен видеть акции
                   const SizedBox(height: Gap.blockWide),
+                  PressScale(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const LoginScreen(),
+                      ),
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 28,
+                        vertical: 15,
+                      ),
+                      decoration: BoxDecoration(
+                        color: c.accent,
+                        borderRadius: R.pill,
+                      ),
+                      child: Text(
+                        'Войти по телефону',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: c.surface,
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Лента публичная: гость тоже должен видеть акции
+                  const SizedBox(height: Gap.md),
                   PressScale(
                     onTap: () => Navigator.push(
                       context,
