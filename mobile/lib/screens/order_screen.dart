@@ -265,6 +265,52 @@ class _OrderScreenState extends State<OrderScreen> {
                         color: c.surface.withValues(alpha: 0.75),
                       ),
                     ),
+                    // Состав заказа: без него экран статуса сообщает сумму
+                    // и больше ничего — проверить, что именно едет, негде,
+                    // и при частичной отмене человеку не с чем сверяться.
+                    for (final raw in (_data?['items'] as List?) ?? const [])
+                      Builder(
+                        builder: (_) {
+                          final item = raw as Map;
+                          final qty = (item['qty'] as num?)?.toInt() ?? 1;
+                          final gift = item['isGift'] == true;
+                          return Padding(
+                            padding: const EdgeInsets.only(top: Gap.sm),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '${item['name']}${qty > 1 ? ' ×$qty' : ''}',
+                                    style: TextStyle(
+                                      fontSize: 13.5,
+                                      height: 1.35,
+                                      color: c.surface,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: Gap.sm),
+                                Text(
+                                  gift
+                                      ? 'подарок'
+                                      : formatTenge(
+                                          ((item['price'] as num?) ?? 0)
+                                                  .toInt() *
+                                              qty,
+                                        ),
+                                  style: TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: gift
+                                        ? c.benefit
+                                        : c.surface.withValues(alpha: 0.85),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                     const SizedBox(height: Gap.md),
                     Text(
                       formatTenge(widget.order.total),

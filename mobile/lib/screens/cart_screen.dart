@@ -224,6 +224,12 @@ class _CartScreenState extends State<CartScreen> {
                         value: _points,
                         max: _maxPoints(preview),
                         balance: context.watch<AuthState>().pointsBalance,
+                        // Акция и баллы несовместимы. Раньше об этом
+                        // сообщал сервер на оформлении — то есть через два
+                        // экрана после того, как человек выставил ползунок,
+                        // и вернуться к нему было уже некуда. Гасим блок
+                        // там, где он стоит, и объясняем на месте.
+                        blockedByPromo: preview.promoDiscount > 0,
                         onChanged: (v) {
                           _pointsHaptic.onValue(v);
                           setState(() => _points = v.round());
@@ -611,11 +617,15 @@ class _PointsBlock extends StatelessWidget {
   final int balance;
   final ValueChanged<double> onChanged;
 
+  /// Сработала акция: списание баллов недоступно
+  final bool blockedByPromo;
+
   const _PointsBlock({
     required this.value,
     required this.max,
     required this.balance,
     required this.onChanged,
+    this.blockedByPromo = false,
   });
 
   @override
@@ -639,7 +649,7 @@ class _PointsBlock extends StatelessWidget {
                 ),
               ),
               Text(
-                '$balance доступно',
+                blockedByPromo ? 'недоступно' : '$balance доступно',
                 style: TextStyle(
                   fontSize: 12,
                   color: c.surface.withValues(alpha: 0.6),
@@ -647,12 +657,27 @@ class _PointsBlock extends StatelessWidget {
               ),
             ],
           ),
+          if (blockedByPromo) ...[
+            const SizedBox(height: Gap.sm),
+            Text(
+              'В заказе есть акция — баллы к ней не добавляются. '
+              'Уберите акцию, если хотите списать баллы.',
+              style: TextStyle(
+                fontSize: 12.5,
+                height: 1.4,
+                color: c.surface.withValues(alpha: 0.7),
+              ),
+            ),
+          ],
           const SizedBox(height: Gap.md),
-          AnimatedMoney(
-            value,
-            style: Theme.of(context).textTheme.displayLarge?.copyWith(
-              fontSize: 28,
-              color: c.benefit,
+          Opacity(
+            opacity: blockedByPromo ? 0.35 : 1,
+            child: AnimatedMoney(
+              value,
+              style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                fontSize: 28,
+                color: c.benefit,
+              ),
             ),
           ),
           SliderTheme(
@@ -668,7 +693,7 @@ class _PointsBlock extends StatelessWidget {
               value: value.toDouble().clamp(0, max.toDouble()),
               max: max <= 0 ? 1 : max.toDouble(),
               divisions: max < 50 ? null : (max / 50).round(),
-              onChanged: max <= 0 ? null : onChanged,
+              onChanged: (max <= 0 || blockedByPromo) ? null : onChanged,
             ),
           ),
           Row(

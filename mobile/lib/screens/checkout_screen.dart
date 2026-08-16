@@ -457,10 +457,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         style: TextStyle(fontSize: 13, color: c.muted),
                       ),
                       const SizedBox(height: Gap.md),
+                      // Купюра меньше суммы заказа сдачи не даёт — предлагать
+                      // её значит просить кассира готовить размен с 5 000 на
+                      // заказ в 9 297. Оставляем только те, что реально
+                      // больше чека.
                       Wrap(
                         spacing: 7,
                         children: [
-                          for (final amount in _changeOptions)
+                          for (final amount
+                              in _changeOptions.where((a) => a > _total))
                             _Chip(
                               label: formatTenge(amount, withCurrency: false),
                               selected: _changeFrom == amount,
@@ -470,6 +475,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                 () => _changeFrom =
                                     _changeFrom == amount ? null : amount,
                               ),
+                            ),
+                          if (_changeOptions.every((a) => a <= _total))
+                            Text(
+                              'Сумма заказа больше обычных купюр — '
+                              'скажите курьеру, с чего готовить сдачу',
+                              style: TextStyle(fontSize: 12.5, color: c.muted),
                             ),
                         ],
                       ),
