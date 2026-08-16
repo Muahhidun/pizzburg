@@ -6,14 +6,12 @@ import '../api/models.dart';
 import '../services/push_notifications.dart';
 import '../state/auth.dart';
 import 'login_screen.dart';
-import '../state/cart.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../utils/haptics.dart';
 import '../widgets/motion.dart';
 import 'messages_screen.dart';
 import 'legal_screen.dart';
-import 'order_screen.dart';
 
 /// Профиль по прототипу «Сигнал».
 ///
@@ -27,49 +25,14 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  MenuResponse? _menu;
-
-  @override
-  void initState() {
-    super.initState();
-    context.read<ApiClient>().fetchMenu().then((menu) {
-      if (mounted) setState(() => _menu = menu);
-    }).catchError((_) {});
-  }
-
-  Future<void> _repeat(Map<String, dynamic> order) async {
-    final loaded = _menu;
-    final messenger = ScaffoldMessenger.of(context);
-    if (loaded == null) return;
-    try {
-      final result = await context.read<ApiClient>().repeatOrder(
-        order['id'].toString(),
-      );
-      if (!mounted) return;
-      final added = context.read<Cart>().fillFromRepeat(result, loaded);
-      if (added == 0) {
-        await Haptics.warning();
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Из того заказа сегодня ничего нет')),
-        );
-        return;
-      }
-      Haptics.success();
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Заказ перенесён в корзину')),
-      );
-    } catch (e) {
-      await Haptics.warning();
-      messenger.showSnackBar(SnackBar(content: Text(e.toString())));
-    }
-  }
+  // Меню здесь больше не нужно: его загружали ради кнопки «Повтор» в
+  // списке заказов, а сам список уехал на свою вкладку.
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     final auth = context.watch<AuthState>();
     final push = context.watch<PushNotificationsService>();
-    final orders = auth.orders.cast<Map<String, dynamic>>();
 
     if (!auth.isAuthenticated) {
       return Scaffold(
@@ -225,38 +188,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: Gap.block),
               _NotificationsCard(push: push),
 
-              if (orders.isNotEmpty) ...[
-                const SizedBox(height: Gap.blockWide),
-                const Text(
-                  'Заказы',
-                  style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: Gap.sm),
-                for (var i = 0; i < orders.length && i < 5; i++)
-                  StaggeredEntrance(
-                    index: i,
-                    child: _OrderRow(
-                      order: orders[i],
-                      canRepeat: _menu != null,
-                      onRepeat: () => _repeat(orders[i]),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => OrderScreen(
-                            order: CreatedOrder(
-                              id: orders[i]['id'].toString(),
-                              number: (orders[i]['number'] as num).toInt(),
-                              total:
-                                  (orders[i]['total'] as num?)?.toInt() ?? 0,
-                              pointsSpent: 0,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-
+              // Список заказов жил и здесь, и на вкладке «Заказы» — один и
+              // тот же `auth.orders` в двух местах. На вкладке он полнее:
+              // с подписями «Завершён» и «Отменён» и делением на активные
+              // и прошлые. В профиле остаётся то, чего больше нигде нет:
+              // баллы, уровень и адреса.
               const SizedBox(height: Gap.blockWide),
               const Text(
                 'История баллов',
@@ -387,105 +323,6 @@ class _PointsCard extends StatelessWidget {
   }
 }
 
-class _OrderRow extends StatelessWidget {
-  final Map<String, dynamic> order;
-  final bool canRepeat;
-  final VoidCallback onRepeat;
-  final VoidCallback onTap;
-
-  const _OrderRow({
-    required this.order,
-    required this.canRepeat,
-    required this.onRepeat,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final items = (order['items'] as List?) ?? const [];
-    return PressScale(
-      onTap: onTap,
-      scale: 0.99,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: Gap.md),
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: c.line)),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _date(order['createdAt']),
-                    style: const TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    items.map((i) => (i as Map)['name'].toString()).join(', '),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelMedium,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: Gap.sm),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  formatTenge((order['total'] as num?)?.toInt() ?? 0),
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleMedium?.copyWith(fontSize: 15),
-                ),
-                const SizedBox(height: Gap.sm),
-                PressScale(
-                  onTap: canRepeat ? onRepeat : null,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: c.fillSoft,
-                      borderRadius: R.pill,
-                    ),
-                    child: Text(
-                      'Повтор',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: canRepeat ? c.ink : c.muted,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  static String _date(dynamic value) {
-    final date = DateTime.tryParse(value?.toString() ?? '')?.toLocal();
-    if (date == null) return '';
-    const months = [
-      'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-      'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
-    ];
-    return '${date.day} ${months[date.month - 1]}';
-  }
-}
 
 class _PointsRow extends StatelessWidget {
   final Map<String, dynamic> txn;
