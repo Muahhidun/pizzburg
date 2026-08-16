@@ -23,8 +23,8 @@ class OrdersScreen extends StatefulWidget {
 
 class _OrdersScreenState extends State<OrdersScreen> {
   static const _stageLabels = {
-    'NEW': 'Заказ отправлен',
-    'ACCEPTED': 'Принят кухней',
+    'NEW': 'Ждём подтверждения',
+    'ACCEPTED': 'Готовим ваш заказ',
     'COOKING': 'Готовим ваш заказ',
     'READY': 'Готов',
     'ON_WAY': 'Курьер в пути',
