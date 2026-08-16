@@ -87,18 +87,24 @@ export class StatusPollerService {
     const threshold = new Date(Date.now() - AUTO_CLOSE_HOURS * 60 * 60 * 1000);
     const stale = await this.prisma.order.findMany({
       where: {
-        status: { in: ['ACCEPTED', 'COOKING', 'READY', 'ON_WAY'] },
+        status: { in: ['NEW', 'ACCEPTED', 'COOKING', 'READY', 'ON_WAY'] },
         updatedAt: { lt: threshold },
       },
-      select: { id: true, number: true, tenantId: true },
+      select: { id: true, number: true, tenantId: true, status: true },
     });
     for (const o of stale) {
+      // Принятый заказ доехал — закрываем доставкой, с кэшбэком. А тот,
+      // который кухня за три часа так и не приняла, никто не готовил и не
+      // вёз: закрывать его доставкой значило бы начислить кэшбэк за еду,
+      // которой не было. Такой заказ отменяем — заодно вернутся списанные
+      // баллы.
+      const delivered = o.status !== 'NEW';
+      const next = (delivered ? 'DELIVERED' : 'CANCELLED') as OrderStatus;
       try {
-        await this.orders.setStatus(o.id, 'DELIVERED' as OrderStatus, o.tenantId, {
-          notify: false,
-        });
+        await this.orders.setStatus(o.id, next, o.tenantId, { notify: false });
         this.logger.log(
-          `Заказ №${o.number} закрыт автоматически: ${AUTO_CLOSE_HOURS} ч после приёма`,
+          `Заказ №${o.number} закрыт автоматически как ${next}: ` +
+            `${AUTO_CLOSE_HOURS} ч без движения`,
         );
       } catch (e) {
         this.logger.warn(`Автозакрытие №${o.number} не удалось: ${e}`);
