@@ -341,6 +341,28 @@ class ApiClient {
     _ensureOk(res);
   }
 
+  /// Ответ на нехватку позиции: везём остальное (DECISIONS §12.9).
+  ///
+  /// Два метода вместо одного с флагом — по той же причине, по какой на
+  /// сервере два эндпоинта: выбор необратим, и «везти» не должно стать
+  /// «отменить» из-за перепутанного параметра.
+  Future<void> keepOrderWithoutMissing(String orderId) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/orders/by-id/$orderId/shortage/keep'),
+      headers: _headers,
+    );
+    _ensureOk(res);
+  }
+
+  /// Ответ на нехватку позиции: отменить заказ целиком
+  Future<void> cancelOrderForShortage(String orderId) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/orders/by-id/$orderId/shortage/cancel'),
+      headers: _headers,
+    );
+    _ensureOk(res);
+  }
+
   Future<Map<String, dynamic>> orderStatus(String orderId) async {
     final res = await http.get(Uri.parse('$baseUrl/orders/by-id/$orderId'));
     _ensureOk(res);

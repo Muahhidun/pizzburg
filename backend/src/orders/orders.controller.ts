@@ -14,6 +14,7 @@ import { CustomerAuthGuard } from '../auth/customer-auth.guard';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './orders.dto';
 import { CancelReasonsService } from './cancel-reasons.service';
+import { ShortageService } from './shortage.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 class CancelOrderDto {
@@ -33,6 +34,7 @@ export class OrdersController {
   constructor(
     private readonly orders: OrdersService,
     private readonly reasons: CancelReasonsService,
+    private readonly shortage: ShortageService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -70,6 +72,25 @@ export class OrdersController {
       dto.reason,
       dto.reasonId,
     );
+  }
+
+  /**
+   * Ответ клиента на нехватку позиции (DECISIONS §12.9).
+   *
+   * Два эндпоинта, а не один с параметром: выбор необратимый, и «везти
+   * без неё» не должно превратиться в «отменить» из-за опечатки в теле
+   * запроса.
+   */
+  @Post('by-id/:orderId/shortage/keep')
+  @UseGuards(CustomerAuthGuard)
+  keepRest(@Param('orderId') orderId: string, @Req() req: any) {
+    return this.shortage.respond(orderId, req.customer.sub, 'KEEP');
+  }
+
+  @Post('by-id/:orderId/shortage/cancel')
+  @UseGuards(CustomerAuthGuard)
+  cancelForShortage(@Param('orderId') orderId: string, @Req() req: any) {
+    return this.shortage.respond(orderId, req.customer.sub, 'CANCEL');
   }
 
   /** Последний заказ для блока «Тот же заказ?» на главном экране */

@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { OrderStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrdersService } from './orders.service';
+import { ShortageService } from './shortage.service';
 
 /** Через сколько принятый заказ закрывается сам (см. DECISIONS §12.8) */
 const AUTO_CLOSE_HOURS = 3;
@@ -19,6 +20,7 @@ export class StatusPollerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly orders: OrdersService,
+    private readonly shortage: ShortageService,
   ) {}
 
   @Cron('*/1 * * * *')
@@ -57,6 +59,12 @@ export class StatusPollerService {
               .join(', ')})`,
           );
         }
+        // Отказ второго отдела на планшете — не отмена заказа, а нехватка
+        // всех его позиций: клиента нужно спросить, везти ли остальное.
+        // Проверка идемпотентна и стоит один запрос, поэтому висит на
+        // каждом круге, а не на «статус изменился»: отказ мог приехать и
+        // синхронизацией из приложения, между кругами опроса.
+        await this.shortage.handleRejectedDepartments(o.id);
       } catch (e) {
         this.logger.warn(`Poll failed for order ${o.id}: ${e}`);
       }

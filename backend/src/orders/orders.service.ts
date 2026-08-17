@@ -373,8 +373,18 @@ export class OrdersService {
     };
   }
 
-  /** Отправляет каждую часть заказа в свой аккаунт Poster */
-  async dispatchToPoster(orderId: string) {
+  /**
+   * Отправляет каждую часть заказа в свой аккаунт Poster.
+   *
+   * `resend` — id частей, которые нужно отправить заново с исправленным
+   * составом после нехватки позиции (DECISIONS §12.9). Poster не умеет
+   * менять состав уже отправленного входящего заказа: в API есть только
+   * создание и чтение. Поэтому «исправить» — значит создать новый
+   * входящий заказ, а старый кассир отклоняет на планшете; его номер
+   * уходит в комментарий и в `replacedOrders`, чтобы два чека на один
+   * заказ не выглядели дублем при разборе смены.
+   */
+  async dispatchToPoster(orderId: string, options?: { resend?: string[] }) {
     const order = await this.prisma.order.findUniqueOrThrow({
       where: { id: orderId },
       include: {
@@ -388,14 +398,20 @@ export class OrdersService {
       },
     });
 
-    const parts = order.dispatches;
+    const resendIds = new Set(options?.resend ?? []);
+    // Часть, в которой не осталось ни одной позиции, из нумерации выпадает:
+    // иначе «часть 1/2» ссылалась бы на планшет, который ничего не готовит,
+    // а стоимость доставки повисла бы на несуществующем чеке.
+    const parts = order.dispatches.filter((d) => d.status !== 'VOID');
+    // Отсутствующие позиции в кассу не уходят — ни в состав, ни в суммы.
+    const liveItems = order.items.filter((it) => !it.isUnavailable);
     // Предоплата «Личной интеграцией» — это баллы И денежная скидка по
     // акциям: и то, и другое клиент не платит наличными, но в кассе
     // позиции стоят полную цену.
     let remainingPrepaid = order.pointsSpent + order.promoDiscount;
     const prepaidByDispatch = new Map<string, number>();
     for (const part of parts) {
-      const payableInPart = order.items
+      const payableInPart = liveItems
         .filter(
           (it) =>
             !it.isGift && it.product?.posterAccountId === part.posterAccountId,
@@ -414,11 +430,49 @@ export class OrdersService {
     }
     for (let i = 0; i < parts.length; i++) {
       const d = parts[i];
-      if (d.status === 'SENT') continue;
+      const resending = resendIds.has(d.id);
+      if (d.status === 'SENT' && !resending) continue;
 
-      const items = order.items.filter(
+      // Кассира просили не принимать заказ, пока идёт разбирательство, но
+      // если чек всё же приняли, второй такой же — это две готовки и два
+      // чека. Тогда отправку отменяем и оставляем ошибку в ленте: править
+      // состав придётся на планшете руками.
+      if (resending && d.posterOrderId && d.posterOrderId !== 'dry-run') {
+        let accepted = false;
+        try {
+          const live = await this.poster.getIncomingOrder(
+            d.posterAccount.token,
+            d.posterOrderId,
+          );
+          accepted = live.status === 1;
+        } catch (e) {
+          this.logger.warn(`Проверка чека ${d.posterOrderId} не удалась: ${e}`);
+        }
+        if (accepted) {
+          this.logger.error(
+            `Заказ №${order.number}: чек №${d.posterOrderId} (${d.posterAccount.name}) ` +
+              'уже принят — исправленный состав не отправлен',
+          );
+          await this.prisma.orderDispatch.update({
+            where: { id: d.id },
+            data: {
+              error:
+                `Чек №${d.posterOrderId} приняли до ответа клиента — ` +
+                'исправьте состав на планшете вручную',
+            },
+          });
+          continue;
+        }
+      }
+
+      const items = liveItems.filter(
         (it) => it.product?.posterAccountId === d.posterAccountId,
       );
+      // Кассир должен понять с чека, что старый заказ надо отклонить, —
+      // отдельного канала связи с планшетом у нас нет.
+      const replaceNote = resending
+        ? ` | СОСТАВ ИЗМЕНЁН — ЧЕК №${d.posterOrderId ?? '—'} ОТКЛОНИТЬ, готовить этот`
+        : '';
       const partNote =
         parts.length > 1
           ? ` | ОБЩИЙ ЗАКАЗ №${order.number}: часть ${i + 1}/${parts.length} (${parts
@@ -482,11 +536,15 @@ export class OrdersService {
             `${d.posterAccount.name}: ${items.map((x) => `${x.name}×${x.qty}`).join(', ')}${partNote}` +
             // Комментарий кассира целиком: по нему проверяем сдачу,
             // предзаказ и пометки подарков перед боевым тестом
-            `\n  комментарий в Poster: №${order.number}.${order.comment ? ` ПОЖЕЛАНИЕ: ${order.comment}.` : ''} — КАССЕ: ${payNote}.${scheduledNote}${giftNote}${pointsNote}`,
+            `\n  комментарий в Poster: №${order.number}.${order.comment ? ` ПОЖЕЛАНИЕ: ${order.comment}.` : ''} — КАССЕ: ${payNote}.${replaceNote}${scheduledNote}${giftNote}${pointsNote}`,
         );
         await this.prisma.orderDispatch.update({
           where: { id: d.id },
-          data: { status: 'SENT', posterOrderId: 'dry-run' },
+          data: {
+            status: 'SENT',
+            posterOrderId: 'dry-run',
+            ...(resending ? { replacedOrders: this.withReplaced(d) } : {}),
+          },
         });
         continue;
       }
@@ -508,6 +566,7 @@ export class OrdersService {
               `№${order.number}.` +
               (order.comment ? ` ПОЖЕЛАНИЕ: ${order.comment}.` : '') +
               ` — КАССЕ: ${payNote}.` +
+              replaceNote +
               scheduledNote +
               giftNote +
               pointsNote +
@@ -557,7 +616,11 @@ export class OrdersService {
           data: {
             status: 'SENT',
             posterOrderId: String(res.incoming_order_id),
+            // Новый чек — новая жизнь: старый статус с планшета относится
+            // к отклонённому заказу и сбил бы агрегацию.
+            posterStatus: null,
             error: null,
+            ...(resending ? { replacedOrders: this.withReplaced(d) } : {}),
           },
         });
       } catch (e) {
@@ -570,6 +633,21 @@ export class OrdersService {
     }
   }
 
+  /** Дописывает отменяемый чек в историю замен этой части */
+  private withReplaced(dispatch: {
+    posterOrderId: string | null;
+    replacedOrders: unknown;
+  }) {
+    const previous = Array.isArray(dispatch.replacedOrders)
+      ? dispatch.replacedOrders
+      : [];
+    if (!dispatch.posterOrderId) return previous;
+    return [
+      ...previous,
+      { posterOrderId: dispatch.posterOrderId, replacedAt: new Date().toISOString() },
+    ];
+  }
+
   /**
    * Подтягивает статусы частей заказа с планшетов Poster и агрегирует
    * статус заказа. Пуш клиенту (позже) триггерится «главным» отделом:
@@ -578,7 +656,15 @@ export class OrdersService {
   async syncStatus(orderId: string) {
     const order = await this.prisma.order.findUniqueOrThrow({
       where: { id: orderId },
-      include: { dispatches: { include: { posterAccount: true } } },
+      include: {
+        dispatches: { include: { posterAccount: true } },
+        items: {
+          select: {
+            isUnavailable: true,
+            product: { select: { posterAccountId: true } },
+          },
+        },
+      },
     });
 
     const map: Record<number, string> = { 0: 'NEW', 1: 'ACCEPTED', 7: 'REJECTED' };
@@ -605,8 +691,25 @@ export class OrdersService {
       orderBy: { posterAccount: { sortOrder: 'asc' } },
     });
 
+    // Пока клиент выбирает, судьба отдела с нехваткой ещё не решена: его
+    // чек будет отправлен заново, и кассир отклонит старый. Считать этот
+    // отказ отказом отдела нельзя — иначе разбирательство по одному роллу
+    // отменяло бы заказ ровно в тот момент, когда мы спрашиваем клиента.
+    // Погашенные части (VOID) не считаются по той же причине: готовить в
+    // них уже нечего.
+    const undecided = new Set(
+      order.shortageState === 'AWAITING_CUSTOMER'
+        ? order.items
+            .filter((i) => i.isUnavailable)
+            .map((i) => i.product?.posterAccountId)
+        : [],
+    );
+    const counted = fresh.filter(
+      (d) => d.status !== 'VOID' && !undecided.has(d.posterAccountId),
+    );
+
     // Главный отдел = первый по sortOrder среди частей заказа
-    const main = fresh[0];
+    const main = counted[0];
     let orderStatus = order.status;
     // Отказ основного отдела отменяет заказ целиком, вместе со второй
     // частью: через него идёт большинство позиций, и без них заказ обычно
@@ -614,12 +717,13 @@ export class OrdersService {
     // одного отдела оставлял заказ живым — клиент ждал полный состав, а
     // приехала бы половина.
     //
-    // Обратный случай — отказ второго отдела при живом основном — здесь
-    // намеренно не трогаем: там заказ должен не отменяться, а спросить
-    // клиента, оставить ли остальное. Это отдельная работа.
+    // Обратный случай — отказ второго отдела при живом основном — заказ
+    // не отменяет: там разбираются по позициям (DECISIONS §12.9), и
+    // отдельный отказ отдела остаётся сигналом кассиру, а не отменой.
     if (
-      main?.posterStatus === 'REJECTED' ||
-      fresh.every((d) => d.posterStatus === 'REJECTED')
+      counted.length > 0 &&
+      (main?.posterStatus === 'REJECTED' ||
+        counted.every((d) => d.posterStatus === 'REJECTED'))
     ) {
       orderStatus = 'CANCELLED';
     } else if (main?.posterStatus === 'ACCEPTED' && order.status === 'NEW') {

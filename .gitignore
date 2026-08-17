@@ -10,6 +10,9 @@ dist/
 # Local exports containing customer data and session material
 private/
 
+# Локальные настройки агента; launch.json общий и остаётся в репозитории
+.claude/settings.local.json
+
 # Next.js
 .next/
 

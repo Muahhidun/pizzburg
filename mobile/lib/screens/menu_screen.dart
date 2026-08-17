@@ -710,6 +710,10 @@ class _ActiveOrderCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final status = order['status']?.toString() ?? 'NEW';
+    // Нехватка позиции ждать не может: у человека пять минут на ответ, а
+    // пуши на iOS у нас не работают вовсе. Карточка на главном — самый
+    // надёжный способ, которым он об этом узнает.
+    final needsAnswer = order['shortageState'] == 'AWAITING_CUSTOMER';
     return PressScale(
       onTap: onTap,
       scale: 0.985,
@@ -718,6 +722,7 @@ class _ActiveOrderCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: c.surface,
           borderRadius: const BorderRadius.all(Radius.circular(24)),
+          border: needsAnswer ? Border.all(color: c.accent, width: 2) : null,
         ),
         child: Row(
           children: [
@@ -727,8 +732,12 @@ class _ActiveOrderCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    _stageLabels[status] ?? status,
-                    style: Theme.of(context).textTheme.bodyLarge,
+                    needsAnswer
+                        ? 'Нужен ваш ответ'
+                        : (_stageLabels[status] ?? status),
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: needsAnswer ? c.accent : null,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(

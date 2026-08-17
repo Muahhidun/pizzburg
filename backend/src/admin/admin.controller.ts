@@ -34,6 +34,7 @@ import {
   UpdateScheduleDto,
   UpdateSettingsDto,
   UpdateOrderStatusDto,
+  MarkShortageDto,
   AdjustLoyaltyDto,
   PublishLegalDto,
   CancelReasonDto,
@@ -117,6 +118,23 @@ export class AdminController {
   @Get('orders')
   orders(@Query('date') date?: string, @Query('status') status?: string) {
     return this.admin.orders({ date, status });
+  }
+
+  /**
+   * Консоль кассира: заказы, по которым ещё есть что решать.
+   *
+   * Отдельно от ленты за день: кассир заходит сюда только когда чего-то
+   * нет, и ей нужен короткий список живых заказов с составом, а не отчёт.
+   */
+  @Get('orders/queue')
+  orderQueue() {
+    return this.admin.orderQueue();
+  }
+
+  /** «Этой позиции нет»: пустой список снимает пометку (DECISIONS §12.9) */
+  @Post('orders/:id/shortage')
+  markShortage(@Param('id') id: string, @Body() dto: MarkShortageDto) {
+    return this.admin.markShortage(id, dto.itemIds);
   }
 
   @Patch('orders/:id/status')

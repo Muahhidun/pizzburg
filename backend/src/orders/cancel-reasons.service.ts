@@ -48,6 +48,26 @@ export class CancelReasonsService {
       : reasons;
   }
 
+  /** Название причины, под которой закрывается отказ из-за нехватки позиции */
+  static readonly shortageLabel = 'Нет позиции в наличии';
+
+  /**
+   * Причина для отмены по нехватке позиции (DECISIONS §12.9).
+   *
+   * Клиент отказывается от заказа не «потому что передумал», а потому что
+   * у нас чего-то нет, — и в отчёте это должно лежать в той же строке, что
+   * и отмены кассира по той же причине. Если владелец удалил или выключил
+   * стандартную причину, возвращаем null: отменить заказ всё равно нужно,
+   * просто без разбивки.
+   */
+  async shortageReasonId(tenantId: string): Promise<string | null> {
+    const reasons = await this.list(tenantId);
+    return (
+      reasons.find((r) => r.label === CancelReasonsService.shortageLabel)?.id ??
+      null
+    );
+  }
+
   /** Все причины, включая выключенные — для админки */
   async listAll(tenantId: string) {
     await this.list(tenantId); // гарантируем стартовый набор

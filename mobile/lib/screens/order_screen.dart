@@ -28,7 +28,9 @@ class _OrderScreenState extends State<OrderScreen> {
   Map<String, dynamic>? _data;
   Availability? _availability;
   Timer? _timer;
+  Timer? _countdown;
   bool _cancelling = false;
+  bool _answering = false;
   int _lastStage = -1;
 
   /// Только два этапа — ровно столько, сколько мы знаем на самом деле.
@@ -59,12 +61,59 @@ class _OrderScreenState extends State<OrderScreen> {
     _load();
     _loadAvailability();
     _timer = Timer.periodic(const Duration(seconds: 20), (_) => _load());
+    // Отдельный тик на секунду — только чтобы шёл обратный отсчёт ответа
+    // по нехватке позиции. Опрашивать сервер раз в секунду ради этого
+    // незачем: срок известен заранее.
+    _countdown = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted && _awaitingShortage) setState(() {});
+    });
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _countdown?.cancel();
     super.dispose();
+  }
+
+  /// Ждём ли ответа клиента по нехватке позиции (DECISIONS §12.9)
+  bool get _awaitingShortage => _data?['shortageState'] == 'AWAITING_CUSTOMER';
+
+  List<Map> get _missingItems => ((_data?['items'] as List?) ?? const [])
+      .cast<Map>()
+      .where((i) => i['isUnavailable'] == true)
+      .toList();
+
+  /// Сколько осталось на ответ. null — срок неизвестен
+  Duration? get _shortageLeft {
+    final raw = _data?['shortageDeadline']?.toString();
+    if (raw == null) return null;
+    final deadline = DateTime.tryParse(raw);
+    if (deadline == null) return null;
+    final left = deadline.difference(DateTime.now());
+    return left.isNegative ? Duration.zero : left;
+  }
+
+  /// Ответ на нехватку: везём остальное или отменяем заказ целиком
+  Future<void> _answerShortage({required bool keep}) async {
+    setState(() => _answering = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final api = context.read<ApiClient>();
+    try {
+      if (keep) {
+        await api.keepOrderWithoutMissing(widget.order.id);
+      } else {
+        await api.cancelOrderForShortage(widget.order.id);
+        await LastPlacedOrder.forget();
+      }
+      await _load();
+      if (mounted) Haptics.success();
+    } catch (e) {
+      await Haptics.warning();
+      messenger.showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      if (mounted) setState(() => _answering = false);
+    }
   }
 
   Future<void> _load() async {
@@ -208,13 +257,19 @@ class _OrderScreenState extends State<OrderScreen> {
               ),
               const SizedBox(height: Gap.sm),
               Text(
-                loaded ? (_headlines[status] ?? status) : 'Загружаем…',
+                loaded
+                    ? (_awaitingShortage
+                          ? 'Одной позиции не оказалось'
+                          : (_headlines[status] ?? status))
+                    : 'Загружаем…',
                 style: Theme.of(context).textTheme.displayMedium?.copyWith(
                   color: loaded
                       ? c.surface
                       : c.surface.withValues(alpha: 0.35),
                 ),
               ),
+
+              if (_awaitingShortage) _shortageChoice(),
 
               if (loaded && !cancelled) ...[
                 const SizedBox(height: Gap.lg),
@@ -301,6 +356,10 @@ class _OrderScreenState extends State<OrderScreen> {
                           final item = raw as Map;
                           final qty = (item['qty'] as num?)?.toInt() ?? 1;
                           final gift = item['isGift'] == true;
+                          // Снятую позицию не убираем из списка, а гасим:
+                          // человек должен видеть, чего именно не будет,
+                          // а не гадать, куда делась строка.
+                          final gone = item['isUnavailable'] == true;
                           return Padding(
                             padding: const EdgeInsets.only(top: Gap.sm),
                             child: Row(
@@ -312,13 +371,23 @@ class _OrderScreenState extends State<OrderScreen> {
                                     style: TextStyle(
                                       fontSize: 13.5,
                                       height: 1.35,
-                                      color: c.surface,
+                                      color: c.surface.withValues(
+                                        alpha: gone ? 0.45 : 1,
+                                      ),
+                                      decoration: gone
+                                          ? TextDecoration.lineThrough
+                                          : null,
+                                      decorationColor: c.surface.withValues(
+                                        alpha: 0.45,
+                                      ),
                                     ),
                                   ),
                                 ),
                                 const SizedBox(width: Gap.sm),
                                 Text(
-                                  gift
+                                  gone
+                                      ? 'нет в наличии'
+                                      : gift
                                       ? 'подарок'
                                       : formatTenge(
                                           ((item['price'] as num?) ?? 0)
@@ -328,7 +397,9 @@ class _OrderScreenState extends State<OrderScreen> {
                                   style: TextStyle(
                                     fontSize: 13.5,
                                     fontWeight: FontWeight.w600,
-                                    color: gift
+                                    color: gone
+                                        ? c.surface.withValues(alpha: 0.45)
+                                        : gift
                                         ? c.benefit
                                         : c.surface.withValues(alpha: 0.85),
                                   ),
@@ -339,8 +410,14 @@ class _OrderScreenState extends State<OrderScreen> {
                         },
                       ),
                     const SizedBox(height: Gap.md),
+                    // Сумму берём из ответа сервера, а не из карточки
+                    // оформления: после нехватки позиции заказ дешевеет,
+                    // и старая цифра тут была бы прямым обманом.
                     Text(
-                      formatTenge(widget.order.total),
+                      formatTenge(
+                        ((_data?['total'] as num?) ?? widget.order.total)
+                            .toInt(),
+                      ),
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontSize: 17,
                         color: c.surface,
@@ -391,11 +468,120 @@ class _OrderScreenState extends State<OrderScreen> {
     );
   }
 
+  /// Выбор клиента при нехватке позиции (DECISIONS §12.9).
+  ///
+  /// Вариантов ровно два, и оба честные: замен на первом этапе нет.
+  /// Обратный отсчёт показываем прямо здесь — молчание тоже решение, и
+  /// человек должен знать, каким оно будет.
+  Widget _shortageChoice() {
+    final c = context.colors;
+    final left = _shortageLeft;
+    final names = _missingItems
+        .map((i) {
+          final qty = (i['qty'] as num?)?.toInt() ?? 1;
+          return '${i['name']}${qty > 1 ? ' ×$qty' : ''}';
+        })
+        .join(', ');
+
+    return Padding(
+      padding: const EdgeInsets.only(top: Gap.lg),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: c.surface.withValues(alpha: 0.1),
+          borderRadius: R.thumb,
+          border: Border.all(color: c.accent.withValues(alpha: 0.7), width: 1.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              names.isEmpty ? 'Позиции нет в наличии' : 'Нет: $names',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                height: 1.35,
+                color: c.surface,
+              ),
+            ),
+            const SizedBox(height: Gap.sm),
+            Text(
+              'Остальное уже готовится. Везём без этой позиции — или отменяем '
+              'заказ целиком?',
+              style: TextStyle(
+                fontSize: 13.5,
+                height: 1.45,
+                color: c.surface.withValues(alpha: 0.75),
+              ),
+            ),
+            if (left != null) ...[
+              const SizedBox(height: Gap.sm),
+              Text(
+                left == Duration.zero
+                    ? 'Время вышло — сейчас оформим доставку остального'
+                    : 'Если не ответите за ${left.inMinutes}:'
+                          '${(left.inSeconds % 60).toString().padLeft(2, '0')}, '
+                          'привезём остальное',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  height: 1.4,
+                  color: c.surface.withValues(alpha: 0.5),
+                ),
+              ),
+            ],
+            const SizedBox(height: Gap.lg),
+            PressScale(
+              onTap: _answering ? null : () => _answerShortage(keep: true),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(color: c.benefit, borderRadius: R.pill),
+                child: Text(
+                  _answering ? 'Секунду…' : 'Везите без неё',
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                    color: c.ink,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: Gap.sm),
+            PressScale(
+              onTap: _answering ? null : () => _answerShortage(keep: false),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  borderRadius: R.pill,
+                  border: Border.all(color: c.surface.withValues(alpha: 0.3)),
+                ),
+                child: Text(
+                  'Отменить заказ целиком',
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w600,
+                    color: c.surface,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   String _summary() {
-    final items = (_data?['items'] as List?) ?? const [];
+    final items = ((_data?['items'] as List?) ?? const [])
+        .cast<Map>()
+        // Снятые позиции в счёт не идут: «5 поз.» при четырёх приехавших
+        .where((i) => i['isUnavailable'] != true);
     final count = items.fold<int>(
       0,
-      (sum, i) => sum + ((i as Map)['qty'] as num).toInt(),
+      (sum, i) => sum + ((i['qty'] as num?) ?? 0).toInt(),
     );
     final type = _data?['type'] == 'PICKUP' ? 'Самовывоз' : 'Доставка';
     return count == 0 ? type : '$count поз. · $type';

@@ -233,6 +233,19 @@ export class UpdateOrderStatusDto {
   status: OrderStatus;
 }
 
+/**
+ * Позиции, которых не оказалось (DECISIONS §12.9).
+ *
+ * Пустой список — «нашлись»: снимает пометку и возвращает заказ в обычный
+ * ход, поэтому @ArrayNotEmpty здесь намеренно нет.
+ */
+export class MarkShortageDto {
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsString({ each: true })
+  itemIds: string[];
+}
+
 export class AdjustLoyaltyDto {
   @IsInt() @Min(-10_000_000) @Max(10_000_000) amount: number;
   @IsString() @Length(3, 300) comment: string;

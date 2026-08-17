@@ -23,6 +23,13 @@ export interface PromoContext {
   customerId?: string;
   /// Заказ первый у этого клиента
   isFirstOrder?: boolean;
+  /// Не учитывать применения этого заказа в лимитах.
+  ///
+  /// Нужно при пересчёте уже оформленного заказа (нехватка позиции,
+  /// DECISIONS §12.9): его применения уже записаны в PromotionUse, и без
+  /// этого акция с лимитом «раз на клиента» выглядела бы исчерпанной
+  /// собственным заказом — подарок молча пропал бы при пересчёте.
+  excludeOrderId?: string;
 }
 
 export interface PromoResult {
@@ -211,16 +218,23 @@ export class PromotionsService {
     if (promo.firstOrderOnly) {
       if (!context.customerId || !context.isFirstOrder) return false;
     }
+    const ownUses = context.excludeOrderId
+      ? { orderId: { not: context.excludeOrderId } }
+      : {};
     if (promo.totalLimit != null) {
       const total = await this.prisma.promotionUse.count({
-        where: { promotionId: promo.id },
+        where: { promotionId: promo.id, ...ownUses },
       });
       if (total >= promo.totalLimit) return false;
     }
     if (promo.perCustomerLimit != null) {
       if (!context.customerId) return false;
       const mine = await this.prisma.promotionUse.count({
-        where: { promotionId: promo.id, customerId: context.customerId },
+        where: {
+          promotionId: promo.id,
+          customerId: context.customerId,
+          ...ownUses,
+        },
       });
       if (mine >= promo.perCustomerLimit) return false;
     }

@@ -29,6 +29,7 @@ import { OrdersService } from '../orders/orders.service';
 import { AvailabilityService } from '../availability/availability.service';
 import { LegalService } from '../legal/legal.service';
 import { CancelReasonsService } from '../orders/cancel-reasons.service';
+import { ShortageService } from '../orders/shortage.service';
 import { PromotionsService } from '../promotions/promotions.service';
 import { OrderStatus } from '@prisma/client';
 import { GeoService } from '../geo/geo.service';
@@ -130,6 +131,7 @@ export class AdminService {
     private readonly reasons: CancelReasonsService,
     private readonly promoEngine: PromotionsService,
     private readonly geo: GeoService,
+    private readonly shortage: ShortageService,
   ) {}
 
   private async tenant(slug = 'pizzburg') {
@@ -518,6 +520,18 @@ export class AdminService {
   async cancelOrder(id: string, reasonId: string, comment?: string) {
     const tenant = await this.tenant();
     return this.orderService.cancelByOperator(id, tenant.id, reasonId, comment);
+  }
+
+  /** Живая лента для консоли кассира (DECISIONS §12.9) */
+  async orderQueue() {
+    const tenant = await this.tenant();
+    return this.shortage.queue(tenant.id);
+  }
+
+  /** Кассир отмечает позиции, которых нет; пустой список снимает пометку */
+  async markShortage(orderId: string, itemIds: string[]) {
+    const tenant = await this.tenant();
+    return this.shortage.markUnavailable(tenant.id, orderId, itemIds);
   }
 
   async promotions() {

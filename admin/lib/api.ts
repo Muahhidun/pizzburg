@@ -132,6 +132,59 @@ export interface AdminOrder {
 }
 
 /**
+ * Разбирательство по нехватке позиции (DECISIONS §12.9).
+ *
+ * Живёт отдельно от статуса заказа: основной отдел готовит свою часть,
+ * не дожидаясь ответа клиента, поэтому заказ может быть одновременно
+ * принятым и ждущим выбора по позиции второго отдела.
+ */
+export type ShortageState =
+  | 'NONE'
+  | 'AWAITING_CUSTOMER'
+  | 'KEPT_REST'
+  | 'CANCELLED_BY_CUSTOMER';
+
+export interface CashierItem {
+  id: string;
+  name: string;
+  qty: number;
+  price: number;
+  isGift: boolean;
+  isUnavailable: boolean;
+  department: string;
+}
+
+export interface CashierPart extends OrderPart {
+  /// Отменённые чеки этой части: Poster не умеет менять состав, и
+  /// исправленный заказ уходит новым чеком
+  replacedOrders: { posterOrderId: string; replacedAt: string }[];
+}
+
+export interface CashierOrder {
+  id: string;
+  number: number;
+  createdAt: string;
+  scheduledAt: string | null;
+  type: 'DELIVERY' | 'PICKUP';
+  status: string;
+  paymentMethod: string;
+  customer: { name: string | null; phone: string } | null;
+  comment: string;
+  total: number;
+  shortageState: ShortageState;
+  shortageDeadline: string | null;
+  shortageResolvedBy: string | null;
+  items: CashierItem[];
+  parts: CashierPart[];
+}
+
+export interface CashierQueue {
+  /// Сколько минут ждём ответа клиента — считает сервер
+  windowMinutes: number;
+  orders: CashierOrder[];
+}
+
+/**
  * Причина отмены из справочника. `availableToCustomer` отделяет причины,
  * которые видит клиент, от внутренних («нет курьеров», «нет позиции»).
  */

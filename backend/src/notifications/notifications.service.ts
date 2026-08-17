@@ -119,6 +119,32 @@ export class NotificationsService implements OnModuleInit {
   }
 
   /**
+   * Уведомление о заказе, не связанное со сменой статуса.
+   *
+   * Нужно для нехватки позиции (DECISIONS §12.9): статус заказа при этом
+   * не меняется — основной отдел уже готовит, — а сказать человеку надо
+   * срочно, у него пять минут на ответ. Отдельный `type` в данных, а не
+   * `order_status`: приложение должно открыть экран с выбором, а не
+   * просто обновить шкалу.
+   */
+  async sendOrderEvent(
+    orderId: string,
+    notification: OrderStatusNotification,
+    data: Record<string, string> = {},
+  ) {
+    const messaging = this.messaging;
+    if (!messaging) return;
+
+    try {
+      await this.deliverToCustomer(messaging, orderId, notification, data);
+    } catch (error) {
+      this.logger.warn(
+        `FCM для заказа ${orderId} не отправлен: ${this.errorMessage(error)}`,
+      );
+    }
+  }
+
+  /**
    * Рассылка сообщения ленты всем устройствам.
    *
    * Возвращает, скольким устройствам ушло: владелец должен видеть охват,
@@ -177,6 +203,25 @@ export class NotificationsService implements OnModuleInit {
   ) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
+      select: { number: true, type: true },
+    });
+    if (!order) return;
+    await this.deliverToCustomer(
+      messaging,
+      orderId,
+      orderStatusNotification(order.number, status, order.type),
+      { type: 'order_status', status },
+    );
+  }
+
+  private async deliverToCustomer(
+    messaging: Messaging,
+    orderId: string,
+    notification: OrderStatusNotification,
+    extra: Record<string, string>,
+  ) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
       select: {
         id: true,
         number: true,
@@ -195,7 +240,6 @@ export class NotificationsService implements OnModuleInit {
     const tokens = [...new Set(order?.customer?.pushDevices.map((d) => d.token) ?? [])];
     if (!order || tokens.length === 0) return;
 
-    const notification = orderStatusNotification(order.number, status, order.type);
     for (let offset = 0; offset < tokens.length; offset += 500) {
       const batch = tokens.slice(offset, offset + 500);
       try {
@@ -203,11 +247,10 @@ export class NotificationsService implements OnModuleInit {
           tokens: batch,
           notification,
           data: {
-            type: 'order_status',
             orderId: order.id,
             orderNumber: String(order.number),
-            status,
             total: String(order.total),
+            ...extra,
           },
           android: {
             priority: 'high',

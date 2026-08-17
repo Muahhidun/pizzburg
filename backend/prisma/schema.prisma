@@ -472,6 +472,24 @@ enum PaymentStatus {
   NOT_REQUIRED // оплата при получении
 }
 
+/// Разбирательство по нехватке позиции (DECISIONS §12.9).
+///
+/// Живёт отдельно от OrderStatus, а не новым его значением: основной
+/// отдел принимает и готовит свою часть, не дожидаясь ответа клиента,
+/// поэтому заказ вполне может быть ACCEPTED и одновременно ждать выбора
+/// по позиции второго отдела. Свести это в одну шкалу — значит соврать
+/// либо кухне, либо клиенту.
+enum ShortageState {
+  /// Всё на месте — обычный ход заказа
+  NONE
+  /// Кассир отметил позицию, клиент выбирает: везти без неё или отменить
+  AWAITING_CUSTOMER
+  /// Везём остальное. Кто решил — в shortageResolvedBy
+  KEPT_REST
+  /// Клиент отказался от заказа целиком
+  CANCELLED_BY_CUSTOMER
+}
+
 model Order {
   id              String        @id @default(cuid())
   tenantId        String
@@ -513,6 +531,16 @@ model Order {
   /// Версии документов, действовавшие при оформлении — доказательство
   /// согласия именно на эту редакцию
   legalVersions   Json?
+  // ─ Нехватка позиции (DECISIONS §12.9) ─────────────────────────────
+  shortageState      ShortageState @default(NONE)
+  /// Когда кассир отметил нехватку — по нему в консоли видно, сколько висит
+  shortageAt         DateTime?
+  /// До этого момента ждём ответа клиента; истёк — везём остальное
+  shortageDeadline   DateTime?
+  /// CUSTOMER | TIMEOUT — кто закрыл вопрос. Разница нужна кассиру:
+  /// после TIMEOUT человек ещё не знает, что везём без позиции
+  shortageResolvedBy String?
+  shortageResolvedAt DateTime?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -523,6 +551,8 @@ model Order {
   @@unique([tenantId, number])
   @@index([tenantId, status])
   @@index([tenantId, createdAt])
+  /// Фоновая задача ищет просроченные ожидания раз в минуту
+  @@index([shortageState, shortageDeadline])
 }
 
 /// Отправка части заказа в конкретный отдел (аккаунт Poster).
@@ -534,10 +564,19 @@ model OrderDispatch {
   posterAccountId String
   posterAccount   PosterAccount @relation(fields: [posterAccountId], references: [id])
   posterOrderId   String? // incoming_order_id в этом аккаунте Poster
-  status          String        @default("PENDING") // PENDING | SENT | FAILED
+  // PENDING | SENT | FAILED | VOID (в части не осталось позиций)
+  status          String        @default("PENDING")
   // статус на планшете: NEW | ACCEPTED | REJECTED (поллинг Poster)
   posterStatus    String?
   error           String?
+  /// Отменённые чеки этой части: [{ posterOrderId, replacedAt }].
+  ///
+  /// Poster не умеет менять состав уже отправленного входящего заказа —
+  /// в API есть только создание и чтение. Поэтому исправленный после
+  /// нехватки состав уходит НОВЫМ входящим заказом, а старый кассир
+  /// отклоняет на планшете. Здесь хранится, что именно она отклоняет:
+  /// иначе при разборе смены два чека на один заказ выглядят как дубль.
+  replacedOrders  Json          @default("[]")
   createdAt       DateTime      @default(now())
 
   @@unique([orderId, posterAccountId])
@@ -558,6 +597,12 @@ model OrderItem {
   // подарок по акции: клиент не платит, в Poster уходит полной ценой,
   // компенсируется «Личной интеграцией»
   isGift    Boolean  @default(false)
+  /// Позиции не оказалось — кассир отметил её в консоли (DECISIONS §12.9).
+  ///
+  /// Строка не удаляется, а гасится: в кассу и в сумму она больше не
+  /// попадает, но и клиенту, и разбору смены нужно видеть, чего именно
+  /// не привезли. Удалённая строка не оставила бы следа.
+  isUnavailable Boolean @default(false)
 
   @@index([orderId])
 }

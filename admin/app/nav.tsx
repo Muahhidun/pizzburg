@@ -6,6 +6,8 @@ import { clearToken } from '@/lib/api';
 
 const links = [
   { href: '/dashboard', label: 'Сводка' },
+  // Первым после сводки: кассир заходит сюда в спешке, когда чего-то нет
+  { href: '/cashier', label: 'Касса' },
   { href: '/orders', label: 'Заказы' },
   { href: '/storefront', label: 'Витрина' },
   { href: '/stoplist', label: 'Стоп-листы' },
