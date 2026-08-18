@@ -121,6 +121,8 @@ export interface AdminOrder {
   pointsSpent: number;
   pointsEarned: number;
   total: number;
+  /// Другие живые заказы того же клиента — признак перезаказа
+  otherActiveOrders: number[];
   items: {
     name: string;
     qty: number;
@@ -174,6 +176,9 @@ export interface CashierOrder {
   shortageState: ShortageState;
   shortageDeadline: string | null;
   shortageResolvedBy: string | null;
+  /// Другие живые заказы того же клиента — признак перезаказа.
+  /// Только сигнал: ничего не отменяется автоматически.
+  otherActiveOrders: number[];
   items: CashierItem[];
   parts: CashierPart[];
 }

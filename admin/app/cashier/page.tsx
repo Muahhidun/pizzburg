@@ -140,6 +140,17 @@ function OrderCard({ order, onDone }: { order: CashierOrder; onDone: () => void 
         </p>
       )}
 
+      {/* Перезаказ — только сигнал. Отменять что-либо автоматически нельзя:
+          чек в Poster не отменяется, а второй заказ часто настоящий. */}
+      {order.otherActiveOrders?.length > 0 && (
+        <p className="mt-3 rounded-xl bg-sky-50 px-3 py-2 text-sm text-sky-800 dark:bg-sky-950 dark:text-sky-200">
+          У клиента ещё{' '}
+          {order.otherActiveOrders.length === 1 ? 'заказ' : 'заказы'} №
+          {order.otherActiveOrders.join(', №')} — похоже на перезаказ.
+          Уточните, что готовить, и лишний отмените вручную.
+        </p>
+      )}
+
       <ShortageBanner order={order} />
 
       {/* Отменённые чеки видны отдельной строкой: два чека на один заказ

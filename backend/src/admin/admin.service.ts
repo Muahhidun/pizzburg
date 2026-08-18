@@ -312,6 +312,11 @@ export class AdminService {
       },
     });
 
+    const activeByCustomer = await this.orderService.otherActiveOrders(
+      tenant.id,
+      orders.map((o) => o.customerId ?? ''),
+    );
+
     return {
       date: localDate,
       total: orders.length,
@@ -336,6 +341,10 @@ export class AdminService {
         pointsSpent: o.pointsSpent,
         pointsEarned: o.pointsEarned,
         total: o.total,
+        /// Другие живые заказы того же клиента — сигнал о перезаказе.
+        /// Никаких автоматических отмен: смотрит и решает оператор.
+        otherActiveOrders: (activeByCustomer.get(o.customerId ?? '') ?? [])
+          .filter((n) => n !== o.number),
         items: o.items.map((i) => ({
           name: i.name,
           qty: i.qty,

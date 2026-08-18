@@ -78,6 +78,13 @@ export class ShortageService {
       },
     });
 
+    // «Похоже на перезаказ» — только пометка кассиру. Ни один заказ
+    // автоматически не отменяется: решает человек, глядя на оба.
+    const activeByCustomer = await this.orders.otherActiveOrders(
+      tenantId,
+      orders.map((o) => o.customerId ?? ''),
+    );
+
     const departmentById = new Map<string, string>();
     for (const order of orders) {
       for (const d of order.dispatches) {
@@ -101,6 +108,8 @@ export class ShortageService {
         shortageState: o.shortageState,
         shortageDeadline: o.shortageDeadline,
         shortageResolvedBy: o.shortageResolvedBy,
+        otherActiveOrders: (activeByCustomer.get(o.customerId ?? '') ?? [])
+          .filter((n) => n !== o.number),
         items: o.items.map((i) => ({
           id: i.id,
           name: i.name,

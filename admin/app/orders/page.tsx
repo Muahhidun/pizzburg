@@ -93,6 +93,15 @@ export default function OrdersPage() {
               <span className="text-sm">
                 {o.customer?.name ?? 'Без имени'} · {o.customer?.phone}
               </span>
+              {/* Сигнал о перезаказе: решает оператор, автоматики нет */}
+              {o.otherActiveOrders?.length > 0 && (
+                <span
+                  title={`Другие живые заказы этого клиента: №${o.otherActiveOrders.join(', №')}`}
+                  className="rounded-lg bg-sky-50 px-2 py-0.5 text-xs text-sky-700 dark:bg-sky-950 dark:text-sky-300"
+                >
+                  ещё №{o.otherActiveOrders.join(', №')}
+                </span>
+              )}
               <span className="ml-auto flex items-center gap-2">
                 {o.parts.map((p) => (
                   <span

@@ -17,6 +17,36 @@ import { CancelReasonsService } from './cancel-reasons.service';
 import { LegalService } from '../legal/legal.service';
 import { AddressesService } from '../auth/addresses.service';
 
+/**
+ * Окно, в котором повторный такой же заказ считается сорвавшимся
+ * запросом, а не вторым заказом (см. findRecentDuplicate).
+ */
+const DUPLICATE_WINDOW_MS = 2 * 60 * 1000;
+
+/**
+ * Отпечаток заказа для сравнения «тот же самый».
+ *
+ * Позиции сортируются: порядок в корзине ничего не значит, а вот
+ * несортированный список сделал бы два одинаковых заказа разными.
+ */
+function orderFingerprint(order: {
+  type: string;
+  paymentMethod: string;
+  address?: Record<string, unknown> | null;
+  items: { productId: string; qty: number }[];
+}) {
+  const address = order.address
+    ? [order.address.street, order.address.house, order.address.flat]
+        .map((part) => String(part ?? ''))
+        .join('|')
+    : '';
+  const items = order.items
+    .map((i) => `${i.productId}x${i.qty}`)
+    .sort()
+    .join(',');
+  return [order.type, order.paymentMethod, address, items].join('#');
+}
+
 interface DeliverySettings {
   minOrder: number;
   fee: number;
@@ -186,6 +216,63 @@ export class OrdersService {
         data: { name: dto.name },
       });
     }
+    // Незакрытый вопрос по прошлому заказу держит оформление нового.
+    //
+    // Иначе выходит так: кассир спросила, чего везти без пропавшего ролла,
+    // человек не ответил и пошёл оформлять второй заказ — карточка с
+    // вопросом на главном экране сменилась на новый заказ, вопрос ушёл из
+    // виду, и через пять минут мы решили за него.
+    //
+    // Ждём именно **срока**, а не ответа: привязка к ответу заперла бы
+    // клиента навсегда, если разбирательство зависнет (крон не отработал,
+    // сбой в кассе). По сроку он свободен через пять минут в любом случае.
+    const pending = await this.prisma.order.findFirst({
+      where: {
+        customerId: customer.id,
+        shortageState: 'AWAITING_CUSTOMER',
+        shortageDeadline: { gt: new Date() },
+      },
+      select: { number: true, shortageDeadline: true },
+    });
+    if (pending) {
+      const leftMinutes = Math.max(
+        1,
+        Math.ceil(
+          (pending.shortageDeadline!.getTime() - Date.now()) / 60_000,
+        ),
+      );
+      throw new BadRequestException(
+        `Сначала ответьте по заказу №${pending.number}: там не оказалось одной ` +
+          `позиции. Или подождите ${leftMinutes} мин — привезём остальное`,
+      );
+    }
+
+    // Тот же заказ, отправленный дважды, — это не второй заказ.
+    //
+    // Защиты от повтора у создания заказа не было: хватало отвалившейся
+    // сети и второго нажатия, чтобы на планшет уехало два одинаковых чека
+    // и кухня приготовила всё дважды. Честный клиент ничего не заметит —
+    // ему вернётся уже созданный заказ.
+    const duplicate = await this.findRecentDuplicate(customer.id, dto);
+    if (duplicate) {
+      this.logger.warn(
+        `Повтор заказа №${duplicate.number} от клиента ${customer.id} — ` +
+          'возвращаем существующий вместо нового',
+      );
+      return {
+        id: duplicate.id,
+        number: duplicate.number,
+        subtotal: duplicate.subtotal,
+        deliveryFee: duplicate.deliveryFee,
+        total: duplicate.total,
+        pointsSpent: duplicate.pointsSpent,
+        dispatches: duplicate.dispatches.map((d) => ({
+          department: d.posterAccount.name,
+          status: d.status,
+        })),
+      };
+    }
+
     // Акции считаем после клиента: ограничения «первый заказ», «раз на
     // клиента» и лимит применений без него не проверить.
     const ordersBefore = await this.prisma.order.count({
@@ -371,6 +458,93 @@ export class OrdersService {
         status: d.status,
       })),
     };
+  }
+
+  /**
+   * Другие живые заказы этих же клиентов — сигнал «похоже на перезаказ».
+   *
+   * Только сигнал: ни один заказ автоматически не отменяется. Отменить
+   * чек в Poster нельзя, и «аннулировали старый» жило бы только у нас,
+   * пока кухня его готовит. А второй заказ часто настоящий — себе и
+   * родителям, или семья попросила добавки. Ошибиться в эту сторону
+   * дороже: не отменили лишний — потеряли немного еды, отменили
+   * настоящий — человек остался голодным.
+   */
+  async otherActiveOrders(tenantId: string, customerIds: string[]) {
+    const ids = [...new Set(customerIds.filter(Boolean))];
+    if (ids.length === 0) return new Map<string, number[]>();
+
+    const active = await this.prisma.order.findMany({
+      where: {
+        tenantId,
+        customerId: { in: ids },
+        status: { in: ['NEW', 'ACCEPTED', 'COOKING', 'READY', 'ON_WAY'] },
+      },
+      select: { id: true, number: true, customerId: true },
+      orderBy: { number: 'asc' },
+    });
+
+    const byCustomer = new Map<string, number[]>();
+    for (const order of active) {
+      if (!order.customerId) continue;
+      const list = byCustomer.get(order.customerId) ?? [];
+      list.push(order.number);
+      byCustomer.set(order.customerId, list);
+    }
+    return byCustomer;
+  }
+
+  /**
+   * Ищет только что созданный такой же заказ этого клиента.
+   *
+   * Окно намеренно короткое: две минуты — это про сорвавшийся запрос и
+   * повторное нажатие, а не про «передумал и заказал ещё». Человек,
+   * который через полчаса заказывает то же самое, делает это осознанно, и
+   * подменять ему заказ старым было бы враньём.
+   *
+   * Сравниваем состав, способ получения, оплату и адрес. Тот же набор
+   * блюд на другой адрес — обычное дело (себе и родителям), и это разные
+   * заказы.
+   */
+  private async findRecentDuplicate(
+    customerId: string,
+    dto: CreateOrderDto,
+    now = new Date(),
+  ) {
+    const recent = await this.prisma.order.findMany({
+      where: {
+        customerId,
+        status: { not: 'CANCELLED' },
+        createdAt: { gt: new Date(now.getTime() - DUPLICATE_WINDOW_MS) },
+      },
+      include: {
+        items: true,
+        dispatches: { include: { posterAccount: { select: { name: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (recent.length === 0) return null;
+
+    const wanted = orderFingerprint({
+      type: dto.type,
+      paymentMethod: dto.paymentMethod,
+      address: dto.address as unknown as Record<string, unknown> | undefined,
+      items: dto.items.map((i) => ({ productId: i.productId, qty: i.qty })),
+    });
+
+    return (
+      recent.find(
+        (order) =>
+          orderFingerprint({
+            type: order.type,
+            paymentMethod: order.paymentMethod,
+            address: order.address as Record<string, unknown> | null,
+            items: order.items
+              .filter((i) => !i.isGift)
+              .map((i) => ({ productId: i.productId ?? '', qty: i.qty })),
+          }) === wanted,
+      ) ?? null
+    );
   }
 
   /**
