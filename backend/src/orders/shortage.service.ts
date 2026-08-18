@@ -296,8 +296,27 @@ export class ShortageService {
     }
   }
 
-  /** «Позиции нашлись» — снимаем пометку, заказ идёт обычным ходом */
+  /**
+   * «Позиции нашлись» — снимаем пометку, заказ идёт обычным ходом.
+   *
+   * Работает, только пока ждём ответа клиента. После ответа сумма уже
+   * пересчитана, лишние баллы возвращены, а исправленный чек ушёл в
+   * кассу: вернуть строку в состав здесь значило бы показать полный
+   * заказ по уменьшенной цене и ничего не сообщить кухне. Позицию,
+   * которая нашлась слишком поздно, добавляют звонком и новым заказом.
+   */
   private async clearShortage(orderId: string) {
+    const order = await this.prisma.order.findUniqueOrThrow({
+      where: { id: orderId },
+      select: { shortageState: true },
+    });
+    if (order.shortageState === 'NONE') return this.state(orderId);
+    if (order.shortageState !== 'AWAITING_CUSTOMER') {
+      throw new BadRequestException(
+        'Клиент уже получил ответ, и сумма пересчитана — ' +
+          'позицию можно вернуть только новым заказом',
+      );
+    }
     await this.prisma.$transaction([
       this.prisma.orderItem.updateMany({
         where: { orderId },
@@ -362,6 +381,11 @@ export class ShortageService {
       where: {
         shortageState: 'AWAITING_CUSTOMER',
         shortageDeadline: { lte: now },
+        // Только живые заказы. Отменённый заказ ничего не ждёт, и решать
+        // за клиента по нему нечего: раньше такой заказ находился по
+        // одному лишь `shortageState`, пересчитывался и получал новый чек
+        // на планшет — кассир видела бумагу по отменённому заказу.
+        status: { notIn: ['CANCELLED', 'DELIVERED'] },
       },
       select: { id: true, number: true },
     });
@@ -391,6 +415,20 @@ export class ShortageService {
         dispatches: { include: { posterAccount: { select: { name: true } } } },
       },
     });
+
+    // Второй рубеж к фильтру в `resolveExpired`: сюда же ведёт ответ
+    // клиента, а он мог нажать кнопку ровно в момент отмены заказа
+    // оператором. Пересчитывать и слать чек по закрытому заказу нельзя.
+    if (order.status === 'CANCELLED' || order.status === 'DELIVERED') {
+      await this.prisma.order.updateMany({
+        where: { id: order.id, shortageState: 'AWAITING_CUSTOMER' },
+        data: { shortageState: 'NONE', shortageDeadline: null },
+      });
+      this.logger.warn(
+        `Заказ №${order.number} уже закрыт (${order.status}) — ожидание снято без пересчёта`,
+      );
+      return this.state(order.id);
+    }
 
     const gone = order.items.filter((i) => i.isUnavailable);
     const payable = order.items.filter((i) => !i.isGift && !i.isUnavailable);

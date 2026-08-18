@@ -218,7 +218,9 @@ function OrderCard({ order, onDone }: { order: CashierOrder; onDone: () => void 
         >
           {busy ? 'Отмечаем…' : 'Этих позиций нет'}
         </button>
-        {missing.length > 0 && (
+        {/* Только пока ждём ответа: после него сумма уже пересчитана и
+            исправленный чек ушёл в кассу, вернуть строку нельзя. */}
+        {waiting && missing.length > 0 && (
           <button
             onClick={() => send([])}
             disabled={busy}

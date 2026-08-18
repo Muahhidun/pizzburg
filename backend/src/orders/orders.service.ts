@@ -885,6 +885,26 @@ export class OrdersService {
       where: { id: order.id },
       data: { status: next },
     });
+    // Отменённый заказ больше никого ни о чём не спрашивает.
+    //
+    // Ожидание ответа по нехватке живёт отдельным полем и переживало
+    // отмену: фоновая задача находила заказ по одному только
+    // `shortageState` и через пять минут «решала за клиента» —
+    // пересчитывала отменённый заказ и отправляла на планшет чек по нему.
+    // Гасим здесь, а не в каждом методе отмены: их четыре (клиент,
+    // оператор, отказ основного отдела, автозакрытие), и пятый забудут.
+    //
+    // Условие по AWAITING_CUSTOMER обязательно: отмена, которую выбрал сам
+    // клиент из-за нехватки, уже проставила CANCELLED_BY_CUSTOMER, и
+    // затирать её здесь значило бы потерять причину отмены.
+    if (next === 'CANCELLED') {
+      await this.prisma.order.updateMany({
+        where: { id: order.id, shortageState: 'AWAITING_CUSTOMER' },
+        // Пометки `isUnavailable` намеренно остаются: чего именно не
+        // хватало, видно и в отменённом заказе.
+        data: { shortageState: 'NONE', shortageDeadline: null },
+      });
+    }
     await this.loyalty.onStatusChanged(order.id, next);
     if (options?.notify !== false) {
       await this.notifications.sendOrderStatus(order.id, next);
