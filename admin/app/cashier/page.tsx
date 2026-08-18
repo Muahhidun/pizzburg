@@ -76,6 +76,7 @@ function OrderCard({ order, onDone }: { order: CashierOrder; onDone: () => void 
   const [error, setError] = useState<string | null>(null);
 
   const waiting = order.shortageState === 'AWAITING_CUSTOMER';
+  const cancelled = order.status === 'CANCELLED';
   const missing = order.items.filter((i) => i.isUnavailable);
 
   async function send(itemIds: string[]) {
@@ -95,7 +96,7 @@ function OrderCard({ order, onDone }: { order: CashierOrder; onDone: () => void 
   return (
     <li
       className={`rounded-2xl bg-white p-4 shadow-sm dark:bg-neutral-900 ${
-        waiting ? 'ring-2 ring-amber-400' : ''
+        cancelled ? 'ring-2 ring-red-500' : waiting ? 'ring-2 ring-amber-400' : ''
       }`}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -151,6 +152,28 @@ function OrderCard({ order, onDone }: { order: CashierOrder; onDone: () => void 
         </p>
       )}
 
+      {/* Отмена — единственное, о чём принтер сказать не может: при отмене
+          на планшет не уходит ничего, и чек лежит как живой. Строка уйдёт
+          сама, когда кассир отклонит чек, — опрос это увидит. */}
+      {cancelled && (
+        <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+          <b>Заказ отменён</b>
+          {order.cancelledBy === 'CUSTOMER' ? ' клиентом' : ''}
+          {order.cancelReason ? ` — ${order.cancelReason}` : ''}.{' '}
+          {order.receiptsToReject.length > 0 ? (
+            <>
+              Отклоните на планшете:{' '}
+              {order.receiptsToReject
+                .map((r) => `${r.department} — чек №${r.posterOrderId}`)
+                .join('; ')}
+              .
+            </>
+          ) : (
+            'Чеки уже отклонены.'
+          )}
+        </p>
+      )}
+
       <ShortageBanner order={order} />
 
       {/* Отменённые чеки видны отдельной строкой: два чека на один заказ
@@ -182,7 +205,7 @@ function OrderCard({ order, onDone }: { order: CashierOrder; onDone: () => void 
           const checked = picked.includes(i.id) || i.isUnavailable;
           // Подарок нельзя отметить: он не выбор клиента, а следствие
           // состава, и пересчитается сам вместе с позицией-условием.
-          const locked = i.isGift || busy;
+          const locked = i.isGift || busy || cancelled;
           return (
             <li key={i.id}>
               <label
@@ -224,7 +247,7 @@ function OrderCard({ order, onDone }: { order: CashierOrder; onDone: () => void 
       <div className="mt-3 flex flex-wrap gap-2">
         <button
           onClick={() => send([...missing.map((i) => i.id), ...picked])}
-          disabled={busy || picked.length === 0}
+          disabled={busy || picked.length === 0 || cancelled}
           className="rounded-lg bg-red-600 px-3 py-1.5 text-sm text-white disabled:opacity-40"
         >
           {busy ? 'Отмечаем…' : 'Этих позиций нет'}

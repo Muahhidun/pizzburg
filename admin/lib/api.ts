@@ -176,6 +176,11 @@ export interface CashierOrder {
   shortageState: ShortageState;
   shortageDeadline: string | null;
   shortageResolvedBy: string | null;
+  cancelReason: string | null;
+  cancelledBy: string | null;
+  /// У отменённого заказа — чеки, которые ещё висят на планшетах.
+  /// Пустеет само, когда кассир их отклонит.
+  receiptsToReject: { department: string; posterOrderId: string }[];
   /// Другие живые заказы того же клиента — признак перезаказа.
   /// Только сигнал: ничего не отменяется автоматически.
   otherActiveOrders: number[];

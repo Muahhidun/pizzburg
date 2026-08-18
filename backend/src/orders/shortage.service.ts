@@ -64,8 +64,28 @@ export class ShortageService {
     const orders = await this.prisma.order.findMany({
       where: {
         tenantId,
-        status: { in: ['NEW', 'ACCEPTED'] },
-        createdAt: { gt: new Date(now.getTime() - 12 * 60 * 60 * 1000) },
+        OR: [
+          {
+            status: { in: ['NEW', 'ACCEPTED'] },
+            createdAt: { gt: new Date(now.getTime() - 12 * 60 * 60 * 1000) },
+          },
+          // Отменённый заказ раньше просто исчезал из консоли, и кассир не
+          // узнавала о нём ниоткуда: на планшет при отмене ничего не
+          // уходит (Poster не умеет отменять чеки), пуш идёт клиенту.
+          // Чек лежал как живой, и еду готовили. Показываем, пока чек не
+          // отклонён на планшете, — как отклонит, строка уйдёт сама.
+          {
+            status: 'CANCELLED',
+            cancelledAt: { gt: new Date(now.getTime() - 2 * 60 * 60 * 1000) },
+            dispatches: {
+              some: {
+                status: 'SENT',
+                posterStatus: { not: 'REJECTED' },
+                posterOrderId: { not: null },
+              },
+            },
+          },
+        ],
       },
       orderBy: { createdAt: 'desc' },
       include: {
@@ -110,6 +130,24 @@ export class ShortageService {
         shortageState: o.shortageState,
         shortageDeadline: o.shortageDeadline,
         shortageResolvedBy: o.shortageResolvedBy,
+        cancelReason: o.cancelReason,
+        cancelledBy: o.cancelledBy,
+        /// Чеки, которые ещё висят на планшетах у отменённого заказа
+        receiptsToReject:
+          o.status === 'CANCELLED'
+            ? o.dispatches
+                .filter(
+                  (d) =>
+                    d.status === 'SENT' &&
+                    d.posterStatus !== 'REJECTED' &&
+                    d.posterOrderId &&
+                    d.posterOrderId !== 'dry-run',
+                )
+                .map((d) => ({
+                  department: d.posterAccount.name,
+                  posterOrderId: d.posterOrderId as string,
+                }))
+            : [],
         otherActiveOrders: (activeByCustomer.get(o.customerId ?? '') ?? [])
           .filter((n) => n !== o.number),
         items: o.items.map((i) => ({

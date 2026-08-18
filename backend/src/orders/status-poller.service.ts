@@ -27,8 +27,23 @@ export class StatusPollerService {
   async poll() {
     const active = await this.prisma.order.findMany({
       where: {
-        status: { in: ['NEW', 'ACCEPTED', 'COOKING', 'READY', 'ON_WAY'] },
-        createdAt: { gt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        OR: [
+          {
+            status: { in: ['NEW', 'ACCEPTED', 'COOKING', 'READY', 'ON_WAY'] },
+            createdAt: { gt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+          },
+          // Недавно отменённые опрашиваем тоже, и это не расточительство.
+          // Отменить чек через API Poster нельзя, поэтому кассир отклоняет
+          // его руками, а узнать, что она это сделала, можно только
+          // спросив планшет. Без этого напоминание «отклоните чек» висело
+          // бы в консоли и после того, как всё уже сделано, — и его бы
+          // перестали читать.
+          {
+            status: 'CANCELLED',
+            cancelledAt: { gt: new Date(Date.now() - 2 * 60 * 60 * 1000) },
+            dispatches: { some: { posterStatus: { not: 'REJECTED' } } },
+          },
+        ],
         dispatches: {
           some: { status: 'SENT', posterOrderId: { not: 'dry-run' } },
         },
