@@ -222,7 +222,10 @@ export interface StopListResponse {
 /** Настройки телеграм-канала. Токен наружу не отдаётся */
 export interface TelegramSettings {
   enabled: boolean;
+  /// Чат руководства
   chatId: string;
+  /// Чат кассы — отдельный: разные аудитории и разные события
+  cashierChatId: string;
   botTokenSet: boolean;
   botTokenHint: string;
 }

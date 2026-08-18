@@ -20,7 +20,17 @@ import { PrismaService } from '../prisma/prisma.service';
 export interface TelegramSettings {
   enabled: boolean;
   botToken: string;
+  /// Чат руководства: стоп-листы, нехватка, перезаказы
   chatId: string;
+  /**
+   * Чат кассы — отдельный, и это не удобство, а необходимость.
+   *
+   * Аудитории разные: в чат руководства идут сигналы наблюдения за
+   * кассиром, и класть их перед тем, за кем наблюдают, бессмысленно. А
+   * кассира нельзя заваливать тем, что не требует её действия, иначе
+   * канал станет фоном и важное в нём потеряется.
+   */
+  cashierChatId: string;
 }
 
 const API = 'https://api.telegram.org';
@@ -41,6 +51,7 @@ export class TelegramService {
       enabled: raw.enabled === true,
       botToken: String(raw.botToken ?? ''),
       chatId: String(raw.chatId ?? ''),
+      cashierChatId: String(raw.cashierChatId ?? ''),
     };
   }
 
@@ -50,6 +61,7 @@ export class TelegramService {
     return {
       enabled: s.enabled,
       chatId: s.chatId,
+      cashierChatId: s.cashierChatId,
       // Показываем только факт наличия и хвост: сверить, что вставлен
       // нужный токен, можно и так, а светить его в браузере незачем.
       botTokenSet: s.botToken.length > 0,
@@ -78,6 +90,7 @@ export class TelegramService {
             // обратно, потому что мы его ей и не показывали.
             botToken: patch.botToken?.trim() || current.botToken,
             chatId: patch.chatId?.trim() ?? current.chatId,
+            cashierChatId: patch.cashierChatId?.trim() ?? current.cashierChatId,
           },
         } as object,
       },
@@ -119,11 +132,17 @@ export class TelegramService {
   }
 
   /** Проверка связи из админки — здесь ошибку показываем, а не глотаем */
-  async sendTest(tenantId: string) {
+  async sendTest(tenantId: string, target: 'OWNER' | 'CASHIER' = 'OWNER') {
     const s = await this.settings(tenantId);
     if (!s.botToken) throw new BadRequestException('Не задан токен бота');
-    if (!s.chatId) throw new BadRequestException('Не задан чат');
-    const error = await this.deliver(s, 'Проверка связи: бот подключён.');
+    const chatId = target === 'CASHIER' ? s.cashierChatId : s.chatId;
+    if (!chatId) throw new BadRequestException('Не задан чат');
+    const error = await this.deliver(
+      { ...s, chatId },
+      target === 'CASHIER'
+        ? 'Проверка связи: сюда будут приходить сообщения для кассы.'
+        : 'Проверка связи: бот подключён.',
+    );
     if (error) throw new BadRequestException(error);
     return { sent: true };
   }
@@ -138,6 +157,24 @@ export class TelegramService {
     const error = await this.deliver(s, text);
     if (error) {
       this.logger.warn(`Телеграм не принял сообщение: ${error}`);
+      return { sent: false };
+    }
+    return { sent: true };
+  }
+
+  /**
+   * Сообщение кассиру. Отправляем только то, что требует действия **на
+   * планшете** и о чём принтер сказать не может: о новом заказе и об
+   * исправленном составе он печатает сам, а вот о смерти заказа у Poster
+   * механизма нет. Всё остальное сюда не идёт — иначе вернём привычку
+   * жить в телеграме, от которой ушли (DECISIONS §12.1).
+   */
+  async notifyCashier(tenantId: string, text: string) {
+    const s = await this.settings(tenantId);
+    if (!s.enabled || !s.botToken || !s.cashierChatId) return { sent: false };
+    const error = await this.deliver({ ...s, chatId: s.cashierChatId }, text);
+    if (error) {
+      this.logger.warn(`Телеграм кассы не принял сообщение: ${error}`);
       return { sent: false };
     }
     return { sent: true };

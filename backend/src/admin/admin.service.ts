@@ -594,6 +594,7 @@ export class AdminService {
     enabled?: boolean;
     botToken?: string;
     chatId?: string;
+    cashierChatId?: string;
   }) {
     const tenant = await this.tenant();
     await this.telegram.saveSettings(tenant.id, dto);
@@ -605,9 +606,9 @@ export class AdminService {
     return this.telegram.detectChat(tenant.id);
   }
 
-  async telegramTest() {
+  async telegramTest(target: 'OWNER' | 'CASHIER') {
     const tenant = await this.tenant();
-    return this.telegram.sendTest(tenant.id);
+    return this.telegram.sendTest(tenant.id, target);
   }
 
   async promotions() {

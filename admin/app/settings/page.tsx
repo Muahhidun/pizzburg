@@ -385,6 +385,7 @@ function TelegramSection() {
   const [state, setState] = useState<TelegramSettings | null>(null);
   const [token, setToken] = useState('');
   const [chatId, setChatId] = useState('');
+  const [cashierChatId, setCashierChatId] = useState('');
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -393,6 +394,7 @@ function TelegramSection() {
     const s = await api.get<TelegramSettings>('/admin/settings/telegram');
     setState(s);
     setChatId(s.chatId);
+    setCashierChatId(s.cashierChatId);
   }, []);
 
   useEffect(() => {
@@ -461,11 +463,30 @@ function TelegramSection() {
       </label>
 
       <label className="mt-3 block text-sm">
-        Чат
+        Чат руководства
+        <span className="ml-2 text-xs text-neutral-400">
+          стоп-листы, нехватка позиций, перезаказы
+        </span>
         <input
           value={chatId}
           onChange={(e) => setChatId(e.target.value)}
           placeholder="-1001234567890"
+          className="mt-1 w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
+        />
+      </label>
+
+      {/* Второй чат, а не второй бот: тот же бот сидит в обеих группах.
+          Разделены аудитории, а не боты — кассиру не нужны сигналы
+          наблюдения за ней же, а руководству не нужны команды по чекам. */}
+      <label className="mt-3 block text-sm">
+        Чат кассы
+        <span className="ml-2 text-xs text-neutral-400">
+          только то, что требует действия на планшете
+        </span>
+        <input
+          value={cashierChatId}
+          onChange={(e) => setCashierChatId(e.target.value)}
+          placeholder="-1009876543210"
           className="mt-1 w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
         />
       </label>
@@ -493,6 +514,7 @@ function TelegramSection() {
               await api.patch('/admin/settings/telegram', {
                 ...(token.trim() ? { botToken: token.trim() } : {}),
                 chatId: chatId.trim(),
+                cashierChatId: cashierChatId.trim(),
               });
               setToken('');
               return 'Сохранено';
@@ -528,7 +550,19 @@ function TelegramSection() {
           disabled={busy !== null}
           className="rounded-lg border border-black/10 px-3 py-1.5 text-sm disabled:opacity-50 dark:border-white/15"
         >
-          {busy === 'test' ? 'Отправляем…' : 'Проверить связь'}
+          {busy === 'test' ? 'Отправляем…' : 'Проверить руководство'}
+        </button>
+        <button
+          onClick={() =>
+            run('testCashier', async () => {
+              await api.post('/admin/settings/telegram/test?target=cashier');
+              return 'Сообщение ушло в чат кассы';
+            })
+          }
+          disabled={busy !== null}
+          className="rounded-lg border border-black/10 px-3 py-1.5 text-sm disabled:opacity-50 dark:border-white/15"
+        >
+          {busy === 'testCashier' ? 'Отправляем…' : 'Проверить кассу'}
         </button>
       </div>
 

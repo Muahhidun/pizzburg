@@ -16,6 +16,7 @@ import { AvailabilityService } from '../availability/availability.service';
 import { CancelReasonsService } from './cancel-reasons.service';
 import { LegalService } from '../legal/legal.service';
 import { AddressesService } from '../auth/addresses.service';
+import { TelegramService } from '../telegram/telegram.service';
 
 /**
  * Окно, в котором повторный такой же заказ считается сорвавшимся
@@ -80,6 +81,7 @@ export class OrdersService {
     private readonly cancelReasons: CancelReasonsService,
     private readonly legal: LegalService,
     private readonly addresses: AddressesService,
+    private readonly telegram: TelegramService,
   ) {}
 
   async createOrder(
@@ -472,6 +474,57 @@ export class OrdersService {
         status: d.status,
       })),
     };
+  }
+
+  /**
+   * Говорит кассе, что заказ умер и чек надо отклонить руками.
+   *
+   * Это единственное событие, о котором планшет узнать не может: на
+   * отмену в Poster ничего не отправляется, отменить входящий заказ через
+   * API нельзя, и чек продолжает лежать как живой. Без сообщения кассир
+   * приготовит еду по отменённому заказу — и узнает об этом, только если
+   * сама заглянет в консоль.
+   *
+   * Если чек уже отклонён или его не было вовсе, молчим: сообщение без
+   * действия учит не читать этот канал.
+   */
+  private async tellCashierOrderDied(orderId: string) {
+    try {
+      const order = await this.prisma.order.findUnique({
+        where: { id: orderId },
+        select: {
+          number: true,
+          tenantId: true,
+          cancelReason: true,
+          cancelledBy: true,
+          dispatches: {
+            where: { status: 'SENT', posterStatus: { not: 'REJECTED' } },
+            select: {
+              posterOrderId: true,
+              posterAccount: { select: { name: true } },
+            },
+          },
+        },
+      });
+      const live = (order?.dispatches ?? []).filter(
+        (d) => d.posterOrderId && d.posterOrderId !== 'dry-run',
+      );
+      if (!order || live.length === 0) return;
+
+      const who = order.cancelledBy === 'CUSTOMER' ? 'клиентом' : 'оператором';
+      await this.telegram.notifyCashier(
+        order.tenantId,
+        `🚫 <b>Заказ №${order.number} отменён ${who}</b>` +
+          (order.cancelReason ? `\n${order.cancelReason}` : '') +
+          `\n\nОтклоните на планшете:\n` +
+          live
+            .map((d) => `• ${d.posterAccount.name} — чек №${d.posterOrderId}`)
+            .join('\n'),
+      );
+    } catch (e) {
+      // Побочный канал: сообщение не должно ломать саму отмену
+      this.logger.warn(`Сообщение кассе об отмене не ушло: ${e}`);
+    }
   }
 
   /**
@@ -1097,6 +1150,7 @@ export class OrdersService {
     if (options?.notify !== false) {
       await this.notifications.sendOrderStatus(order.id, next);
     }
+    if (next === 'CANCELLED') await this.tellCashierOrderDied(order.id);
     return this.prisma.order.findUniqueOrThrow({ where: { id: updated.id } });
   }
 

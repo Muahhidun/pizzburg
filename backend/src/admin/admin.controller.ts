@@ -199,8 +199,8 @@ export class AdminController {
   }
 
   @Post('settings/telegram/test')
-  telegramTest() {
-    return this.admin.telegramTest();
+  telegramTest(@Query('target') target?: string) {
+    return this.admin.telegramTest(target === 'cashier' ? 'CASHIER' : 'OWNER');
   }
 
   @Get('promotions')

@@ -265,6 +265,7 @@ export class TelegramSettingsDto {
   /// Пустая строка означает «не меняли»: форма не получает токен обратно
   @IsOptional() @IsString() @MaxLength(200) botToken?: string;
   @IsOptional() @IsString() @MaxLength(64) chatId?: string;
+  @IsOptional() @IsString() @MaxLength(64) cashierChatId?: string;
 }
 
 export class AdjustLoyaltyDto {

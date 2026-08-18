@@ -609,6 +609,13 @@ export class ShortageService {
         // Отдел, который сам отклонил чек, просить отклонить его ещё раз
         // не нужно — это шум в единственном месте, куда кассир смотрит.
         const alreadyRejected = d.posterStatus === 'REJECTED';
+        if (!alreadyRejected && d.posterOrderId && d.posterOrderId !== 'dry-run') {
+          await this.telegram.notifyCashier(
+            order.tenantId,
+            `🚫 <b>Заказ №${order.number}</b>: в части «${d.posterAccount.name}» ` +
+              `не осталось позиций.\nОтклоните чек №${d.posterOrderId} на планшете.`,
+          );
+        }
         await this.prisma.orderDispatch.update({
           where: { id: d.id },
           data: {
@@ -637,6 +644,17 @@ export class ShortageService {
           : 'Клиент подтвердил.') +
         `\nК оплате ${totals.total} ₸.`,
     );
+    // Кассе — только когда нужно действие. Клиент подтвердил сам:
+    // исправленный чек уже печатается, добавить нечего. А вот молчание
+    // означает звонок, и об этом принтер не скажет.
+    if (by === 'TIMEOUT') {
+      await this.telegram.notifyCashier(
+        order.tenantId,
+        `📞 <b>Заказ №${order.number}</b>: клиент не ответил за ` +
+          `${SHORTAGE_WINDOW_MINUTES} мин.\nВезём без «${names}», ` +
+          `к оплате ${totals.total} ₸.\nПозвоните клиенту и предупредите.`,
+      );
+    }
     await this.notifications.sendOrderEvent(
       order.id,
       {
