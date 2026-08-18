@@ -10,6 +10,7 @@ import { PosterClient } from '../poster/poster.client';
 import { PromotionsService } from '../promotions/promotions.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CancelReasonsService } from './cancel-reasons.service';
+import { TelegramService } from '../telegram/telegram.service';
 import { OrdersService } from './orders.service';
 import { lineTotal, recalcAfterShortage, shrinkToOriginal } from './shortage-math';
 
@@ -47,6 +48,7 @@ export class ShortageService {
     private readonly promotions: PromotionsService,
     private readonly notifications: NotificationsService,
     private readonly cancelReasons: CancelReasonsService,
+    private readonly telegram: TelegramService,
   ) {}
 
   // ─── Кассир ───────────────────────────────────────────────────────
@@ -237,6 +239,13 @@ export class ShortageService {
         body: `Не оказалось: ${names}. Везём остальное или отменяем?`,
       },
       { type: 'order_shortage' },
+    );
+    // Руководству — сразу: частичные отказы это как раз то, о чём иначе
+    // узнаёшь только если сам откроешь админку (DECISIONS §12.7).
+    await this.telegram.notify(
+      order.tenantId,
+      `❓ <b>Нехватка позиции</b>\nЗаказ №${order.number}: нет «${names}».\n` +
+        `Ждём ответа клиента ${SHORTAGE_WINDOW_MINUTES} мин.`,
     );
 
     return this.state(order.id);
@@ -582,6 +591,14 @@ export class ShortageService {
     }
 
     const names = gone.map((i) => i.name).join(', ');
+    await this.telegram.notify(
+      order.tenantId,
+      `✅ <b>Заказ №${order.number}</b>: везём без «${names}».\n` +
+        (by === 'TIMEOUT'
+          ? 'Клиент не ответил — нужен звонок.'
+          : 'Клиент подтвердил.') +
+        `\nК оплате ${totals.total} ₸.`,
+    );
     await this.notifications.sendOrderEvent(
       order.id,
       {

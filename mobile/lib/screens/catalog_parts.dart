@@ -353,7 +353,7 @@ class ProductRow extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      inStopList ? 'Закончилась, вернём завтра' : subtitle,
+                      inStopList ? 'Временно недоступно' : subtitle,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.labelMedium,

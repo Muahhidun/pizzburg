@@ -14,6 +14,8 @@ import { FavoritesModule } from './favorites/favorites.module';
 import { MessagesModule } from './messages/messages.module';
 import { GeoModule } from './geo/geo.module';
 import { LegalModule } from './legal/legal.module';
+import { StopListModule } from './stoplist/stoplist.module';
+import { TelegramModule } from './telegram/telegram.module';
 
 @Controller()
 class RootController {
@@ -51,6 +53,8 @@ class RootController {
     PrismaModule,
     AvailabilityModule,
     LegalModule,
+    StopListModule,
+    TelegramModule,
     GeoModule,
     FavoritesModule,
     MessagesModule,

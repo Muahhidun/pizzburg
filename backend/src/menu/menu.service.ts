@@ -44,6 +44,7 @@ export class MenuService {
     });
     if (!tenant) throw new NotFoundException('Unknown tenant');
 
+    const now = new Date();
     const categories = await this.prisma.appCategory.findMany({
       where: { tenantId: tenant.id, isVisible: true },
       orderBy: { sortOrder: 'asc' },
@@ -54,6 +55,10 @@ export class MenuService {
             isVisible: true, // включён на витрине
             category: { isActive: true }, // категория не скрыта в кассе
             posterAccount: { isActive: true },
+            // Наш стоп со сроком (DECISIONS §12.3) позицию НЕ убирает:
+            // исчезновение прочитывается как «блюда больше нет», и
+            // постоянный клиент решит, что его сняли с меню навсегда.
+            // Она остаётся в каталоге неактивной, с подписью.
           },
           orderBy: [
             { sortOverride: { sort: 'asc', nulls: 'last' } },
@@ -74,6 +79,7 @@ export class MenuService {
             price: true,
             priceOverride: true,
             modifiers: true,
+            stoppedUntil: true,
             comboGroups: {
               orderBy: { sortOrder: 'asc' },
               select: {
@@ -118,18 +124,34 @@ export class MenuService {
               priceOverride,
               modifiers,
               comboGroups,
+              stoppedUntil,
               ...p
-            }) => ({
-              name: displayName ?? name,
-              description: displayDescription ?? description,
-              photoUrl: displayPhotoUrl ?? photoUrl,
-              price: priceOverride ?? price,
-              // наборы модификаторов Poster («Донер Комбо», «Напиток к сету»)
-              modifierGroups: normalizeModifierGroups(modifiers),
-              // наши собственные группы (расширение поверх Poster)
-              comboGroups,
-              ...p,
-            }),
+            }) => {
+              // Стоп категории накрывает все её позиции: «сегодня без
+              // роллов» ставится одним действием, а не двадцатью.
+              const until =
+                c.stoppedUntil && c.stoppedUntil > now
+                  ? c.stoppedUntil
+                  : stoppedUntil && stoppedUntil > now
+                    ? stoppedUntil
+                    : null;
+              return {
+                name: displayName ?? name,
+                description: displayDescription ?? description,
+                photoUrl: displayPhotoUrl ?? photoUrl,
+                price: priceOverride ?? price,
+                // наборы модификаторов Poster («Донер Комбо», «Напиток к сету»)
+                modifierGroups: normalizeModifierGroups(modifiers),
+                // наши собственные группы (расширение поверх Poster)
+                comboGroups,
+                /// Временно недоступна: срок сравниваем здесь, поэтому
+                /// позиция возвращается сама, даже если фоновая задача
+                /// не отработала.
+                isAvailable: until === null,
+                availableFrom: until,
+                ...p,
+              };
+            },
           ),
         })),
     };

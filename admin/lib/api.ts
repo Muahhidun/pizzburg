@@ -189,6 +189,39 @@ export interface CashierQueue {
   orders: CashierOrder[];
 }
 
+/** Срок стопа: бессрочного стопа у нас нет (DECISIONS §12.3) */
+export type StopPreset = 'HOUR' | 'TWO_HOURS' | 'END_OF_DAY' | 'NEXT_SHIFT';
+
+export interface StoppedProduct {
+  id: string;
+  name: string;
+  category: string;
+  department: string;
+  until: string;
+  reason: string | null;
+}
+
+export interface StoppedCategory {
+  id: string;
+  name: string;
+  until: string;
+  reason: string | null;
+}
+
+export interface StopListResponse {
+  presets: { value: StopPreset; label: string }[];
+  products: StoppedProduct[];
+  categories: StoppedCategory[];
+}
+
+/** Настройки телеграм-канала. Токен наружу не отдаётся */
+export interface TelegramSettings {
+  enabled: boolean;
+  chatId: string;
+  botTokenSet: boolean;
+  botTokenHint: string;
+}
+
 /**
  * Причина отмены из справочника. `availableToCustomer` отделяет причины,
  * которые видит клиент, от внутренних («нет курьеров», «нет позиции»).

@@ -35,6 +35,9 @@ import {
   UpdateSettingsDto,
   UpdateOrderStatusDto,
   MarkShortageDto,
+  StopItemDto,
+  ReleaseStopDto,
+  TelegramSettingsDto,
   AdjustLoyaltyDto,
   PublishLegalDto,
   CancelReasonDto,
@@ -149,6 +152,55 @@ export class AdminController {
   @Patch('orders/:id/cancel')
   cancelOrder(@Param('id') id: string, @Body() dto: CancelOrderByAdminDto) {
     return this.admin.cancelOrder(id, dto.reasonId, dto.comment);
+  }
+
+  // ─── Стоп-листы со сроком (DECISIONS §12.3) ──────────────────
+
+  /** Что сейчас на стопе + доступные сроки */
+  @Get('stoplist')
+  stopList() {
+    return this.admin.stopList();
+  }
+
+  /** Поставить позицию или категорию на стоп. Срок обязателен */
+  @Post('stoplist')
+  stopItem(@Body() dto: StopItemDto) {
+    return this.admin.stopItem(dto);
+  }
+
+  /** Досрочно вернуть в продажу */
+  @Post('stoplist/release')
+  releaseStop(@Body() dto: ReleaseStopDto) {
+    return this.admin.releaseStop(dto);
+  }
+
+  /** Ручной синк меню с Poster — не ждать четверть часа */
+  @Post('poster-sync')
+  syncPoster() {
+    return this.admin.syncPoster();
+  }
+
+  // ─── Телеграм-канал руководства (DECISIONS §12.7) ────────────
+
+  @Get('settings/telegram')
+  telegramSettings() {
+    return this.admin.telegramSettings();
+  }
+
+  @Patch('settings/telegram')
+  updateTelegram(@Body() dto: TelegramSettingsDto) {
+    return this.admin.updateTelegram(dto);
+  }
+
+  /** Определить чат по последнему сообщению боту */
+  @Post('settings/telegram/detect-chat')
+  telegramDetectChat() {
+    return this.admin.telegramDetectChat();
+  }
+
+  @Post('settings/telegram/test')
+  telegramTest() {
+    return this.admin.telegramTest();
   }
 
   @Get('promotions')

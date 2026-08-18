@@ -246,6 +246,27 @@ export class MarkShortageDto {
   itemIds: string[];
 }
 
+/** Постановка на стоп: срок обязателен (DECISIONS §12.3) */
+export class StopItemDto {
+  @IsOptional() @IsString() productId?: string;
+  @IsOptional() @IsString() appCategoryId?: string;
+  @IsIn(['HOUR', 'TWO_HOURS', 'END_OF_DAY', 'NEXT_SHIFT'])
+  preset: 'HOUR' | 'TWO_HOURS' | 'END_OF_DAY' | 'NEXT_SHIFT';
+  @IsOptional() @IsString() @MaxLength(200) reason?: string;
+}
+
+export class ReleaseStopDto {
+  @IsOptional() @IsString() productId?: string;
+  @IsOptional() @IsString() appCategoryId?: string;
+}
+
+export class TelegramSettingsDto {
+  @IsOptional() @IsBoolean() enabled?: boolean;
+  /// Пустая строка означает «не меняли»: форма не получает токен обратно
+  @IsOptional() @IsString() @MaxLength(200) botToken?: string;
+  @IsOptional() @IsString() @MaxLength(64) chatId?: string;
+}
+
 export class AdjustLoyaltyDto {
   @IsInt() @Min(-10_000_000) @Max(10_000_000) amount: number;
   @IsString() @Length(3, 300) comment: string;

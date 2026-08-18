@@ -8,6 +8,7 @@ import { LoyaltyModule } from '../loyalty/loyalty.module';
 import { PromotionsModule } from '../promotions/promotions.module';
 import { OrdersModule } from '../orders/orders.module';
 import { MessagesModule } from '../messages/messages.module';
+import { StopListModule } from '../stoplist/stoplist.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { MessagesModule } from '../messages/messages.module';
     OrdersModule,
     PromotionsModule,
     MessagesModule,
+    StopListModule,
   ],
   controllers: [AdminController],
   providers: [AdminService, AdminGuard],

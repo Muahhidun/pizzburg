@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Settings, api, formatTenge } from '@/lib/api';
+import { Settings, TelegramSettings, api, formatTenge } from '@/lib/api';
 
 export default function SettingsPage() {
   const [data, setData] = useState<Settings | null>(null);
@@ -220,6 +220,8 @@ export default function SettingsPage() {
         </p>
       </section>
 
+      <TelegramSection />
+
       <section className="rounded-2xl bg-white p-5 shadow-sm dark:bg-neutral-900">
         <h2 className="mb-3 font-semibold">Точки</h2>
         <ul className="space-y-1.5">
@@ -368,5 +370,157 @@ function AddAccount({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
       </div>
     </div>
+  );
+}
+
+
+/**
+ * Телеграм как канал руководства (DECISIONS §12.7).
+ *
+ * Токен живёт в настройках арендатора, а не в переменных окружения:
+ * владелец меняет бота из админки, без деплоя. Обратно форме токен не
+ * отдаётся — только хвост, чтобы сверить, что вставлен нужный.
+ */
+function TelegramSection() {
+  const [state, setState] = useState<TelegramSettings | null>(null);
+  const [token, setToken] = useState('');
+  const [chatId, setChatId] = useState('');
+  const [note, setNote] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const s = await api.get<TelegramSettings>('/admin/settings/telegram');
+    setState(s);
+    setChatId(s.chatId);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function run(what: string, fn: () => Promise<string | null>) {
+    setBusy(what);
+    setError(null);
+    setNote(null);
+    try {
+      setNote(await fn());
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (!state) return null;
+
+  return (
+    <section className="rounded-2xl bg-white p-5 shadow-sm dark:bg-neutral-900">
+      <h2 className="mb-1 font-semibold">Телеграм для руководства</h2>
+      <p className="mb-3 text-sm text-neutral-500">
+        Сюда приходят стоп-листы, нехватка позиций и другие события, о которых
+        иначе узнаёшь, только если сам откроешь админку. Кассиры этим ботом не
+        пользуются.
+      </p>
+
+      <ol className="mb-4 list-decimal space-y-1 pl-5 text-sm text-neutral-500">
+        <li>Создайте бота у @BotFather и скопируйте токен.</li>
+        <li>Вставьте токен ниже и сохраните.</li>
+        <li>Напишите боту любое сообщение и нажмите «Определить чат».</li>
+        <li>Включите канал и проверьте связь.</li>
+      </ol>
+
+      <label className="block text-sm">
+        Токен бота
+        {state.botTokenSet && (
+          <span className="ml-2 text-xs text-emerald-600">
+            задан {state.botTokenHint}
+          </span>
+        )}
+        <input
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          type="password"
+          placeholder={state.botTokenSet ? 'оставьте пустым, чтобы не менять' : '123456:AA…'}
+          className="mt-1 w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
+        />
+      </label>
+
+      <label className="mt-3 block text-sm">
+        Чат
+        <input
+          value={chatId}
+          onChange={(e) => setChatId(e.target.value)}
+          placeholder="-1001234567890"
+          className="mt-1 w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
+        />
+      </label>
+
+      <label className="mt-3 flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={state.enabled}
+          onChange={(e) =>
+            run('toggle', async () => {
+              await api.patch('/admin/settings/telegram', {
+                enabled: e.target.checked,
+              });
+              return e.target.checked ? 'Канал включён' : 'Канал выключен';
+            })
+          }
+        />
+        Отправлять уведомления
+      </label>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          onClick={() =>
+            run('save', async () => {
+              await api.patch('/admin/settings/telegram', {
+                ...(token.trim() ? { botToken: token.trim() } : {}),
+                chatId: chatId.trim(),
+              });
+              setToken('');
+              return 'Сохранено';
+            })
+          }
+          disabled={busy !== null}
+          className="rounded-lg bg-black px-3 py-1.5 text-sm text-white disabled:opacity-50 dark:bg-white dark:text-black"
+        >
+          {busy === 'save' ? 'Сохраняем…' : 'Сохранить'}
+        </button>
+        <button
+          onClick={() =>
+            run('detect', async () => {
+              const res = await api.post<{ chatId: string; title: string }>(
+                '/admin/settings/telegram/detect-chat',
+              );
+              setChatId(res.chatId);
+              return `Нашёл чат ${res.title || res.chatId} — нажмите «Сохранить»`;
+            })
+          }
+          disabled={busy !== null}
+          className="rounded-lg border border-black/10 px-3 py-1.5 text-sm disabled:opacity-50 dark:border-white/15"
+        >
+          {busy === 'detect' ? 'Ищем…' : 'Определить чат'}
+        </button>
+        <button
+          onClick={() =>
+            run('test', async () => {
+              await api.post('/admin/settings/telegram/test');
+              return 'Сообщение отправлено — проверьте телеграм';
+            })
+          }
+          disabled={busy !== null}
+          className="rounded-lg border border-black/10 px-3 py-1.5 text-sm disabled:opacity-50 dark:border-white/15"
+        >
+          {busy === 'test' ? 'Отправляем…' : 'Проверить связь'}
+        </button>
+      </div>
+
+      {note && <p className="mt-3 text-sm text-emerald-600">{note}</p>}
+      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+    </section>
   );
 }

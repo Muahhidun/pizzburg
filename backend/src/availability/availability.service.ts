@@ -167,6 +167,29 @@ export class AvailabilityService {
     return (tenantSettings as Record<string, any>) ?? {};
   }
 
+  /**
+   * Локальное время арендатора. Публично, потому что сроки по расписанию
+   * считает не только этот сервис: стоп-лист со сроком «до конца дня» и
+   * «до следующей смены» обязан жить в той же временной зоне, что и
+   * приём заказов, иначе позиция вернётся посреди ночи.
+   */
+  localTime(tenantSettings: unknown, at = new Date()) {
+    const timezone: string =
+      this.settingsOf(tenantSettings).timezone ?? DEFAULT_TIMEZONE;
+    return { timezone, ...this.localParts(at, timezone) };
+  }
+
+  /** Часы работы на тот день, в который попадает `at` по местному времени */
+  hoursOn(tenantSettings: unknown, at = new Date()): HoursInterval[] {
+    const s = this.settingsOf(tenantSettings);
+    const { weekday, ymd } = this.localTime(tenantSettings, at);
+    const profiles: ScheduleProfile[] = Array.isArray(s.schedule?.profiles)
+      ? s.schedule.profiles
+      : [];
+    const profile = this.activeProfile(profiles, ymd);
+    return profile?.hours?.[weekday] ?? [];
+  }
+
   /** Полное состояние приёма заказов на момент `now` */
   getState(tenantSettings: unknown, now = new Date()): AvailabilityState {
     const s = this.settingsOf(tenantSettings);

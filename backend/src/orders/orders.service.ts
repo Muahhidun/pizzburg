@@ -125,9 +125,10 @@ export class OrdersService {
     const ids = dto.items.map((i) => i.productId);
     const products = await this.prisma.product.findMany({
       where: { id: { in: ids }, tenantId: tenant.id },
-      include: { posterAccount: true, category: true },
+      include: { posterAccount: true, category: true, appCategory: true },
     });
     const byId = new Map(products.map((p) => [p.id, p]));
+    const now = new Date();
     for (const item of dto.items) {
       const p = byId.get(item.productId);
       if (!p || !p.isVisible || !p.posterAccount.isActive) {
@@ -136,6 +137,19 @@ export class OrdersService {
       if (!p.isActive || !p.category.isActive) {
         throw new BadRequestException(
           `«${p.displayName ?? p.name}» сейчас в стоп-листе`,
+        );
+      }
+      // Наш стоп со сроком (DECISIONS §12.3). Приложение такую позицию
+      // показывает неактивной, но решает сервер: корзина могла пролежать
+      // с прошлого захода, когда позиция ещё продавалась.
+      const stoppedUntil =
+        (p.appCategory?.stoppedUntil && p.appCategory.stoppedUntil > now
+          ? p.appCategory.stoppedUntil
+          : null) ??
+        (p.stoppedUntil && p.stoppedUntil > now ? p.stoppedUntil : null);
+      if (stoppedUntil) {
+        throw new BadRequestException(
+          `«${p.displayName ?? p.name}» временно недоступна — уберите её из корзины`,
         );
       }
     }

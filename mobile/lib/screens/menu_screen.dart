@@ -533,6 +533,7 @@ class _MenuScreenState extends State<MenuScreen> {
                                   child: Consumer<Cart>(
                                     builder: (context, cart, _) => ProductRow(
                                       product: product,
+                                      inStopList: !product.isAvailable,
                                       favorite: authed
                                           ? favorites.contains(product.id)
                                           : null,
@@ -544,8 +545,10 @@ class _MenuScreenState extends State<MenuScreen> {
                                       onTap: () => Navigator.push(
                                         context,
                                         MaterialPageRoute(
-                                          builder: (_) =>
-                                              ProductScreen(product: product),
+                                          builder: (_) => ProductScreen(
+                                            product: product,
+                                            inStopList: !product.isAvailable,
+                                          ),
                                         ),
                                       ),
                                       onAdd: () {
@@ -555,6 +558,8 @@ class _MenuScreenState extends State<MenuScreen> {
                                             MaterialPageRoute(
                                               builder: (_) => ProductScreen(
                                                 product: product,
+                                                inStopList:
+                                                    !product.isAvailable,
                                               ),
                                             ),
                                           );
@@ -608,6 +613,7 @@ class _MenuScreenState extends State<MenuScreen> {
                                 height: _productRowHeight,
                                 child: Consumer<Cart>(
                                   builder: (context, cart, _) => ProductRow(
+                                    inStopList: !product.isAvailable,
                                     favorite: authed
                                         ? favorites.contains(product.id)
                                         : null,
@@ -620,8 +626,10 @@ class _MenuScreenState extends State<MenuScreen> {
                                     onTap: () => Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (_) =>
-                                            ProductScreen(product: product),
+                                        builder: (_) => ProductScreen(
+                                          product: product,
+                                          inStopList: !product.isAvailable,
+                                        ),
                                       ),
                                     ),
                                     onAdd: () {
@@ -631,8 +639,10 @@ class _MenuScreenState extends State<MenuScreen> {
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(
-                                            builder: (_) =>
-                                                ProductScreen(product: product),
+                                            builder: (_) => ProductScreen(
+                                              product: product,
+                                              inStopList: !product.isAvailable,
+                                            ),
                                           ),
                                         );
                                         return;

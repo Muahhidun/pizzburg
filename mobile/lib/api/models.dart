@@ -42,6 +42,13 @@ class Product {
   final int price;
   final List<ModifierGroup> modifierGroups;
 
+  /// Позиция временно снята с продажи (DECISIONS §12.3).
+  ///
+  /// Из каталога она при этом не исчезает: исчезновение постоянный клиент
+  /// читает как «блюда больше нет в меню». Показываем её приглушённой с
+  /// подписью и не даём положить в корзину.
+  final bool isAvailable;
+
   Product({
     required this.id,
     required this.name,
@@ -53,6 +60,7 @@ class Product {
     this.isNew = false,
     required this.price,
     required this.modifierGroups,
+    this.isAvailable = true,
   });
 
   factory Product.fromJson(Map<String, dynamic> json) => Product(
@@ -68,6 +76,9 @@ class Product {
     modifierGroups: ((json['modifierGroups'] ?? []) as List)
         .map((g) => ModifierGroup.fromJson(g))
         .toList(),
+    // Старые сборки поля не знают: без него позиция считается доступной,
+    // и сервер всё равно не даст оформить заказ
+    isAvailable: json['isAvailable'] ?? true,
   );
 
   bool get hasChoices => modifierGroups.isNotEmpty;

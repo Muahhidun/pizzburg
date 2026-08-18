@@ -30,6 +30,10 @@ import { AvailabilityService } from '../availability/availability.service';
 import { LegalService } from '../legal/legal.service';
 import { CancelReasonsService } from '../orders/cancel-reasons.service';
 import { ShortageService } from '../orders/shortage.service';
+import { StopListService } from '../stoplist/stoplist.service';
+import { STOP_PRESETS, type StopPreset } from '../stoplist/stop-deadline';
+import { TelegramService } from '../telegram/telegram.service';
+import { PosterSyncService } from '../poster/poster-sync.service';
 import { PromotionsService } from '../promotions/promotions.service';
 import { OrderStatus } from '@prisma/client';
 import { GeoService } from '../geo/geo.service';
@@ -132,6 +136,9 @@ export class AdminService {
     private readonly promoEngine: PromotionsService,
     private readonly geo: GeoService,
     private readonly shortage: ShortageService,
+    private readonly stops: StopListService,
+    private readonly telegram: TelegramService,
+    private readonly posterSync: PosterSyncService,
   ) {}
 
   private async tenant(slug = 'pizzburg') {
@@ -541,6 +548,66 @@ export class AdminService {
   async markShortage(orderId: string, itemIds: string[]) {
     const tenant = await this.tenant();
     return this.shortage.markUnavailable(tenant.id, orderId, itemIds);
+  }
+
+  // ─── Стоп-листы со сроком (DECISIONS §12.3) ──────────────────
+
+  async stopList() {
+    const tenant = await this.tenant();
+    return { presets: STOP_PRESETS, ...(await this.stops.active(tenant.id)) };
+  }
+
+  async stopItem(dto: {
+    productId?: string;
+    appCategoryId?: string;
+    preset: StopPreset;
+    reason?: string;
+  }) {
+    const tenant = await this.tenant();
+    return this.stops.stop(
+      tenant.id,
+      { productId: dto.productId, appCategoryId: dto.appCategoryId },
+      dto.preset,
+      dto.reason ?? '',
+    );
+  }
+
+  async releaseStop(dto: { productId?: string; appCategoryId?: string }) {
+    const tenant = await this.tenant();
+    return this.stops.release(tenant.id, dto);
+  }
+
+  /** Ручной синк меню с Poster — кнопка в админке */
+  async syncPoster() {
+    const tenant = await this.tenant();
+    return this.posterSync.syncTenant(tenant.id);
+  }
+
+  // ─── Телеграм-канал руководства (DECISIONS §12.7) ────────────
+
+  async telegramSettings() {
+    const tenant = await this.tenant();
+    return this.telegram.publicSettings(tenant.id);
+  }
+
+  async updateTelegram(dto: {
+    enabled?: boolean;
+    botToken?: string;
+    chatId?: string;
+  }) {
+    const tenant = await this.tenant();
+    await this.telegram.saveSettings(tenant.id, dto);
+    return this.telegram.publicSettings(tenant.id);
+  }
+
+  async telegramDetectChat() {
+    const tenant = await this.tenant();
+    return this.telegram.detectChat(tenant.id);
+  }
+
+  async telegramTest() {
+    const tenant = await this.tenant();
+    return this.telegram.sendTest(tenant.id);
   }
 
   async promotions() {

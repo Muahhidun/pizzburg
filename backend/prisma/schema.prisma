@@ -27,6 +27,7 @@ model Tenant {
   orders         Order[]
   promoCodes     PromoCode[]
   loyaltyTxns    LoyaltyTransaction[]
+  stopEvents     StopEvent[]
 }
 
 /// Аккаунт Poster = отдел на своём планшете. У тенанта их может быть
@@ -93,8 +94,14 @@ model AppCategory {
   sortOrder Int     @default(0)
   isVisible Boolean @default(true)
 
+  /// Наш стоп-лист со сроком (DECISIONS §12.3). Истёк — категория
+  /// возвращается сама, без участия человека.
+  stoppedUntil  DateTime?
+  stoppedReason String?
+
   products         Product[]
   posterCategories Category[]
+  stopEvents       StopEvent[]
 
   @@index([tenantId])
 }
@@ -153,12 +160,49 @@ model Product {
   sortOverride       Int? // ручной порядок внутри витринной категории
   isVisible          Boolean      @default(true)
 
+  /// ─ Наш стоп-лист со сроком (DECISIONS §12.3) ─
+  ///
+  /// Третье поле, а не переиспользование двух существующих, и это
+  /// принципиально. `isActive` приходит синком из Poster и молча
+  /// снимался бы каждые 15 минут. `isVisible` — «убрано с витрины
+  /// намеренно», такие позиции клиент не должен видеть вовсе. Наш стоп
+  /// временный: позиция остаётся в каталоге неактивной, с подписью
+  /// «временно недоступно», и возвращается сама по истечении срока.
+  stoppedUntil  DateTime?
+  stoppedReason String?
+
   orderItems  OrderItem[]
   comboGroups ComboGroup[]
   favorites   Favorite[]
+  stopEvents  StopEvent[]
 
   @@unique([posterAccountId, posterId])
   @@index([tenantId, categoryId])
+}
+
+/// История стоп-листа: что стояло, сколько времени и сколько раз.
+///
+/// Без неё наблюдаемость теряется в тот же день: как только срок
+/// истекает, `stoppedUntil` обнуляется и факт стопа исчезает бесследно.
+/// А весь смысл §12.3 — видеть, что и как часто снимают с продажи.
+model StopEvent {
+  id            String       @id @default(cuid())
+  tenantId      String
+  tenant        Tenant       @relation(fields: [tenantId], references: [id])
+  productId     String?
+  product       Product?     @relation(fields: [productId], references: [id])
+  appCategoryId String?
+  appCategory   AppCategory? @relation(fields: [appCategoryId], references: [id])
+  reason        String       @default("")
+  startedAt     DateTime     @default(now())
+  /// Плановый срок возврата — тот, что выбрал человек
+  until         DateTime
+  /// Когда позиция вернулась на самом деле
+  endedAt       DateTime?
+  /// EXPIRED — вернулась по сроку, MANUAL — вернули досрочно
+  endedBy       String?
+
+  @@index([tenantId, startedAt])
 }
 
 /// Группа выбора в комбо-товаре («Основное блюдо», «Напиток», «Добавка»).
@@ -491,46 +535,46 @@ enum ShortageState {
 }
 
 model Order {
-  id              String        @id @default(cuid())
-  tenantId        String
-  tenant          Tenant        @relation(fields: [tenantId], references: [id])
-  venueId         String
-  venue           Venue         @relation(fields: [venueId], references: [id])
-  customerId      String?
-  customer        Customer?     @relation(fields: [customerId], references: [id])
-  number          Int // человекочитаемый номер, сквозной по тенанту
-  type            OrderType
-  status          OrderStatus   @default(NEW)
+  id                 String        @id @default(cuid())
+  tenantId           String
+  tenant             Tenant        @relation(fields: [tenantId], references: [id])
+  venueId            String
+  venue              Venue         @relation(fields: [venueId], references: [id])
+  customerId         String?
+  customer           Customer?     @relation(fields: [customerId], references: [id])
+  number             Int // человекочитаемый номер, сквозной по тенанту
+  type               OrderType
+  status             OrderStatus   @default(NEW)
   // { street, house, flat, entrance, floor, comment, lat, lng }
-  address         Json?
-  scheduledAt     DateTime? // предзаказ; null = как можно скорее
-  comment         String        @default("")
-  subtotal        Int // ₸ до скидок
-  deliveryFee     Int           @default(0)
-  discount        Int           @default(0) // вся выгода: подарки + скидка + баллы
+  address            Json?
+  scheduledAt        DateTime? // предзаказ; null = как можно скорее
+  comment            String        @default("")
+  subtotal           Int // ₸ до скидок
+  deliveryFee        Int           @default(0)
+  discount           Int           @default(0) // вся выгода: подарки + скидка + баллы
   /// Денежная скидка по акциям, ₸. Отдельным полем, а не внутри discount:
   /// при отправке в Poster её нужно прибавить к «Личной интеграции», и
   /// вычислить её обратно из общей суммы выгоды нельзя.
-  promoDiscount   Int           @default(0)
-  pointsSpent     Int           @default(0)
-  pointsEarned    Int           @default(0)
-  total           Int
-  paymentMethod   PaymentMethod
-  paymentStatus   PaymentStatus @default(NOT_REQUIRED)
-  promoCode       String?
+  promoDiscount      Int           @default(0)
+  pointsSpent        Int           @default(0)
+  pointsEarned       Int           @default(0)
+  total              Int
+  paymentMethod      PaymentMethod
+  paymentStatus      PaymentStatus @default(NOT_REQUIRED)
+  promoCode          String?
   /// Купюра для сдачи при оплате наличными; кассир готовит размен
-  changeFrom      Int?
+  changeFrom         Int?
   /// Свободный комментарий к отмене
-  cancelReason    String?
+  cancelReason       String?
   /// Причина из справочника — по ней строится отчёт
-  cancelReasonId  String?
-  cancelReasonRef CancelReason? @relation(fields: [cancelReasonId], references: [id])
+  cancelReasonId     String?
+  cancelReasonRef    CancelReason? @relation(fields: [cancelReasonId], references: [id])
   /// Кто отменил: CUSTOMER | ADMIN | POSTER — для отчёта по отменам
-  cancelledBy     String?
-  cancelledAt     DateTime?
+  cancelledBy        String?
+  cancelledAt        DateTime?
   /// Версии документов, действовавшие при оформлении — доказательство
   /// согласия именно на эту редакцию
-  legalVersions   Json?
+  legalVersions      Json?
   // ─ Нехватка позиции (DECISIONS §12.9) ─────────────────────────────
   shortageState      ShortageState @default(NONE)
   /// Когда кассир отметил нехватку — по нему в консоли видно, сколько висит
@@ -541,8 +585,8 @@ model Order {
   /// после TIMEOUT человек ещё не знает, что везём без позиции
   shortageResolvedBy String?
   shortageResolvedAt DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 
   items       OrderItem[]
   dispatches  OrderDispatch[]
@@ -583,26 +627,26 @@ model OrderDispatch {
 }
 
 model OrderItem {
-  id        String   @id @default(cuid())
-  orderId   String
-  order     Order    @relation(fields: [orderId], references: [id])
-  productId String?
-  product   Product? @relation(fields: [productId], references: [id])
+  id            String   @id @default(cuid())
+  orderId       String
+  order         Order    @relation(fields: [orderId], references: [id])
+  productId     String?
+  product       Product? @relation(fields: [productId], references: [id])
   // снапшоты на момент заказа — меню меняется, чек неизменен
-  name      String
-  price     Int
-  qty       Int
+  name          String
+  price         Int
+  qty           Int
   // выбранные модификаторы: [{name, price}]
-  modifiers Json     @default("[]")
+  modifiers     Json     @default("[]")
   // подарок по акции: клиент не платит, в Poster уходит полной ценой,
   // компенсируется «Личной интеграцией»
-  isGift    Boolean  @default(false)
+  isGift        Boolean  @default(false)
   /// Позиции не оказалось — кассир отметил её в консоли (DECISIONS §12.9).
   ///
   /// Строка не удаляется, а гасится: в кассу и в сумму она больше не
   /// попадает, но и клиенту, и разбору смены нужно видеть, чего именно
   /// не привезли. Удалённая строка не оставила бы следа.
-  isUnavailable Boolean @default(false)
+  isUnavailable Boolean  @default(false)
 
   @@index([orderId])
 }
