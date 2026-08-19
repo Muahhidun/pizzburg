@@ -41,7 +41,11 @@ export class StatusPollerService {
           {
             status: 'CANCELLED',
             cancelledAt: { gt: new Date(Date.now() - 2 * 60 * 60 * 1000) },
-            dispatches: { some: { posterStatus: { not: 'REJECTED' } } },
+            dispatches: {
+              some: {
+                OR: [{ posterStatus: null }, { posterStatus: { not: 'REJECTED' } }],
+              },
+            },
           },
         ],
         dispatches: {

@@ -498,7 +498,15 @@ export class OrdersService {
           cancelReason: true,
           cancelledBy: true,
           dispatches: {
-            where: { status: 'SENT', posterStatus: { not: 'REJECTED' } },
+            // NULL — это чек, которого кассир ещё не касалась, то есть
+            // ровно тот, который надо отклонить. Prisma при `not` его
+            // отсекает (NOT NULL = NULL в SQL), поэтому условие пишем
+            // явно: молчание из-за этого стоило кассиру пропущенной
+            // отмены на живом тесте.
+            where: {
+              status: 'SENT',
+              OR: [{ posterStatus: null }, { posterStatus: { not: 'REJECTED' } }],
+            },
             select: {
               posterOrderId: true,
               posterAccount: { select: { name: true } },

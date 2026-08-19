@@ -80,8 +80,11 @@ export class ShortageService {
             dispatches: {
               some: {
                 status: 'SENT',
-                posterStatus: { not: 'REJECTED' },
                 posterOrderId: { not: null },
+                // См. комментарий в OrdersService.tellCashierOrderDied:
+                // `not` в Prisma отсекает NULL, а именно NULL стоит у
+                // чека, который ещё висит на планшете нетронутым.
+                OR: [{ posterStatus: null }, { posterStatus: { not: 'REJECTED' } }],
               },
             },
           },
