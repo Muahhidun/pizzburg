@@ -11,6 +11,7 @@ import { PromotionsService } from '../promotions/promotions.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CancelReasonsService } from './cancel-reasons.service';
 import { TelegramService } from '../telegram/telegram.service';
+import { ServiceReceiptService } from './service-receipt.service';
 import { OrdersService } from './orders.service';
 import { lineTotal, recalcAfterShortage, shrinkToOriginal } from './shortage-math';
 
@@ -49,6 +50,7 @@ export class ShortageService {
     private readonly notifications: NotificationsService,
     private readonly cancelReasons: CancelReasonsService,
     private readonly telegram: TelegramService,
+    private readonly serviceReceipt: ServiceReceiptService,
   ) {}
 
   // ─── Кассир ───────────────────────────────────────────────────────
@@ -634,6 +636,13 @@ export class ShortageService {
             order.tenantId,
             `🚫 <b>Заказ №${order.number}</b>: в части «${d.posterAccount.name}» ` +
               `не осталось позиций.\nОтклоните чек №${d.posterOrderId} на планшете.`,
+          );
+          // Замыкаем контур на планшете: за время разбирательства отдел
+          // получает ровно одно из двух — исправленный чек или этот.
+          await this.serviceReceipt.send(
+            d.posterAccountId,
+            `ЗАКАЗ №${order.number}: ПОЗИЦИЙ ЭТОЙ ЧАСТИ НЕ ОСТАЛОСЬ. ` +
+              `ОТКЛОНИТЕ ЧЕК №${d.posterOrderId}, НЕ ГОТОВЬТЕ.`,
           );
         }
         await this.prisma.orderDispatch.update({

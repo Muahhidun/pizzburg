@@ -30,6 +30,7 @@ function serviceFor(order: Record<string, unknown> | null) {
     undefined as never,
     undefined as never,
     telegram as never,
+    undefined as never,
   );
   (service as unknown as Record<string, unknown>).markUnavailable = async (
     _tenantId: string,

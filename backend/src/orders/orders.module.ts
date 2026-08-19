@@ -6,6 +6,7 @@ import { OrdersService } from './orders.service';
 import { StatusPollerService } from './status-poller.service';
 import { CancelReasonsService } from './cancel-reasons.service';
 import { ShortageService } from './shortage.service';
+import { ServiceReceiptService } from './service-receipt.service';
 import { AuthModule } from '../auth/auth.module';
 import { LoyaltyModule } from '../loyalty/loyalty.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -24,7 +25,13 @@ import { NotificationsModule } from '../notifications/notifications.module';
     StatusPollerService,
     CancelReasonsService,
     ShortageService,
+    ServiceReceiptService,
   ],
-  exports: [OrdersService, CancelReasonsService, ShortageService],
+  exports: [
+    OrdersService,
+    CancelReasonsService,
+    ShortageService,
+    ServiceReceiptService,
+  ],
 })
 export class OrdersModule {}

@@ -41,6 +41,7 @@ function serviceFor(order: Record<string, unknown>) {
     undefined as never,
     undefined as never,
     undefined as never,
+    undefined as never,
   );
   (service as unknown as Record<string, unknown>).state = async () => ({});
 

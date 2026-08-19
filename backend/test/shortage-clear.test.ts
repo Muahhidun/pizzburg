@@ -38,6 +38,7 @@ function serviceFor(shortageState: string) {
     undefined as never,
     undefined as never,
     undefined as never,
+    undefined as never,
   );
   (service as unknown as Record<string, unknown>).state = async () => ({});
   return { service, cleared };

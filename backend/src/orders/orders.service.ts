@@ -17,6 +17,7 @@ import { CancelReasonsService } from './cancel-reasons.service';
 import { LegalService } from '../legal/legal.service';
 import { AddressesService } from '../auth/addresses.service';
 import { TelegramService } from '../telegram/telegram.service';
+import { ServiceReceiptService } from './service-receipt.service';
 
 /**
  * Окно, в котором повторный такой же заказ считается сорвавшимся
@@ -91,6 +92,7 @@ export class OrdersService {
     private readonly legal: LegalService,
     private readonly addresses: AddressesService,
     private readonly telegram: TelegramService,
+    private readonly serviceReceipt: ServiceReceiptService,
   ) {}
 
   async createOrder(
@@ -549,6 +551,7 @@ export class OrdersService {
           total: true,
           cancelReason: true,
           cancelledBy: true,
+          customer: { select: { phone: true } },
           dispatches: {
             // NULL — это чек, которого кассир ещё не касалась, то есть
             // ровно тот, который надо отклонить. Prisma при `not` его
@@ -561,6 +564,7 @@ export class OrdersService {
             },
             select: {
               posterOrderId: true,
+              posterAccountId: true,
               posterAccount: { select: { name: true } },
             },
           },
@@ -593,6 +597,19 @@ export class OrdersService {
             .map((d) => `• ${d.posterAccount.name} — чек №${d.posterOrderId}`)
             .join('\n'),
       );
+
+      // И тем же сообщением — на сам планшет. Телеграм кассир может не
+      // увидеть посреди смены, а печатающийся чек не заметить нельзя.
+      // Шлём в каждый отдел отдельно: отклонять чек каждому свой.
+      for (const d of live) {
+        await this.serviceReceipt.send(
+          d.posterAccountId,
+          `ЗАКАЗ №${order.number} ОТМЕНЁН ${who.toUpperCase()}. ` +
+            `ОТКЛОНИТЕ ЧЕК №${d.posterOrderId}, НЕ ГОТОВЬТЕ.` +
+            (order.cancelReason ? ` Причина: ${order.cancelReason}.` : ''),
+          order.customer?.phone ?? '',
+        );
+      }
     } catch (e) {
       // Побочный канал: сообщение не должно ломать саму отмену
       this.logger.warn(`Сообщение об отмене не ушло: ${e}`);
