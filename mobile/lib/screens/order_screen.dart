@@ -65,7 +65,9 @@ class _OrderScreenState extends State<OrderScreen> {
     // по нехватке позиции. Опрашивать сервер раз в секунду ради этого
     // незачем: срок известен заранее.
     _countdown = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && _awaitingShortage) setState(() {});
+      if (mounted && (_awaitingShortage || _beforeDispatch != null)) {
+        setState(() {});
+      }
     });
   }
 
@@ -78,6 +80,20 @@ class _OrderScreenState extends State<OrderScreen> {
 
   /// Ждём ли ответа клиента по нехватке позиции (DECISIONS §12.9)
   bool get _awaitingShortage => _data?['shortageState'] == 'AWAITING_CUSTOMER';
+
+  /// Сколько осталось до отправки заказа на кухню.
+  ///
+  /// Пока идёт окно отмены, заказ у нас есть, а в кассе его ещё нет —
+  /// и честно сказать об этом важнее, чем написать «отправлен»: именно
+  /// в эти секунды отмена ничего никому не стоит.
+  Duration? get _beforeDispatch {
+    final raw = _data?['dispatchAfter']?.toString();
+    if (raw == null) return null;
+    final at = DateTime.tryParse(raw);
+    if (at == null) return null;
+    final left = at.difference(DateTime.now());
+    return left.isNegative ? null : left;
+  }
 
   List<Map> get _missingItems => ((_data?['items'] as List?) ?? const [])
       .cast<Map>()
@@ -260,6 +276,8 @@ class _OrderScreenState extends State<OrderScreen> {
                 loaded
                     ? (_awaitingShortage
                           ? 'Одной позиции не оказалось'
+                          : _beforeDispatch != null
+                          ? 'Ещё можно отменить'
                           : (_headlines[status] ?? status))
                     : 'Загружаем…',
                 style: Theme.of(context).textTheme.displayMedium?.copyWith(
@@ -270,6 +288,24 @@ class _OrderScreenState extends State<OrderScreen> {
               ),
 
               if (_awaitingShortage) _shortageChoice(),
+
+              // Пока заказ не ушёл на кухню, говорим об этом прямо.
+              // «Заказ отправлен» в эти секунды было бы неправдой, а
+              // человек как раз в них решает, передумал он или нет.
+              if (!_awaitingShortage && _beforeDispatch != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: Gap.md),
+                  child: Text(
+                    'Отправим на кухню через '
+                    '${_beforeDispatch!.inSeconds} с — пока отмена бесплатна '
+                    'и заведение о заказе не узнает.',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      height: 1.45,
+                      color: c.surface.withValues(alpha: 0.75),
+                    ),
+                  ),
+                ),
 
               if (loaded && !cancelled) ...[
                 const SizedBox(height: Gap.lg),

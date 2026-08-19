@@ -91,6 +91,41 @@ export class StatusPollerService {
   }
 
   /**
+   * Отправляет в кассу заказы, у которых истекло окно отмены.
+   *
+   * Раз в 10 секунд, а не раз в минуту: задержка и так съедает у кухни
+   * больше минуты, и добавлять к ней случайные полминуты нельзя — в час
+   * пик это заметно.
+   *
+   * Отмена в окно отмены снимает срок вместе со статусом: отменённый
+   * заказ сюда не попадает и на планшеты не уходит вовсе.
+   */
+  @Cron('*/10 * * * * *')
+  async dispatchDue() {
+    const due = await this.prisma.order.findMany({
+      where: {
+        dispatchAfter: { lte: new Date() },
+        status: { notIn: ['CANCELLED', 'DELIVERED'] },
+      },
+      select: { id: true, number: true },
+    });
+    for (const o of due) {
+      try {
+        await this.orders.dispatchToPoster(o.id);
+        // Снимаем срок только после отправки: если она упала, следующий
+        // круг попробует снова, а не забудет заказ навсегда.
+        await this.prisma.order.update({
+          where: { id: o.id },
+          data: { dispatchAfter: null },
+        });
+        this.logger.log(`Заказ №${o.number} отправлен в кассу: окно отмены истекло`);
+      } catch (e) {
+        this.logger.error(`Отправка заказа №${o.number} не удалась: ${e}`);
+      }
+    }
+  }
+
+  /**
    * Закрывает заказы, которые давно приняли и о которых больше никто не
    * отчитается.
    *

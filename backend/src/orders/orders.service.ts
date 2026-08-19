@@ -25,6 +25,15 @@ import { TelegramService } from '../telegram/telegram.service';
 const DUPLICATE_WINDOW_MS = 2 * 60 * 1000;
 
 /**
+ * Буфер между концом окна отмены и отправкой в кассу (DECISIONS §12.12).
+ *
+ * Если отправлять ровно в тот момент, когда у клиента истекает право
+ * отменить, появляется щель в одну секунду: он жмёт «Отменить», а чек уже
+ * печатается. Десять секунд эту гонку закрывают.
+ */
+const DISPATCH_BUFFER_MS = 10 * 1000;
+
+/**
  * Отпечаток заказа для сравнения «тот же самый».
  *
  * Позиции сортируются: порядок в корзине ничего не значит, а вот
@@ -455,8 +464,29 @@ export class OrdersService {
       }
     }
 
-    // Отправка на планшеты — вне транзакции (сетевые вызовы)
-    await this.dispatchToPoster(order.id);
+    // Отправка на планшеты — вне транзакции (сетевые вызовы).
+    //
+    // Пока у клиента есть право отменить, заказ в кассу не уходит вовсе:
+    // тогда отмена в это окно не оставляет чека, который кассир должна
+    // искать и отклонять, и она о заказе просто не узнаёт. Срок кладём в
+    // базу, отправляет крон — таймер в памяти умер бы вместе с
+    // контейнером при деплое, и заказ не уехал бы никогда.
+    const cancelWindowMs =
+      availability.cancellation.customerWindowMinutes * 60_000;
+    if (cancelWindowMs > 0) {
+      await this.prisma.order.update({
+        where: { id: order.id },
+        data: {
+          dispatchAfter: new Date(Date.now() + cancelWindowMs + DISPATCH_BUFFER_MS),
+        },
+      });
+      this.logger.log(
+        `Заказ №${order.number}: отправка в кассу через ` +
+          `${Math.round((cancelWindowMs + DISPATCH_BUFFER_MS) / 1000)} с — идёт окно отмены`,
+      );
+    } else {
+      await this.dispatchToPoster(order.id);
+    }
 
     // «Похоже на перезаказ» — кассе, а не только пометкой в консоли.
     // При обычном заказе она в консоль не заходит вовсе и предупреждение
@@ -489,6 +519,7 @@ export class OrdersService {
       deliveryFee,
       total,
       pointsSpent,
+      dispatchAfter: fresh.dispatchAfter,
       dispatches: fresh.dispatches.map((d) => ({
         department: d.posterAccount.name,
         status: d.status,
@@ -1185,6 +1216,12 @@ export class OrdersService {
         // Пометки `isUnavailable` намеренно остаются: чего именно не
         // хватало, видно и в отменённом заказе.
         data: { shortageState: 'NONE', shortageDeadline: null },
+      });
+      // Заказ, отменённый в своё окно, в кассу не уезжает вовсе — ради
+      // этого задержка и вводилась (DECISIONS §12.12).
+      await this.prisma.order.update({
+        where: { id: order.id },
+        data: { dispatchAfter: null },
       });
     }
     await this.loyalty.onStatusChanged(order.id, next);
