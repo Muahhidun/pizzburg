@@ -111,25 +111,30 @@ class CatalogHeader extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: Gap.md),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: c.surface.withValues(alpha: 0.14),
-                    borderRadius: R.pill,
-                  ),
-                  child: Text(
-                    etaLabel,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: c.surface,
+                // Пустая подпись — значит о состоянии сказать нечего.
+                // Рисовать пустую плашку незачем: она занимает место и
+                // читается как сломанная.
+                if (etaLabel.isNotEmpty) ...[
+                  const SizedBox(width: Gap.md),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: c.surface.withValues(alpha: 0.14),
+                      borderRadius: R.pill,
+                    ),
+                    child: Text(
+                      etaLabel,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: c.surface,
+                      ),
                     ),
                   ),
-                ),
+                ],
               ],
             ),
 

@@ -129,9 +129,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     try {
       final list = await context.read<ApiClient>().fetchAddresses();
       if (!mounted || list.isEmpty) return;
+      // Адрес, выбранный на главном, должен доехать сюда: иначе человек
+      // выбирает его дважды и во второй раз может выбрать не тот.
+      final chosenId = await SelectedAddress.get();
+      if (!mounted) return;
       setState(() {
         _addresses = list;
-        _applyAddress(list.first);
+        _applyAddress(
+          list.firstWhere((a) => a.id == chosenId, orElse: () => list.first),
+        );
       });
     } catch (_) {}
   }

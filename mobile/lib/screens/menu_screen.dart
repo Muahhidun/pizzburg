@@ -144,18 +144,30 @@ class _MenuScreenState extends State<MenuScreen> {
   Map<String, dynamic>? _activeOrder;
   Timer? _activeOrderTimer;
 
+  /// id адреса, выбранного человеком; null — берём первый сохранённый
+  String? _selectedAddressId;
+
   @override
   void initState() {
     super.initState();
     _future = _load();
     _listController.addListener(_onScroll);
     LastPlacedOrder.revision.addListener(_refreshActiveOrder);
+    SelectedAddress.revision.addListener(_reloadSelectedAddress);
+    _reloadSelectedAddress();
     // Вопрос о нехватке появляется, пока человек уже на главном, и ждать
     // его пять минут молча нельзя — карточка должна успеть измениться.
     _activeOrderTimer = Timer.periodic(
       const Duration(seconds: 30),
       (_) => _refreshActiveOrder(),
     );
+  }
+
+  Future<void> _reloadSelectedAddress() async {
+    final id = await SelectedAddress.get();
+    if (mounted && id != _selectedAddressId) {
+      setState(() => _selectedAddressId = id);
+    }
   }
 
   /// Перечитывает активный заказ, не трогая каталог
@@ -184,6 +196,7 @@ class _MenuScreenState extends State<MenuScreen> {
   @override
   void dispose() {
     LastPlacedOrder.revision.removeListener(_refreshActiveOrder);
+    SelectedAddress.revision.removeListener(_reloadSelectedAddress);
     _activeOrderTimer?.cancel();
     _overscroll.dispose();
     // Чужой контроллер не наш, его закроет оболочка
@@ -374,22 +387,50 @@ class _MenuScreenState extends State<MenuScreen> {
   /// путь к скандалу: человек оформит предзаказ на через час и предъявит
   /// цифру из шапки. Поэтому показываем то, что знаем точно, — режим
   /// получения и часы работы, а не обещание срока.
+  /// Значок справа от адреса — это **состояние заведения**, а не режим.
+  ///
+  /// Раньше он подменялся словами «доставка» и «самовывоз», когда сказать
+  /// было нечего, и дублировал переключатель под ним: выбран самовывоз —
+  /// и в кнопке «Самовывоз», и в значке «самовывоз». Пустая строка значит
+  /// «сказать нечего» — тогда значок не рисуем вовсе, а не занимаем место
+  /// повтором того, что уже видно.
   String _eta(Availability a) {
     if (!a.isOpenNow) return 'закрыто';
-    if (_mode == 'PICKUP') return 'самовывоз';
-    if (!a.deliveryAvailable) return 'только самовывоз';
+    if (_mode == 'DELIVERY' && !a.deliveryAvailable) return 'только самовывоз';
     final hours = a.todayHours;
     if (hours.isNotEmpty && hours.first.length == 2) {
       return 'до ${hours.first[1]}';
     }
-    return 'доставка';
+    return '';
   }
 
   String _addressLabel(_CatalogData data) {
     if (_mode == 'PICKUP') return 'Ауэзова 47б, MaxiMall';
     if (data.addresses.isEmpty) return 'Укажите адрес';
-    final a = data.addresses.first;
-    return '${a.street}, ${a.house}';
+    final chosen = data.addresses.firstWhere(
+      (a) => a.id == _selectedAddressId,
+      orElse: () => data.addresses.first,
+    );
+    return '${chosen.street}, ${chosen.house}';
+  }
+
+  /// Выбор адреса с главного экрана.
+  ///
+  /// Новый адрес отсюда не добавляем: полноценный ввод с подсказками улиц
+  /// уже есть в оформлении, и вторая его копия была бы второй точкой
+  /// отказа. Здесь — только переключение между сохранёнными.
+  Future<void> _pickAddress(List<SavedAddress> addresses) async {
+    if (addresses.isEmpty) return;
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _AddressSheet(
+        addresses: addresses,
+        selectedId: _selectedAddressId ?? addresses.first.id,
+      ),
+    );
+    if (picked == null) return;
+    await SelectedAddress.set(picked);
   }
 
   @override
@@ -444,6 +485,9 @@ class _MenuScreenState extends State<MenuScreen> {
                     SliverToBoxAdapter(
                       child: CatalogHeader(
                         addressLabel: _addressLabel(data),
+                        onAddressTap: _mode == 'PICKUP'
+                            ? null
+                            : () => _pickAddress(data.addresses),
                         etaLabel: _eta(data.availability),
                         mode: _mode,
                         availability: data.availability,
@@ -803,6 +847,79 @@ class _ActiveOrderCard extends StatelessWidget {
             Icon(Icons.chevron_right, size: 20, color: c.muted),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Выбор адреса доставки с главного экрана.
+///
+/// Только переключение между сохранёнными: добавление нового живёт в
+/// оформлении, где уже есть поиск улицы с подсказками. Две копии одного
+/// ввода означали бы две точки отказа и два места, где чинить.
+class _AddressSheet extends StatelessWidget {
+  final List<SavedAddress> addresses;
+  final String selectedId;
+
+  const _AddressSheet({required this.addresses, required this.selectedId});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+        Gap.screen,
+        Gap.blockWide,
+        Gap.screen,
+        Gap.blockWide,
+      ),
+      decoration: BoxDecoration(color: c.surface, borderRadius: R.sheetTop),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Куда доставить',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 21),
+          ),
+          const SizedBox(height: Gap.lg),
+          for (final a in addresses)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Gap.sm),
+              child: PressScale.selection(
+                onTap: () => Navigator.pop(context, a.id),
+                child: AnimatedContainer(
+                  duration: Motion.base,
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Gap.lg,
+                    vertical: 14,
+                  ),
+                  decoration: BoxDecoration(
+                    color: a.id == selectedId ? c.ink : c.fillSoft,
+                    borderRadius: R.field,
+                  ),
+                  child: Text(
+                    [
+                      '${a.street}, ${a.house}',
+                      if (a.flat.isNotEmpty) 'кв. ${a.flat}',
+                    ].join(' · '),
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: a.id == selectedId ? c.surface : c.ink,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          const SizedBox(height: Gap.sm),
+          Text(
+            'Новый адрес добавляется при оформлении заказа — там есть поиск '
+            'по улицам.',
+            style: TextStyle(fontSize: 12.5, height: 1.4, color: c.muted),
+          ),
+        ],
       ),
     );
   }

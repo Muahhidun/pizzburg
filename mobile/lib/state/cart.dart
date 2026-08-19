@@ -67,6 +67,30 @@ abstract final class LastPlacedOrder {
   }
 }
 
+/// Адрес, выбранный человеком на главном экране.
+///
+/// Раньше главный экран просто показывал первый сохранённый адрес, а
+/// оформление тоже брало первый — выбрать было негде и незачем. Теперь
+/// выбор с главного должен доезжать до оформления, иначе он ничего не
+/// значит и человек второй раз ищет тот же адрес в чекауте.
+abstract final class SelectedAddress {
+  static const _key = 'pizzburg_selected_address';
+
+  /// Меняется при выборе — главный экран перерисовывает подпись
+  static final ValueNotifier<int> revision = ValueNotifier(0);
+
+  static Future<void> set(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_key, id);
+    revision.value++;
+  }
+
+  static Future<String?> get() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_key);
+  }
+}
+
 class Cart extends ChangeNotifier {
   final List<CartLine> _lines = [];
 
