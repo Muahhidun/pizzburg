@@ -13,7 +13,14 @@ import { ShortageService } from '../src/orders/shortage.service';
  */
 function serviceFor(order: Record<string, unknown> | null) {
   const marked: { orderId: string; itemIds: string[] }[] = [];
+  const toCashier: string[] = [];
   const prisma = { order: { findUnique: async () => order } };
+  const telegram = {
+    notifyCashier: async (_tenantId: string, text: string) => {
+      toCashier.push(text);
+      return { sent: true };
+    },
+  };
 
   const service = new ShortageService(
     prisma as never,
@@ -22,6 +29,7 @@ function serviceFor(order: Record<string, unknown> | null) {
     undefined as never,
     undefined as never,
     undefined as never,
+    telegram as never,
   );
   (service as unknown as Record<string, unknown>).markUnavailable = async (
     _tenantId: string,
@@ -32,7 +40,7 @@ function serviceFor(order: Record<string, unknown> | null) {
     return {};
   };
 
-  return { service, marked };
+  return { service, marked, toCashier };
 }
 
 /** Заказ «бургер из основного + раф из SunDay», отделы по порядку sortOrder */
@@ -191,4 +199,43 @@ test('подарок отдела в пометку не попадает — о
   await service.handleRejectedDepartments('o1');
 
   assert.deepEqual(marked[0].itemIds, ['i-sun']);
+});
+
+test('соседний отдел узнаёт, что его напарник отказался', async () => {
+  // Иначе он видит свой чек живым и готовит, не зная, что половина
+  // заказа отвалилась и клиента уже спрашивают
+  const { service, toCashier } = serviceFor(twoPartOrder());
+
+  await service.handleRejectedDepartments('o1');
+
+  assert.equal(toCashier.length, 1);
+  assert.match(toCashier[0], /Sunday отклонил свою часть/);
+  assert.match(toCashier[0], /Основной/);
+});
+
+test('когда отдел один, сообщать некому', async () => {
+  const { service, toCashier } = serviceFor(
+    twoPartOrder({
+      dispatches: [
+        {
+          id: 'd-main',
+          posterAccountId: 'main',
+          status: 'VOID',
+          posterStatus: 'NEW',
+          posterAccount: { name: 'Основной' },
+        },
+        {
+          id: 'd-sun',
+          posterAccountId: 'sun',
+          status: 'SENT',
+          posterStatus: 'REJECTED',
+          posterAccount: { name: 'Sunday' },
+        },
+      ],
+    }),
+  );
+
+  await service.handleRejectedDepartments('o1');
+
+  assert.deepEqual(toCashier, []);
 });

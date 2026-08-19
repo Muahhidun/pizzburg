@@ -39,9 +39,18 @@ class CartLine {
 abstract final class LastPlacedOrder {
   static const _key = 'pizzburg_last_order';
 
+  /// Меняется при каждом запоминании и забывании заказа.
+  ///
+  /// Каталог живёт в IndexedStack и данные запрашивает один раз при
+  /// создании — после оформления он так и показывал блок «Повторить
+  /// заказ», а нового заказа и вопроса по нему человек не видел вовсе.
+  /// Через этот сигнал экран узнаёт, что смотреть надо заново.
+  static final ValueNotifier<int> revision = ValueNotifier(0);
+
   static Future<void> remember(String id, int number, int total) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_key, [id, '$number', '$total']);
+    revision.value++;
   }
 
   static Future<(String id, int number, int total)?> restore() async {
@@ -54,6 +63,7 @@ abstract final class LastPlacedOrder {
   static Future<void> forget() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_key);
+    revision.value++;
   }
 }
 

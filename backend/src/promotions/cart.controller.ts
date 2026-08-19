@@ -102,6 +102,15 @@ export class CartController {
       freeDelivery: promo.freeDelivery,
       loyalty: {
         ...loyaltyPolicy,
+        /// Можно ли списать баллы в этой корзине.
+        ///
+        /// Считает сервер, а не приложение. Раньше приложение выводило
+        /// это косвенно, по ненулевой стоимости подарков, и условие
+        /// разъехалось с серверным: сервер отказывает при ЛЮБОЙ
+        /// сработавшей акции. Человек выставлял ползунок, а отказ
+        /// получал через два экрана, на оформлении.
+        pointsAllowed:
+          promo.applied.length === 0 || loyaltyPolicy.allowPointsWithPromotions,
       },
       delivery: {
         minOrder: settings.minOrder ?? 0,

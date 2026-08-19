@@ -281,12 +281,14 @@ export class ShortageService {
       },
       { type: 'order_shortage' },
     );
-    // Руководству — сразу: частичные отказы это как раз то, о чём иначе
-    // узнаёшь только если сам откроешь админку (DECISIONS §12.7).
+    // Руководству — не ход разбирательства, а факт, о котором есть смысл
+    // спросить человека: почему позиции не оказалось — повар, закуп,
+    // забыли поставить стоп? Пошаговый пересказ процесса замыливает глаз,
+    // и тогда в потоке теряется то, что действительно влияет на бизнес.
     await this.telegram.notify(
       order.tenantId,
-      `❓ <b>Нехватка позиции</b>\nЗаказ №${order.number}: нет «${names}».\n` +
-        `Ждём ответа клиента ${SHORTAGE_WINDOW_MINUTES} мин.`,
+      `❗️ <b>Кассир отметил позицию отсутствующей</b>\n` +
+        `Заказ №${order.number}: «${names}».`,
     );
 
     return this.state(order.id);
@@ -342,11 +344,26 @@ export class ShortageService {
       .map((i) => i.id);
     if (itemIds.length === 0) return;
 
+    const names = rejected.map((d) => d.posterAccount.name).join(', ');
     this.logger.warn(
-      `Заказ №${order.number}: ${rejected
-        .map((d) => d.posterAccount.name)
-        .join(', ')} отклонил чек на планшете — спрашиваем клиента по позициям`,
+      `Заказ №${order.number}: ${names} отклонил чек на планшете — ` +
+        'спрашиваем клиента по позициям',
     );
+    // Соседний отдел об этом иначе не узнает: он видит свой чек живым и
+    // спокойно готовит, не зная, что половина заказа отвалилась и клиента
+    // сейчас спрашивают, везти ли остальное. Сообщение уходит в общий чат
+    // кассы — там сидят оба отдела.
+    const others = live
+      .filter((d) => !accounts.has(d.posterAccountId))
+      .map((d) => d.posterAccount.name);
+    if (others.length > 0) {
+      await this.telegram.notifyCashier(
+        order.tenantId,
+        `⚠️ <b>Заказ №${order.number}: ${names} отклонил свою часть</b>\n` +
+          `${others.join(', ')} — ваша часть в силе, но состав меняется.\n` +
+          `Спрашиваем клиента, везти ли остальное (${SHORTAGE_WINDOW_MINUTES} мин).`,
+      );
+    }
     try {
       await this.markUnavailable(order.tenantId, order.id, itemIds);
     } catch (e) {
@@ -639,14 +656,10 @@ export class ShortageService {
     }
 
     const names = gone.map((i) => i.name).join(', ');
-    await this.telegram.notify(
-      order.tenantId,
-      `✅ <b>Заказ №${order.number}</b>: везём без «${names}».\n` +
-        (by === 'TIMEOUT'
-          ? 'Клиент не ответил — нужен звонок.'
-          : 'Клиент подтвердил.') +
-        `\nК оплате ${totals.total} ₸.`,
-    );
+    // Руководству итог разбирательства не отправляем: «везём без ролла»
+    // ничего не меняет в работе отдела, а поток таких сообщений и есть
+    // тот шум, из-за которого перестают замечать важное.
+    //
     // Кассе — только когда нужно действие. Клиент подтвердил сам:
     // исправленный чек уже печатается, добавить нечего. А вот молчание
     // означает звонок, и об этом принтер не скажет.

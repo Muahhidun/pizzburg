@@ -139,6 +139,14 @@ class CartPreview {
   final bool earnWhenPointsSpent;
   final bool allowPointsWithPromotions;
   final bool earnOnPromotionalOrders;
+
+  /// Можно ли списать баллы в этой корзине — решает сервер.
+  ///
+  /// Раньше приложение выводило это само по стоимости подарков, и
+  /// условие разъехалось с серверным: сервер отказывает при любой
+  /// сработавшей акции. Человек выставлял ползунок и получал отказ через
+  /// два экрана, на оформлении.
+  final bool pointsAllowed;
   final Availability availability;
 
   /// «Добавьте ещё на N ₸ — подарок». Порог считает сервер.
@@ -157,6 +165,7 @@ class CartPreview {
     required this.earnWhenPointsSpent,
     required this.allowPointsWithPromotions,
     required this.earnOnPromotionalOrders,
+    this.pointsAllowed = true,
     required this.availability,
     this.nextGift,
   });
@@ -171,6 +180,9 @@ class CartPreview {
           .toList(),
       appliedPromotions: ((json['appliedPromotions'] ?? []) as List)
           .cast<String>(),
+      // Старые сборки поля не знают; отсутствие трактуем как «можно»,
+      // окончательное слово всё равно за сервером при оформлении
+      pointsAllowed: (json['loyalty'] ?? {})['pointsAllowed'] ?? true,
       deliveryFee: d['fee'] ?? 0,
       minOrder: d['minOrder'] ?? 0,
       freeFrom: d['freeFrom'],

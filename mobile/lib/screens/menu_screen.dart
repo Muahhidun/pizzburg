@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -134,15 +135,56 @@ class _MenuScreenState extends State<MenuScreen> {
   final _search = TextEditingController();
   String _query = '';
 
+  /// Активный заказ держим отдельно от загрузки каталога.
+  ///
+  /// Каталог живёт в IndexedStack и грузится один раз, а заказ появляется
+  /// и меняется уже после: оформили — должна возникнуть карточка, кассир
+  /// отметила нехватку — на ней должно появиться «Нужен ваш ответ».
+  /// Внутри FutureBuilder этого не видно, потому что запрос не повторяется.
+  Map<String, dynamic>? _activeOrder;
+  Timer? _activeOrderTimer;
+
   @override
   void initState() {
     super.initState();
     _future = _load();
     _listController.addListener(_onScroll);
+    LastPlacedOrder.revision.addListener(_refreshActiveOrder);
+    // Вопрос о нехватке появляется, пока человек уже на главном, и ждать
+    // его пять минут молча нельзя — карточка должна успеть измениться.
+    _activeOrderTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _refreshActiveOrder(),
+    );
+  }
+
+  /// Перечитывает активный заказ, не трогая каталог
+  Future<void> _refreshActiveOrder() async {
+    // Клиента берём до первого await: после него виджет мог уйти с экрана
+    final api = context.read<ApiClient>();
+    final remembered = await LastPlacedOrder.restore();
+    if (remembered == null) {
+      if (mounted && _activeOrder != null) setState(() => _activeOrder = null);
+      return;
+    }
+    try {
+      final status = await api.orderStatus(remembered.$1);
+      if (!mounted) return;
+      if (_activeStatuses.contains(status['status']?.toString())) {
+        setState(() => _activeOrder = status);
+      } else {
+        await LastPlacedOrder.forget();
+        if (mounted) setState(() => _activeOrder = null);
+      }
+    } catch (_) {
+      // заказ мог быть удалён — оставляем как есть до следующего круга
+    }
   }
 
   @override
   void dispose() {
+    LastPlacedOrder.revision.removeListener(_refreshActiveOrder);
+    _activeOrderTimer?.cancel();
     _overscroll.dispose();
     // Чужой контроллер не наш, его закроет оболочка
     _listController.removeListener(_onScroll);
@@ -203,6 +245,7 @@ class _MenuScreenState extends State<MenuScreen> {
     }
 
     _menu = menu;
+    _activeOrder = active;
     if (!availability.deliveryAvailable) _mode = 'PICKUP';
     return _CatalogData(
       menu: menu,
@@ -405,21 +448,21 @@ class _MenuScreenState extends State<MenuScreen> {
                         mode: _mode,
                         availability: data.availability,
                         onModeChanged: (m) => setState(() => _mode = m),
-                        activeOrderBlock: data.activeOrder == null
+                        activeOrderBlock: _activeOrder == null
                             ? null
                             : _ActiveOrderCard(
-                                order: data.activeOrder!,
+                                order: _activeOrder!,
                                 onTap: () => Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                     builder: (_) => OrderScreen(
                                       order: CreatedOrder(
-                                        id: data.activeOrder!['id'].toString(),
+                                        id: _activeOrder!['id'].toString(),
                                         number:
-                                            (data.activeOrder!['number'] as num)
+                                            (_activeOrder!['number'] as num)
                                                 .toInt(),
                                         total:
-                                            (data.activeOrder!['total'] as num?)
+                                            (_activeOrder!['total'] as num?)
                                                 ?.toInt() ??
                                             0,
                                         pointsSpent: 0,

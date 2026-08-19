@@ -80,7 +80,14 @@ class _CartScreenState extends State<CartScreen> {
         _error = null;
         // Состав изменился — списание сбрасываем: иначе оно может
         // превысить новую сумму заказа.
-        _points = _points.clamp(0, _maxPoints(preview));
+        //
+        // А если акция запрещает баллы, обнуляем совсем: значение,
+        // оставшееся от прошлой корзины, гасило кнопку оформления
+        // отказом сервера, и починить его на этом экране было нечем —
+        // ползунок к тому моменту уже неактивен.
+        _points = preview.pointsAllowed
+            ? _points.clamp(0, _maxPoints(preview))
+            : 0;
       });
     } catch (e) {
       if (mounted) {
@@ -229,7 +236,7 @@ class _CartScreenState extends State<CartScreen> {
                         // экрана после того, как человек выставил ползунок,
                         // и вернуться к нему было уже некуда. Гасим блок
                         // там, где он стоит, и объясняем на месте.
-                        blockedByPromo: preview.promoDiscount > 0,
+                        blockedByPromo: !preview.pointsAllowed,
                         onChanged: (v) {
                           _pointsHaptic.onValue(v);
                           setState(() => _points = v.round());
@@ -716,19 +723,24 @@ class _PointsBlock extends StatelessWidget {
             ],
           ),
           const SizedBox(height: Gap.md),
+          // Кнопки гасим вместе с ползунком. Раньше они оставались
+          // живыми и двигали неактивный ползунок — списание возвращалось
+          // и снова упиралось в отказ сервера при оформлении.
           Row(
             children: [
               Expanded(
                 child: _DarkButton(
                   label: 'Не списывать',
-                  onTap: () => onChanged(0),
+                  onTap: blockedByPromo ? null : () => onChanged(0),
                 ),
               ),
               const SizedBox(width: Gap.sm),
               Expanded(
                 child: _DarkButton(
                   label: 'Максимум',
-                  onTap: () => onChanged(max.toDouble()),
+                  onTap: blockedByPromo || max <= 0
+                      ? null
+                      : () => onChanged(max.toDouble()),
                 ),
               ),
             ],
@@ -741,7 +753,7 @@ class _PointsBlock extends StatelessWidget {
 
 class _DarkButton extends StatelessWidget {
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   const _DarkButton({required this.label, required this.onTap});
 
   @override
@@ -761,7 +773,9 @@ class _DarkButton extends StatelessWidget {
           style: TextStyle(
             fontSize: 12.5,
             fontWeight: FontWeight.w600,
-            color: c.surface,
+            // Выключенная кнопка должна выглядеть выключенной, иначе
+            // человек будет жать её и не понимать, почему ничего нет
+            color: c.surface.withValues(alpha: onTap == null ? 0.35 : 1),
           ),
         ),
       ),

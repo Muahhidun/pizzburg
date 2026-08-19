@@ -458,6 +458,26 @@ export class OrdersService {
     // Отправка на планшеты — вне транзакции (сетевые вызовы)
     await this.dispatchToPoster(order.id);
 
+    // «Похоже на перезаказ» — кассе, а не только пометкой в консоли.
+    // При обычном заказе она в консоль не заходит вовсе и предупреждение
+    // не увидит, а решать, что готовить, нужно в ближайшие минуты.
+    // Автоматически по-прежнему ничего не отменяется (DECISIONS §12.10).
+    try {
+      const others = (await this.otherActiveOrders(tenant.id, [customer.id]))
+        .get(customer.id)
+        ?.filter((n) => n !== order.number);
+      if (others && others.length > 0) {
+        await this.telegram.notifyCashier(
+          tenant.id,
+          `♻️ <b>Похоже на перезаказ</b>\nКлиент ${customer.phone} оформил ` +
+            `№${order.number}, а у него уже ${others.length === 1 ? 'есть заказ' : 'есть заказы'} ` +
+            `№${others.join(', №')}.\nУточните, что готовить, лишний отмените.`,
+        );
+      }
+    } catch (e) {
+      this.logger.warn(`Сообщение о перезаказе не ушло: ${e}`);
+    }
+
     const fresh = await this.prisma.order.findUniqueOrThrow({
       where: { id: order.id },
       include: { dispatches: { include: { posterAccount: true } } },
@@ -488,13 +508,14 @@ export class OrdersService {
    * Если чек уже отклонён или его не было вовсе, молчим: сообщение без
    * действия учит не читать этот канал.
    */
-  private async tellCashierOrderDied(orderId: string) {
+  private async announceCancellation(orderId: string) {
     try {
       const order = await this.prisma.order.findUnique({
         where: { id: orderId },
         select: {
           number: true,
           tenantId: true,
+          total: true,
           cancelReason: true,
           cancelledBy: true,
           dispatches: {
@@ -514,12 +535,24 @@ export class OrdersService {
           },
         },
       });
-      const live = (order?.dispatches ?? []).filter(
+      if (!order) return;
+      const who = order.cancelledBy === 'CUSTOMER' ? 'клиентом' : 'оператором';
+
+      // Руководству — всегда: отмена это потерянные деньги и повод
+      // спросить причину, независимо от того, висит ли где-то чек.
+      await this.telegram.notify(
+        order.tenantId,
+        `🚫 <b>Заказ №${order.number} отменён ${who}</b>` +
+          (order.cancelReason ? `\nПричина: ${order.cancelReason}` : '') +
+          `\nСумма: ${order.total} ₸`,
+      );
+
+      // Кассе — только если есть что отклонять. Сообщение без действия
+      // учит не читать этот канал.
+      const live = (order.dispatches ?? []).filter(
         (d) => d.posterOrderId && d.posterOrderId !== 'dry-run',
       );
-      if (!order || live.length === 0) return;
-
-      const who = order.cancelledBy === 'CUSTOMER' ? 'клиентом' : 'оператором';
+      if (live.length === 0) return;
       await this.telegram.notifyCashier(
         order.tenantId,
         `🚫 <b>Заказ №${order.number} отменён ${who}</b>` +
@@ -531,7 +564,7 @@ export class OrdersService {
       );
     } catch (e) {
       // Побочный канал: сообщение не должно ломать саму отмену
-      this.logger.warn(`Сообщение кассе об отмене не ушло: ${e}`);
+      this.logger.warn(`Сообщение об отмене не ушло: ${e}`);
     }
   }
 
@@ -1158,7 +1191,7 @@ export class OrdersService {
     if (options?.notify !== false) {
       await this.notifications.sendOrderStatus(order.id, next);
     }
-    if (next === 'CANCELLED') await this.tellCashierOrderDied(order.id);
+    if (next === 'CANCELLED') await this.announceCancellation(order.id);
     return this.prisma.order.findUniqueOrThrow({ where: { id: updated.id } });
   }
 
