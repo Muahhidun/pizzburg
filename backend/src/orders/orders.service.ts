@@ -367,9 +367,14 @@ export class OrdersService {
     const moneyDiscount = Math.min(promo.moneyDiscount, subtotal);
     const payableBeforePoints = subtotal + deliveryFee - moneyDiscount;
 
+    // Потолок списания — настройка заведения. Приложение его показывает,
+    // но решает сервер: корзина могла пролежать с прошлой настройки.
     const pointsSpent = this.loyalty.validateSpend(
       customer.pointsBalance,
-      payableBeforePoints,
+      Math.min(
+        payableBeforePoints,
+        this.loyalty.maxSpend(tenant.settings, subtotal),
+      ),
       requestedPoints,
     );
     const total = payableBeforePoints - pointsSpent;

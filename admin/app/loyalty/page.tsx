@@ -6,6 +6,7 @@ import {
   formatTenge,
   LoyaltyLevel,
   LoyaltyLevelsResponse,
+  Settings,
 } from '@/lib/api';
 
 type Draft = { name: string; cashbackPct: string; minSpent: string };
@@ -228,8 +229,86 @@ export default function LoyaltyPage() {
               ))}
             </div>
           </section>
+
+          <MaxSpendSection />
         </>
       )}
     </main>
+  );
+}
+
+/**
+ * Потолок оплаты баллами (DECISIONS §4).
+ *
+ * Без него клиент с большим балансом закрывает баллами почти весь чек, и
+ * заказ приносит заведению почти ничего живыми деньгами. Считается от
+ * стоимости товаров: баллами и так нельзя платить за доставку, а если
+ * включить её в базу, потолок будет расти от расстояния.
+ */
+function MaxSpendSection() {
+  const [pct, setPct] = useState('');
+  const [saved, setSaved] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const s = await api.get<Settings>('/admin/settings');
+    const value = s.settings.loyalty?.maxSpendPct ?? 100;
+    setSaved(value);
+    setPct(String(value));
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.patch('/admin/settings', { maxSpendPct: Number(pct) });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (saved === null) return null;
+
+  return (
+    <section className="mt-8 rounded-2xl bg-white p-5 shadow-sm dark:bg-neutral-900">
+      <h2 className="font-semibold">Сколько можно оплатить баллами</h2>
+      <p className="mt-1 max-w-2xl text-sm text-neutral-500">
+        Доля от стоимости товаров. Доставку баллами оплатить нельзя в любом
+        случае, поэтому она в расчёт не входит. 100% — без ограничения.
+      </p>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <input
+          type="number"
+          min={1}
+          max={100}
+          value={pct}
+          onChange={(e) => setPct(e.target.value)}
+          className="w-24 rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
+        />
+        <span className="text-sm text-neutral-500">% от суммы товаров</span>
+        <button
+          onClick={save}
+          disabled={busy || pct === String(saved)}
+          className="rounded-lg bg-black px-3 py-1.5 text-sm text-white disabled:opacity-40 dark:bg-white dark:text-black"
+        >
+          {busy ? 'Сохраняем…' : 'Сохранить'}
+        </button>
+      </div>
+
+      <p className="mt-2 text-xs text-neutral-400">
+        Например, при {pct || 100}% в заказе на 1 100 ₸ баллами закроется не
+        больше {Math.floor((1100 * (Number(pct) || 100)) / 100)} ₸.
+      </p>
+      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+    </section>
   );
 }

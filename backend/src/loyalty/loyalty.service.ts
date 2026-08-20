@@ -9,11 +9,33 @@ export interface LoyaltyPolicy {
   earnWhenPointsSpent: boolean;
   allowPointsWithPromotions: boolean;
   earnOnPromotionalOrders: boolean;
+
+  /**
+   * Какую долю стоимости товаров можно закрыть баллами, %.
+   *
+   * 100 — без ограничения. Ограничение считается от товаров, а не от
+   * суммы к оплате: баллами и так нельзя платить за доставку, и включать
+   * её в базу значило бы, что потолок растёт от расстояния.
+   */
+  maxSpendPct: number;
 }
 
 @Injectable()
 export class LoyaltyService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Сколько баллов можно списать в этом заказе.
+   *
+   * Потолок в процентах — настройка заведения: без него человек с
+   * большим балансом закрывает баллами почти весь чек, и заказ приносит
+   * заведению почти ничего живыми деньгами.
+   */
+  maxSpend(settings: Prisma.JsonValue, subtotal: number) {
+    const pct = this.policy(settings).maxSpendPct;
+    if (pct >= 100) return subtotal;
+    return Math.floor((subtotal * pct) / 100);
+  }
 
   /** 1 балл = 1 ₸. Баллами оплачиваются товары, но не доставка. */
   validateSpend(balance: number, subtotal: number, requested = 0) {
@@ -289,7 +311,17 @@ export class LoyaltyService {
         loyalty.allowPointsWithPromotions === true,
       earnOnPromotionalOrders:
         loyalty.earnOnPromotionalOrders === true,
+      // Умолчание — без ограничения: включать потолок молча означало бы
+      // менять правила игры для клиентов, которые уже копили баллы.
+      maxSpendPct: this.clampPct(loyalty.maxSpendPct),
     };
+  }
+
+  /** Процент из настроек: мусор и выход за границы — это «без ограничения» */
+  private clampPct(value: unknown): number {
+    const pct = Number(value);
+    if (!Number.isFinite(pct) || pct <= 0 || pct > 100) return 100;
+    return Math.round(pct);
   }
 
   cashbackAmount(

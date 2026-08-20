@@ -99,9 +99,17 @@ class _CartScreenState extends State<CartScreen> {
     }
   }
 
+  /// Сколько баллов можно списать: меньшее из баланса и потолка.
+  ///
+  /// Потолок считает сервер — это настройка заведения, и приложение не
+  /// должно знать её формулу. Свой предел по стоимости товаров остаётся
+  /// на случай старого сервера, который потолка ещё не отдаёт.
   int _maxPoints(CartPreview preview) {
     final balance = context.read<AuthState>().pointsBalance;
-    return balance < preview.subtotal ? balance : preview.subtotal;
+    final cap = preview.maxPointsSpend > 0
+        ? preview.maxPointsSpend
+        : preview.subtotal;
+    return balance < cap ? balance : cap;
   }
 
   Future<void> _applyPromo() async {

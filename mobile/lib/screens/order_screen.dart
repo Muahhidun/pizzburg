@@ -91,6 +91,11 @@ class _OrderScreenState extends State<OrderScreen> {
   Duration? get _cancelLeft {
     final window = _availability?.cancelWindowMinutes ?? 0;
     if (window <= 0) return null;
+    // Отсчёт живёт, только пока заказ ещё можно отменить. Раньше он
+    // смотрел лишь на время, и после отмены экран ещё полминуты писал
+    // «Ещё можно отменить» с бегущими секундами — человек нажал, ничего
+    // не изменилось, и он идёт звонить.
+    if ((_data?['status'] ?? 'NEW') != 'NEW') return null;
     final created = DateTime.tryParse(_data?['createdAt']?.toString() ?? '');
     if (created == null) return null;
     final left = created

@@ -96,6 +96,11 @@ export class UpdateSettingsDto {
   @IsOptional() @IsBoolean() earnWhenPointsSpent?: boolean;
   @IsOptional() @IsBoolean() allowPointsWithPromotions?: boolean;
   @IsOptional() @IsBoolean() earnOnPromotionalOrders?: boolean;
+
+  /// Какую долю стоимости товаров можно закрыть баллами, %. 100 — без
+  /// ограничения. Ноль не принимаем: «запретить списание совсем» — это
+  /// отдельное решение, а не опечатка в поле процента.
+  @IsOptional() @IsInt() @Min(1) @Max(100) maxSpendPct?: number;
 }
 
 /** Аварийный режим приёма заказов и сообщения клиенту */

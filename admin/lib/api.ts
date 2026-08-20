@@ -357,6 +357,8 @@ export interface Settings {
       earnWhenPointsSpent?: boolean;
       allowPointsWithPromotions?: boolean;
       earnOnPromotionalOrders?: boolean;
+      /// Доля стоимости товаров, которую можно закрыть баллами, %
+      maxSpendPct?: number;
     };
     ordering?: {
       mode?: OrderingMode;

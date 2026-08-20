@@ -111,6 +111,9 @@ export class CartController {
         /// получал через два экрана, на оформлении.
         pointsAllowed:
           promo.applied.length === 0 || loyaltyPolicy.allowPointsWithPromotions,
+        /// Сколько ₸ этой корзины можно закрыть баллами. Баланс клиента
+        /// сюда не входит — его знает приложение, а правило знает сервер.
+        maxPointsSpend: this.loyalty.maxSpend(tenant.settings, subtotal),
       },
       delivery: {
         minOrder: settings.minOrder ?? 0,

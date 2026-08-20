@@ -147,6 +147,10 @@ class CartPreview {
   /// сработавшей акции. Человек выставлял ползунок и получал отказ через
   /// два экрана, на оформлении.
   final bool pointsAllowed;
+
+  /// Сколько ₸ этой корзины можно закрыть баллами — правило заведения.
+  /// Пересекается с балансом уже на клиенте: баланс сервер не знает.
+  final int maxPointsSpend;
   final Availability availability;
 
   /// «Добавьте ещё на N ₸ — подарок». Порог считает сервер.
@@ -166,6 +170,7 @@ class CartPreview {
     required this.allowPointsWithPromotions,
     required this.earnOnPromotionalOrders,
     this.pointsAllowed = true,
+    this.maxPointsSpend = 0,
     required this.availability,
     this.nextGift,
   });
@@ -183,6 +188,9 @@ class CartPreview {
       // Старые сборки поля не знают; отсутствие трактуем как «можно»,
       // окончательное слово всё равно за сервером при оформлении
       pointsAllowed: (json['loyalty'] ?? {})['pointsAllowed'] ?? true,
+      // Старые сборки поля не знают; 0 трактуем как «ограничения нет»,
+      // и клиент упрётся в стоимость товаров, как раньше
+      maxPointsSpend: (json['loyalty'] ?? {})['maxPointsSpend'] ?? 0,
       deliveryFee: d['fee'] ?? 0,
       minOrder: d['minOrder'] ?? 0,
       freeFrom: d['freeFrom'],

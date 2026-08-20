@@ -758,6 +758,7 @@ export class AdminService {
       earnWhenPointsSpent,
       allowPointsWithPromotions,
       earnOnPromotionalOrders,
+      maxSpendPct,
       ...deliveryPatch
     } = dto;
     const delivery = { ...(current.delivery ?? {}), ...deliveryPatch };
@@ -771,6 +772,7 @@ export class AdminService {
       ...(earnOnPromotionalOrders !== undefined
         ? { earnOnPromotionalOrders }
         : {}),
+      ...(maxSpendPct !== undefined ? { maxSpendPct } : {}),
     };
     if (
       delivery.freeFrom > 0 &&
