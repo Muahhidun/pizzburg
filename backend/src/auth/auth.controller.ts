@@ -39,6 +39,23 @@ class VerifyOtpDto {
   code: string;
 }
 
+/**
+ * Новый адрес из справочника города.
+ *
+ * Улица и дом обязательны и приходят из подсказок: свободный ввод
+ * оставлен только для «моего адреса нет в списке», и он идёт отдельной
+ * заявкой оператору, а не сюда.
+ */
+class SaveAddressDto {
+  @IsString() @MaxLength(120) street: string;
+  @IsString() @MaxLength(20) house: string;
+  @IsOptional() @IsString() @MaxLength(20) flat?: string;
+  @IsOptional() @IsString() @MaxLength(20) entrance?: string;
+  @IsOptional() @IsString() @MaxLength(20) floor?: string;
+  @IsOptional() @IsString() @MaxLength(300) comment?: string;
+  @IsOptional() @IsString() @MaxLength(40) label?: string;
+}
+
 class RenameAddressDto {
   @IsOptional()
   @IsString()
@@ -111,6 +128,19 @@ export class AuthController {
   @UseGuards(CustomerAuthGuard)
   listAddresses(@Req() req: any) {
     return this.addresses.list(req.customer.sub);
+  }
+
+  /**
+   * Сохранить адрес до оформления заказа.
+   *
+   * Раньше адрес появлялся только вместе с заказом, и это делало
+   * «добавить адрес» на главном экране невозможным: человек видел список
+   * сохранённых, но пополнить его мог, лишь что-нибудь заказав.
+   */
+  @Post('addresses')
+  @UseGuards(CustomerAuthGuard)
+  addAddress(@Req() req: any, @Body() dto: SaveAddressDto) {
+    return this.addresses.remember(req.customer.tenantId, req.customer.sub, dto);
   }
 
   @Delete('addresses/:id')

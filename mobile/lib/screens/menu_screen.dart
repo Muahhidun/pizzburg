@@ -17,6 +17,7 @@ import 'cart_screen.dart';
 import 'catalog_header.dart';
 import 'catalog_parts.dart';
 import 'order_screen.dart';
+import 'add_address_screen.dart';
 import 'product_screen.dart';
 
 /// Каталог — главный экран.
@@ -416,20 +417,29 @@ class _MenuScreenState extends State<MenuScreen> {
 
   /// Выбор адреса с главного экрана.
   ///
-  /// Новый адрес отсюда не добавляем: полноценный ввод с подсказками улиц
-  /// уже есть в оформлении, и вторая его копия была бы второй точкой
-  /// отказа. Здесь — только переключение между сохранёнными.
+  /// Здесь и выбор из сохранённых, и добавление нового. Точка входа
+  /// вторая — та же есть в оформлении, — и это осознанно: человек,
+  /// который первым делом хочет сменить адрес, не должен для этого
+  /// набирать корзину. Ввод при этом один и тот же виджет, двух
+  /// реализаций нет.
   Future<void> _pickAddress(List<SavedAddress> addresses) async {
-    if (addresses.isEmpty) return;
     final picked = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (_) => _AddressSheet(
         addresses: addresses,
-        selectedId: _selectedAddressId ?? addresses.first.id,
+        selectedId: _selectedAddressId ?? (addresses.isNotEmpty ? addresses.first.id : ''),
       ),
     );
-    if (picked == null) return;
+    if (!mounted || picked == null) return;
+    if (picked == _addNewAddress) {
+      final added = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(builder: (_) => const AddAddressScreen()),
+      );
+      if (added == true) _retry(); // перечитываем список адресов
+      return;
+    }
     await SelectedAddress.set(picked);
   }
 
@@ -492,6 +502,7 @@ class _MenuScreenState extends State<MenuScreen> {
                         mode: _mode,
                         availability: data.availability,
                         onModeChanged: (m) => setState(() => _mode = m),
+                        deliveryAvailable: data.availability.deliveryAvailable,
                         activeOrderBlock: _activeOrder == null
                             ? null
                             : _ActiveOrderCard(
@@ -532,22 +543,9 @@ class _MenuScreenState extends State<MenuScreen> {
                     ),
                     // Переключатель на белом фоне, как в прототипе: внутри
                     // тёмного хедера выбранная половина сливалась с фоном.
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          Gap.screen,
-                          Gap.block,
-                          Gap.screen,
-                          0,
-                        ),
-                        child: ModeSwitch(
-                          mode: _mode,
-                          deliveryAvailable:
-                              data.availability.deliveryAvailable,
-                          onChanged: (m) => setState(() => _mode = m),
-                        ),
-                      ),
-                    ),
+                    // Пара кнопок «Доставка / Самовывоз» убрана: она занимала
+                    // целую строку и дублировала значок в шапке, где способ
+                    // получения теперь и переключается.
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(
@@ -852,6 +850,9 @@ class _ActiveOrderCard extends StatelessWidget {
   }
 }
 
+/// Служебное значение: в шите выбран пункт «Добавить новый адрес»
+const _addNewAddress = '__add__';
+
 /// Выбор адреса доставки с главного экрана.
 ///
 /// Только переключение между сохранёнными: добавление нового живёт в
@@ -914,10 +915,25 @@ class _AddressSheet extends StatelessWidget {
               ),
             ),
           const SizedBox(height: Gap.sm),
-          Text(
-            'Новый адрес добавляется при оформлении заказа — там есть поиск '
-            'по улицам.',
-            style: TextStyle(fontSize: 12.5, height: 1.4, color: c.muted),
+          PressScale(
+            onTap: () => Navigator.pop(context, _addNewAddress),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 15),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                borderRadius: R.field,
+                border: Border.all(color: c.line),
+              ),
+              child: Text(
+                '+ Добавить новый адрес',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                  color: c.ink,
+                ),
+              ),
+            ),
           ),
         ],
       ),

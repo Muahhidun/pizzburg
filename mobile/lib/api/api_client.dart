@@ -144,6 +144,33 @@ class ApiClient {
     return RepeatResult.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
   }
 
+  /// Сохранить адрес до оформления заказа.
+  ///
+  /// Раньше адрес появлялся только вместе с заказом — пополнить список с
+  /// главного экрана было нечем.
+  Future<void> saveAddress({
+    required String street,
+    required String house,
+    String? flat,
+    String? entrance,
+    String? floor,
+    String? comment,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/auth/addresses'),
+      headers: _headers,
+      body: jsonEncode({
+        'street': street,
+        'house': house,
+        if (flat != null && flat.isNotEmpty) 'flat': flat,
+        if (entrance != null && entrance.isNotEmpty) 'entrance': entrance,
+        if (floor != null && floor.isNotEmpty) 'floor': floor,
+        if (comment != null && comment.isNotEmpty) 'comment': comment,
+      }),
+    );
+    _ensureOk(res);
+  }
+
   /// id избранных товаров — для сердечек в каталоге
   Future<List<String>> fetchFavoriteIds() async {
     final res = await http.get(

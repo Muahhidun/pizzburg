@@ -24,6 +24,9 @@ class CatalogHeader extends StatelessWidget {
   final VoidCallback? onAddressTap;
   final ValueChanged<String> onModeChanged;
 
+  /// Доставка недоступна — переключать некуда, значок остаётся подписью
+  final bool deliveryAvailable;
+
   const CatalogHeader({
     super.key,
     required this.addressLabel,
@@ -31,6 +34,7 @@ class CatalogHeader extends StatelessWidget {
     required this.mode,
     required this.availability,
     required this.onModeChanged,
+    required this.deliveryAvailable,
     this.repeatBlock,
     this.activeOrderBlock,
     this.onAddressTap,
@@ -111,12 +115,22 @@ class CatalogHeader extends StatelessWidget {
                     ),
                   ),
                 ),
-                // Пустая подпись — значит о состоянии сказать нечего.
-                // Рисовать пустую плашку незачем: она занимает место и
-                // читается как сломанная.
-                if (etaLabel.isNotEmpty) ...[
-                  const SizedBox(width: Gap.md),
-                  Container(
+                const SizedBox(width: Gap.md),
+                // Способ получения переехал сюда из пары кнопок под шапкой.
+                // Кнопки занимали целую строку и дублировали этот значок, а
+                // состояние всё равно читается слева: «Доставим на» против
+                // «Заберёте из». Здесь остаётся только действие.
+                //
+                // Что человек не поймёт назначение значка — риск реальный,
+                // и он закрыт ниже по потоку: способ получения так же
+                // меняется на оформлении, где до него доходят все.
+                PressScale(
+                  onTap: deliveryAvailable
+                      ? () => onModeChanged(
+                          mode == 'PICKUP' ? 'DELIVERY' : 'PICKUP',
+                        )
+                      : null,
+                  child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
                       vertical: 7,
@@ -125,16 +139,29 @@ class CatalogHeader extends StatelessWidget {
                       color: c.surface.withValues(alpha: 0.14),
                       borderRadius: R.pill,
                     ),
-                    child: Text(
-                      etaLabel,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: c.surface,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          mode == 'PICKUP' ? 'самовывоз' : 'доставка',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: c.surface,
+                          ),
+                        ),
+                        if (deliveryAvailable) ...[
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.swap_horiz,
+                            size: 15,
+                            color: c.surface.withValues(alpha: 0.8),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                ],
+                ),
               ],
             ),
 
