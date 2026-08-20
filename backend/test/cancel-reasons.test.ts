@@ -67,3 +67,35 @@ test('чужая или выключенная причина отклоняет
     /Неизвестная причина/,
   );
 });
+
+test('клиенту предлагают только то, что бывает в первую минуту', async () => {
+  // Стартовый набор создаётся при первом обращении к пустому справочнику
+  let stored: { label: string; availableToCustomer: boolean }[] = [];
+  const prisma = {
+    cancelReason: {
+      findMany: async () => stored,
+      createMany: async ({ data }: { data: typeof stored }) => {
+        stored = data;
+      },
+    },
+  };
+  const service = new CancelReasonsService(prisma as never);
+
+  const forCustomer = (await service.list('t1', true)).map((r) => r.label);
+
+  // Ожидание невозможно: заказ ещё не ушёл в заведение
+  assert.ok(!forCustomer.includes('Долгое ожидание'));
+  // Про себя в третьем лице человек не читает
+  assert.ok(!forCustomer.includes('Клиент передумал'));
+  // Служебные причины кассира клиенту не показываем
+  assert.ok(!forCustomer.includes(CancelReasonsService.shortageLabel));
+
+  assert.deepEqual(forCustomer, [
+    'Не тот адрес',
+    'Перепутал доставку и самовывоз',
+    'Не тот способ оплаты',
+    'Не то время',
+    'Забыл добавить блюдо',
+    'Просто передумал',
+  ]);
+});

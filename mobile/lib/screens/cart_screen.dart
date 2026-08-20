@@ -62,6 +62,7 @@ class _CartScreenState extends State<CartScreen> {
         _preview = null;
         _previewedFor = null;
         _loading = false;
+        _points = 0;
       });
       return;
     }
@@ -144,6 +145,19 @@ class _CartScreenState extends State<CartScreen> {
     final c = context.colors;
     final cart = context.watch<Cart>();
     final preview = _preview;
+
+    // Пустая корзина — конец прошлого заказа: он либо оформлен, либо
+    // разобран по одной позиции. Ползунок баллов начинает следующий заказ
+    // с нуля. Экран живёт в IndexedStack и не пересоздаётся, поэтому
+    // значение доживало до новой корзины и списывало баллы молча — человек
+    // видел готовую сумму и не знал, что за неё уже заплатил накоплениями.
+    if (cart.isEmpty && _points != 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && context.read<Cart>().isEmpty) {
+          setState(() => _points = 0);
+        }
+      });
+    }
 
     // Состав изменился на другом экране — пересчитываем после кадра:
     // setState во время build запрещён.

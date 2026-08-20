@@ -13,17 +13,38 @@ import { PrismaService } from '../prisma/prisma.service';
 export class CancelReasonsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Стартовый набор — создаётся при первом обращении, чтобы список не был пуст */
+  /**
+   * Стартовый набор — создаётся при первом обращении, чтобы список не был пуст.
+   *
+   * Два списка в одном справочнике, и делит их `availableToCustomer`.
+   *
+   * Кассир отменяет заказ в любой момент его жизни, поэтому её причины
+   * описывают кухню и доставку. Клиент отменяет только внутри окна
+   * бесплатной отмены — то есть в первую минуту, когда заведение о заказе
+   * ещё не знает. «Долгое ожидание» там физически невозможно, а «клиент
+   * передумал» он читает про себя в третьем лице.
+   *
+   * Клиентские причины намеренно разнесены, а не свёрнуты в «передумал»:
+   * пять из шести — это не каприз, а наш экран, на котором человек
+   * ошибся, и по каждой видно, что чинить.
+   */
   private readonly defaults = [
     { label: 'Нет позиции в наличии', availableToCustomer: false },
-    { label: 'Клиент передумал', availableToCustomer: true },
-    { label: 'Клиент ошибся в заказе', availableToCustomer: true },
-    { label: 'Долгое ожидание', availableToCustomer: true },
+    { label: 'Клиент передумал', availableToCustomer: false },
+    { label: 'Клиент ошибся в заказе', availableToCustomer: false },
+    { label: 'Долгое ожидание', availableToCustomer: false },
     { label: 'Клиент не отвечает', availableToCustomer: false },
     { label: 'Нет курьеров', availableToCustomer: false },
     { label: 'Адрес вне зоны доставки', availableToCustomer: false },
     { label: 'Дубль заказа', availableToCustomer: false },
     { label: 'Технический сбой', availableToCustomer: false },
+
+    { label: 'Не тот адрес', availableToCustomer: true },
+    { label: 'Перепутал доставку и самовывоз', availableToCustomer: true },
+    { label: 'Не тот способ оплаты', availableToCustomer: true },
+    { label: 'Не то время', availableToCustomer: true },
+    { label: 'Забыл добавить блюдо', availableToCustomer: true },
+    { label: 'Просто передумал', availableToCustomer: true },
   ];
 
   async list(tenantId: string, onlyForCustomer = false) {
