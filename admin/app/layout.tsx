@@ -12,7 +12,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="ru">
       <body className="min-h-screen">
         <Nav />
-        <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+        {/* Отступ слева только на широком экране: на телефоне колонка
+            выезжает поверх, а не раздвигает содержимое. */}
+        <main className="px-4 py-6 lg:pl-60">
+          <div className="mx-auto max-w-6xl lg:px-4">{children}</div>
+        </main>
       </body>
     </html>
   );
