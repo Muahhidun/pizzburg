@@ -21,6 +21,20 @@ const PART_RU: Record<string, string> = {
   REJECTED: 'отклонён',
 };
 
+/**
+ * Что написать про часть заказа.
+ *
+ * `PENDING` — заказ ещё ждёт конца окна отмены и на планшет не уходил.
+ * Раньше в этом случае писали «отправлен», и отменённый в окно заказ
+ * выглядел так, будто чек лежит в кассе, хотя его там не было никогда.
+ */
+function partLabel(part: { status: string; posterStatus: string | null }) {
+  if (part.status === 'PENDING') return 'ещё не отправлен';
+  if (part.status === 'VOID') return 'погашена';
+  if (part.status === 'FAILED') return 'ошибка отправки';
+  return PART_RU[part.posterStatus ?? ''] ?? 'отправлен';
+}
+
 export default function CashierPage() {
   const [data, setData] = useState<CashierQueue | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -127,7 +141,7 @@ function OrderCard({ order, onDone }: { order: CashierOrder; onDone: () => void 
                       : 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
               }`}
             >
-              {p.department}: {PART_RU[p.posterStatus ?? ''] ?? 'отправлен'}
+              {p.department}: {partLabel(p)}
               {p.posterOrderId && p.posterOrderId !== 'dry-run' && ` · чек №${p.posterOrderId}`}
             </span>
           ))}

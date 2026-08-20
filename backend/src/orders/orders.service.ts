@@ -58,6 +58,19 @@ function orderFingerprint(order: {
   return [order.type, order.paymentMethod, address, items].join('#');
 }
 
+/**
+ * Русское склонение после числа. Нужно ровно там, где текст видит клиент:
+ * «в течение 1 минут» читается как небрежность и подрывает доверие к
+ * остальному тексту на экране.
+ */
+function plural(n: number, one: string, few: string, many: string) {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
+}
+
 interface DeliverySettings {
   minOrder: number;
   fee: number;
@@ -553,16 +566,9 @@ export class OrdersService {
           cancelledBy: true,
           customer: { select: { phone: true } },
           dispatches: {
-            // NULL — это чек, которого кассир ещё не касалась, то есть
-            // ровно тот, который надо отклонить. Prisma при `not` его
-            // отсекает (NOT NULL = NULL в SQL), поэтому условие пишем
-            // явно: молчание из-за этого стоило кассиру пропущенной
-            // отмены на живом тесте.
-            where: {
-              status: 'SENT',
-              OR: [{ posterStatus: null }, { posterStatus: { not: 'REJECTED' } }],
-            },
             select: {
+              status: true,
+              posterStatus: true,
               posterOrderId: true,
               posterAccountId: true,
               posterAccount: { select: { name: true } },
@@ -573,19 +579,33 @@ export class OrdersService {
       if (!order) return;
       const who = order.cancelledBy === 'CUSTOMER' ? 'клиентом' : 'оператором';
 
-      // Руководству — всегда: отмена это потерянные деньги и повод
-      // спросить причину, независимо от того, висит ли где-то чек.
-      await this.telegram.notify(
-        order.tenantId,
-        `🚫 <b>Заказ №${order.number} отменён ${who}</b>` +
-          (order.cancelReason ? `\nПричина: ${order.cancelReason}` : '') +
-          `\nСумма: ${order.total} ₸`,
+      // Дошёл ли заказ до кухни вообще. Отменённый в бесплатное окно не
+      // уходил на планшеты, никто ничего не готовил и не терял.
+      const reachedKitchen = (order.dispatches ?? []).some(
+        (d) => d.status === 'SENT' && d.posterOrderId && d.posterOrderId !== 'dry-run',
       );
+
+      // Руководству — только то, что стоило денег или требует разговора.
+      // Клиент передумал за полминуты, кухня об этом не узнала — сообщать
+      // не о чем, а поток таких сообщений и есть то замыливание, из-за
+      // которого перестают замечать важное (DECISIONS §12.11).
+      if (reachedKitchen || order.cancelledBy !== 'CUSTOMER') {
+        await this.telegram.notify(
+          order.tenantId,
+          `🚫 <b>Заказ №${order.number} отменён ${who}</b>` +
+            (order.cancelReason ? `\nПричина: ${order.cancelReason}` : '') +
+            `\nСумма: ${order.total} ₸`,
+        );
+      }
 
       // Кассе — только если есть что отклонять. Сообщение без действия
       // учит не читать этот канал.
       const live = (order.dispatches ?? []).filter(
-        (d) => d.posterOrderId && d.posterOrderId !== 'dry-run',
+        (d) =>
+          d.status === 'SENT' &&
+          d.posterStatus !== 'REJECTED' &&
+          d.posterOrderId &&
+          d.posterOrderId !== 'dry-run',
       );
       if (live.length === 0) return;
       await this.telegram.notifyCashier(
@@ -1117,7 +1137,8 @@ export class OrdersService {
     );
     if (now > deadline) {
       throw new BadRequestException(
-        `Отменить можно в течение ${cancellation.customerWindowMinutes} минут после оформления`,
+        `Отменить можно в течение ${cancellation.customerWindowMinutes} ` +
+          `${plural(cancellation.customerWindowMinutes, 'минуты', 'минут', 'минут')} после оформления`,
       );
     }
 

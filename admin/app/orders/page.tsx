@@ -32,6 +32,20 @@ const PART_RU: Record<string, string> = {
   REJECTED: 'отклонён',
 };
 
+/**
+ * Что написать про часть заказа.
+ *
+ * `PENDING` — заказ ещё ждёт конца окна отмены и на планшет не уходил.
+ * Раньше в этом случае писали «отправлен», и отменённый в окно заказ
+ * выглядел так, будто чек лежит в кассе, хотя его там не было никогда.
+ */
+function partLabel(part: { status: string; posterStatus: string | null }) {
+  if (part.status === 'PENDING') return 'ещё не отправлен';
+  if (part.status === 'VOID') return 'погашена';
+  if (part.status === 'FAILED') return 'ошибка отправки';
+  return PART_RU[part.posterStatus ?? ''] ?? 'отправлен';
+}
+
 export default function OrdersPage() {
   const [date, setDate] = useState(todayLocal);
   const [data, setData] = useState<OrdersResponse | null>(null);
@@ -114,7 +128,7 @@ export default function OrdersPage() {
                           : 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
                     }`}
                   >
-                    {p.department}: {PART_RU[p.posterStatus ?? ''] ?? 'отправлен'}
+                    {p.department}: {partLabel(p)}
                   </span>
                 ))}
                 <span className="font-semibold">{formatTenge(o.total)}</span>
@@ -228,7 +242,7 @@ function OrderDetails({ order, onRefresh }: { order: AdminOrder; onRefresh: () =
             {order.parts.map((p) => (
               <p key={p.department} className="text-neutral-500">
                 {p.department}: чек №{p.posterOrderId ?? '—'} ·{' '}
-                {PART_RU[p.posterStatus ?? ''] ?? 'отправлен'}
+                {partLabel(p)}
                 {p.error && <span className="text-red-600"> · ошибка: {p.error}</span>}
               </p>
             ))}
