@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { clearToken } from '@/lib/api';
+import { ThemePicker } from './theme';
 
 /**
  * Боковая навигация админки.
@@ -173,6 +174,10 @@ export function Nav() {
             })}
           </div>
         ))}
+
+        <div className="mt-6 border-t border-black/5 pt-4 dark:border-white/10">
+          <ThemePicker />
+        </div>
 
         <button
           onClick={() => {
