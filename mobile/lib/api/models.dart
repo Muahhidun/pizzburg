@@ -268,7 +268,11 @@ class Availability {
       cardOnDeliveryEnabled: payments['cardOnDelivery'] ?? true,
       kaspiOnlineEnabled: payments['kaspiOnline'] ?? false,
       askChangeFrom: payments['askChangeFrom'] ?? true,
-      cancelWindowMinutes: j['cancelWindowMinutes'] ?? 0,
+      // Сервер отдаёт окно вложенным, как и способы оплаты. Читали с
+      // верхнего уровня — поле всегда было нулём, и кнопка отмены не
+      // появлялась ни разу, сколько бы минут ни стояло в настройках.
+      cancelWindowMinutes:
+          (j['cancellation'] ?? const {})['customerWindowMinutes'] ?? 0,
     );
   }
 }

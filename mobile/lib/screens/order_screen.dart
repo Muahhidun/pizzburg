@@ -292,7 +292,7 @@ class _OrderScreenState extends State<OrderScreen> {
               // Пока заказ не ушёл на кухню, говорим об этом прямо.
               // «Заказ отправлен» в эти секунды было бы неправдой, а
               // человек как раз в них решает, передумал он или нет.
-              if (!_awaitingShortage && _beforeDispatch != null)
+              if (!_awaitingShortage && _beforeDispatch != null) ...[
                 Padding(
                   padding: const EdgeInsets.only(top: Gap.md),
                   child: Text(
@@ -306,6 +306,34 @@ class _OrderScreenState extends State<OrderScreen> {
                     ),
                   ),
                 ),
+                // Кнопка отмены стоит здесь, а не внизу под составом:
+                // окно живёт минуту, и пролистывать до главного действия
+                // в эту минуту человек не должен.
+                if (_canCancel) ...[
+                  const SizedBox(height: Gap.md),
+                  PressScale(
+                    onTap: _cancelling ? null : _cancel,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        borderRadius: R.pill,
+                        border: Border.all(
+                          color: c.surface.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Text(
+                        _cancelling ? 'Отменяем…' : 'Отменить заказ',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: c.surface,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
 
               if (loaded && !cancelled) ...[
                 const SizedBox(height: Gap.lg),
@@ -463,7 +491,7 @@ class _OrderScreenState extends State<OrderScreen> {
                 ),
               ),
 
-              if (_canCancel) ...[
+              if (_canCancel && _beforeDispatch == null) ...[
                 const SizedBox(height: Gap.lg),
                 PressScale(
                   onTap: _cancelling ? null : _cancel,
