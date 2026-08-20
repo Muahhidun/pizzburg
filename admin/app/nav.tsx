@@ -18,9 +18,23 @@ import { clearToken } from '@/lib/api';
  * и прятать её под бургер значит добавить тап ровно там, где он дороже
  * всего.
  */
-const groups: { title: string; links: { href: string; label: string }[] }[] = [
+/**
+ * Цвет у заголовка группы, а не у ссылок.
+ *
+ * Одним серым по серому заголовок читался как ещё одна вкладка, только
+ * бледнее, и колонка превращалась в четырнадцать одинаковых строк. Цвет
+ * плюс засечка слева сразу говорят: это подпись раздела, а не то, куда
+ * можно нажать. Ссылки остаются нейтральными — цветное здесь только то,
+ * что не кликается, и спутать их уже нельзя.
+ */
+const groups: {
+  title: string;
+  tint: string;
+  links: { href: string; label: string }[];
+}[] = [
   {
     title: 'Работа',
+    tint: 'text-emerald-600 dark:text-emerald-400',
     links: [
       { href: '/dashboard', label: 'Сводка' },
       { href: '/cashier', label: 'Касса' },
@@ -29,6 +43,7 @@ const groups: { title: string; links: { href: string; label: string }[] }[] = [
   },
   {
     title: 'Меню',
+    tint: 'text-amber-600 dark:text-amber-400',
     links: [
       { href: '/storefront', label: 'Витрина' },
       { href: '/stoplist', label: 'Стоп-листы' },
@@ -36,6 +51,7 @@ const groups: { title: string; links: { href: string; label: string }[] }[] = [
   },
   {
     title: 'Маркетинг',
+    tint: 'text-violet-600 dark:text-violet-400',
     links: [
       { href: '/promotions', label: 'Акции' },
       { href: '/loyalty', label: 'Кэшбэк' },
@@ -44,6 +60,7 @@ const groups: { title: string; links: { href: string; label: string }[] }[] = [
   },
   {
     title: 'Клиенты',
+    tint: 'text-sky-600 dark:text-sky-400',
     links: [
       { href: '/customers', label: 'Клиенты' },
       { href: '/addresses', label: 'Адреса' },
@@ -51,10 +68,12 @@ const groups: { title: string; links: { href: string; label: string }[] }[] = [
   },
   {
     title: 'Отчёты',
+    tint: 'text-rose-600 dark:text-rose-400',
     links: [{ href: '/cancellations', label: 'Отмены' }],
   },
   {
     title: 'Настройки',
+    tint: 'text-teal-600 dark:text-teal-400',
     links: [
       { href: '/operations', label: 'Режим работы' },
       { href: '/legal', label: 'Документы' },
@@ -117,10 +136,24 @@ export function Nav() {
           </button>
         </div>
 
-        {groups.map((group) => (
-          <div key={group.title} className="mb-4">
-            <div className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-neutral-400">
-              {group.title}
+        {groups.map((group, i) => (
+          <div
+            key={group.title}
+            className={`mb-4 ${
+              i > 0
+                ? 'mt-4 border-t border-black/5 pt-4 dark:border-white/10'
+                : ''
+            }`}
+          >
+            <div className="flex items-center gap-2 px-2 pb-1.5">
+              <span
+                className={`h-3.5 w-[3px] rounded-full bg-current ${group.tint}`}
+              />
+              <span
+                className={`text-[11px] font-bold uppercase tracking-widest ${group.tint}`}
+              >
+                {group.title}
+              </span>
             </div>
             {group.links.map((l) => {
               const active = pathname.startsWith(l.href);
