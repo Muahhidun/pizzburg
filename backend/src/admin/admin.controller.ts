@@ -2,6 +2,7 @@ import {
   Body,
   BadRequestException,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -17,6 +18,7 @@ import { AdminGuard } from './admin.guard';
 import { AdminService } from './admin.service';
 import { MessagesService } from '../messages/messages.service';
 import { RushService } from '../availability/rush.service';
+import { UpsellService } from '../upsell/upsell.service';
 import {
   PosterAccountDto,
   PromotionDto,
@@ -29,6 +31,7 @@ import {
   UpdateAddressDto,
   UpdateCancellationDto,
   UpdateRushDto,
+  AddUpsellDto,
   UpdateLoyaltyLevelsDto,
   UpdateOrderingDto,
   UpdatePaymentsDto,
@@ -54,6 +57,7 @@ export class AdminController {
     private readonly admin: AdminService,
     private readonly messages: MessagesService,
     private readonly rush: RushService,
+    private readonly upsell: UpsellService,
   ) {}
 
   @Get('storefront')
@@ -311,6 +315,23 @@ export class AdminController {
   @Put('settings/loyalty-levels')
   updateLoyaltyLevels(@Body() dto: UpdateLoyaltyLevelsDto) {
     return this.admin.updateLoyaltyLevels(dto);
+  }
+
+  // ─── Допродажи ───────────────────────────────────────────────
+
+  @Get('upsells')
+  listUpsells() {
+    return this.admin.listUpsells();
+  }
+
+  @Post('upsells')
+  addUpsell(@Body() dto: AddUpsellDto) {
+    return this.admin.addUpsell(dto);
+  }
+
+  @Delete('upsells/:id')
+  removeUpsell(@Param('id') id: string) {
+    return this.admin.removeUpsell(id);
   }
 
   @Patch('settings/rush')

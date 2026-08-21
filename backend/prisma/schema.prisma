@@ -28,6 +28,7 @@ model Tenant {
   promoCodes     PromoCode[]
   loyaltyTxns    LoyaltyTransaction[]
   stopEvents     StopEvent[]
+  upsells        UpsellItem[]
 }
 
 /// Аккаунт Poster = отдел на своём планшете. У тенанта их может быть
@@ -102,8 +103,33 @@ model AppCategory {
   products         Product[]
   posterCategories Category[]
   stopEvents       StopEvent[]
+  upsells          UpsellItem[]
 
   @@index([tenantId])
+}
+
+/// Что предложить добавить к заказу (DECISIONS §12.20).
+///
+/// Привязка к витринной категории, а не общий список на всё меню:
+/// соус к пицце уместен, соус к десерту — нет, и одно неуместное
+/// предложение обесценивает все остальные. `appCategoryId = null` —
+/// «к любому заказу», для напитков.
+model UpsellItem {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  /// К какой категории в корзине предлагать; null — к любому заказу
+  appCategoryId String?
+  appCategory   AppCategory? @relation(fields: [appCategoryId], references: [id], onDelete: Cascade)
+
+  sortOrder Int     @default(0)
+  isActive  Boolean @default(true)
+
+  @@unique([tenantId, productId, appCategoryId])
+  @@index([tenantId, appCategoryId])
 }
 
 /// Категория Poster (зеркало кассы, обновляется синком).
@@ -175,6 +201,7 @@ model Product {
   comboGroups ComboGroup[]
   favorites   Favorite[]
   stopEvents  StopEvent[]
+  upsells     UpsellItem[]
 
   @@unique([posterAccountId, posterId])
   @@index([tenantId, categoryId])

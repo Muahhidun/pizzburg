@@ -156,6 +156,10 @@ class CartPreview {
   /// «Добавьте ещё на N ₸ — подарок». Порог считает сервер.
   final NextGift? nextGift;
 
+  /// Что предложить добавить. Подбирает сервер: приложение не знает
+  /// правил и не должно решать, уместен ли соус к десерту.
+  final List<UpsellOffer> upsell;
+
   CartPreview({
     required this.subtotal,
     required this.promoDiscount,
@@ -173,6 +177,7 @@ class CartPreview {
     this.maxPointsSpend = 0,
     required this.availability,
     this.nextGift,
+    this.upsell = const [],
   });
 
   factory CartPreview.fromJson(Map<String, dynamic> json) {
@@ -205,8 +210,53 @@ class CartPreview {
       nextGift: json['nextGift'] == null
           ? null
           : NextGift.fromJson(json['nextGift']),
+      // Старые сборки сервера поля не знают — тогда блока просто нет
+      upsell: ((json['upsell'] ?? []) as List)
+          .map((u) => UpsellOffer.fromJson(u))
+          .toList(),
     );
   }
+}
+
+/// Предложение добавить к заказу (DECISIONS §12.20)
+class UpsellOffer {
+  final String productId;
+  final String name;
+  final int price;
+  final String? photoUrl;
+  final String? weightLabel;
+
+  const UpsellOffer({
+    required this.productId,
+    required this.name,
+    required this.price,
+    this.photoUrl,
+    this.weightLabel,
+  });
+
+  factory UpsellOffer.fromJson(Map<String, dynamic> json) => UpsellOffer(
+    productId: json['productId']?.toString() ?? '',
+    name: json['name']?.toString() ?? '',
+    price: (json['price'] as num?)?.toInt() ?? 0,
+    photoUrl: json['photoUrl'],
+    weightLabel: json['weightLabel'],
+  );
+
+  /// Строка корзины из предложения.
+  ///
+  /// Каталога на экране корзины нет, а класть в корзину надо. Полей
+  /// хватает: сервер предлагает только позиции без выбора — с
+  /// модификаторами и комбо в допродажи не попадают, — поэтому пустых
+  /// групп здесь достаточно.
+  Product toProduct() => Product(
+    id: productId,
+    name: name,
+    description: '',
+    photoUrl: photoUrl,
+    weightLabel: weightLabel ?? '',
+    price: price,
+    modifierGroups: const [],
+  );
 }
 
 /// Ближайшая невыполненная акция на сумму

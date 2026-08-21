@@ -48,6 +48,7 @@ const groups: {
     links: [
       { href: '/storefront', label: 'Витрина' },
       { href: '/stoplist', label: 'Стоп-листы' },
+      { href: '/upsell', label: 'Допродажи' },
     ],
   },
   {

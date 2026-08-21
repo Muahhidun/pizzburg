@@ -27,6 +27,7 @@ import {
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { OrdersService } from '../orders/orders.service';
 import { AvailabilityService } from '../availability/availability.service';
+import { UpsellService } from '../upsell/upsell.service';
 import { LegalService } from '../legal/legal.service';
 import { CancelReasonsService } from '../orders/cancel-reasons.service';
 import { ShortageService } from '../orders/shortage.service';
@@ -131,6 +132,7 @@ export class AdminService {
     private readonly loyalty: LoyaltyService,
     private readonly orderService: OrdersService,
     private readonly availability: AvailabilityService,
+    private readonly upsell: UpsellService,
     private readonly legal: LegalService,
     private readonly reasons: CancelReasonsService,
     private readonly promoEngine: PromotionsService,
@@ -928,6 +930,23 @@ export class AdminService {
       where: { id },
       data: { resolvedAt: new Date() },
     });
+  }
+
+  // ─── Допродажи (DECISIONS §12.20) ────────────────────────────
+
+  async listUpsells() {
+    const tenant = await this.tenant();
+    return this.upsell.list(tenant.id);
+  }
+
+  async addUpsell(data: { productId: string; appCategoryId?: string | null }) {
+    const tenant = await this.tenant();
+    return this.upsell.add(tenant.id, data);
+  }
+
+  async removeUpsell(id: string) {
+    const tenant = await this.tenant();
+    return this.upsell.remove(tenant.id, id);
   }
 
   /** Общий помощник: патч одной секции настроек тенанта */

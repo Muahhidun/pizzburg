@@ -49,6 +49,7 @@ export const api = {
     }),
   put: <T>(p: string, body: unknown) =>
     request<T>(p, { method: 'PUT', body: JSON.stringify(body) }),
+  del: <T>(p: string) => request<T>(p, { method: 'DELETE' }),
   upload: <T>(p: string, file: File) => {
     const form = new FormData();
     form.append('file', file);
@@ -88,6 +89,19 @@ export interface AdminCategory {
   productsTotal: number;
   productsVisible: number;
   products: AdminProduct[];
+}
+
+/** Позиция допродажи (DECISIONS §12.20) */
+export interface UpsellItem {
+  id: string;
+  productId: string;
+  name: string;
+  price: number;
+  photoUrl: string | null;
+  /** null — предлагаем к любому заказу */
+  appCategoryId: string | null;
+  sortOrder: number;
+  isActive: boolean;
 }
 
 export interface Storefront {

@@ -15,6 +15,7 @@ import { MessagesModule } from './messages/messages.module';
 import { GeoModule } from './geo/geo.module';
 import { LegalModule } from './legal/legal.module';
 import { StopListModule } from './stoplist/stoplist.module';
+import { UpsellModule } from './upsell/upsell.module';
 import { TelegramModule } from './telegram/telegram.module';
 
 @Controller()
@@ -54,6 +55,7 @@ class RootController {
     AvailabilityModule,
     LegalModule,
     StopListModule,
+    UpsellModule,
     TelegramModule,
     GeoModule,
     FavoritesModule,

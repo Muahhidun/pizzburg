@@ -276,6 +276,13 @@ export class ReleaseStopDto {
   @IsOptional() @IsString() appCategoryId?: string;
 }
 
+/** Добавить позицию в допродажи (DECISIONS §12.20) */
+export class AddUpsellDto {
+  @IsString() productId: string;
+  /// К какой витринной категории предлагать; пусто — к любому заказу
+  @IsOptional() @IsString() appCategoryId?: string | null;
+}
+
 export class TelegramSettingsDto {
   @IsOptional() @IsBoolean() enabled?: boolean;
   /// Пустая строка означает «не меняли»: форма не получает токен обратно

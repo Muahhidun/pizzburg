@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PromotionsService } from './promotions.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AvailabilityService } from '../availability/availability.service';
+import { UpsellService } from '../upsell/upsell.service';
 
 class CartPreviewItemDto {
   @IsString()
@@ -39,6 +40,7 @@ export class CartController {
     private readonly promotions: PromotionsService,
     private readonly loyalty: LoyaltyService,
     private readonly availability: AvailabilityService,
+    private readonly upsell: UpsellService,
   ) {}
 
   @Post(':tenantSlug/preview')
@@ -77,6 +79,17 @@ export class CartController {
       dto.promoCode,
     );
 
+    // Что предложить добавить. Считаем от того, что уже в корзине, и
+    // после подарков: предлагать то, что человек и так получит даром, —
+    // худший способ потратить его внимание.
+    const upsell = await this.upsell.suggest(
+      tenant.id,
+      [
+        ...dto.items.map((i) => i.productId),
+        ...promo.gifts.map((g) => g.productId),
+      ],
+    );
+
     const settings = (tenant.settings as any)?.delivery ?? {};
     const loyaltyPolicy = this.loyalty.policy(tenant.settings);
     const availability = this.availability.getState(tenant.settings);
@@ -91,6 +104,7 @@ export class CartController {
         promotion: g.promotionName,
       })),
       appliedPromotions: promo.applied,
+      upsell,
       subtotal,
       // Подарки не уменьшают сумму — клиент просто не платит за позицию.
       // Денежная скидка уменьшает, поэтому идёт отдельным полем.

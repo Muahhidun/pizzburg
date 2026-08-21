@@ -239,6 +239,21 @@ class _CartScreenState extends State<CartScreen> {
                             '${preview.nextGift!.giftName.toLowerCase()} в подарок',
                       ),
 
+                    // Допродажи идут после состава и подарков, но до
+                    // выгоды: сначала человек проверяет, что заказал,
+                    // потом ему предлагают дополнить — и только потом он
+                    // занимается промокодом и баллами. Поставить блок
+                    // ниже значило бы вклиниться в подсчёт денег.
+                    if (preview.upsell.isNotEmpty)
+                      _UpsellStrip(
+                        offers: preview.upsell,
+                        onAdd: (offer) {
+                          Haptics.tap();
+                          cart.add(offer.toProduct());
+                          _refresh();
+                        },
+                      ),
+
                     const SizedBox(height: Gap.lg),
                     _PromoField(
                       controller: _promo,
@@ -548,6 +563,99 @@ class _Hint extends StatelessWidget {
         text,
         style: TextStyle(fontSize: 13, height: 1.4, color: c.warnText),
       ),
+    );
+  }
+}
+
+/// «Добавить к заказу»: горизонтальная лента предложений.
+///
+/// Лента, а не список: блок не должен отодвигать итог вниз — человек
+/// пришёл в корзину оформлять, а не читать ещё одно меню. Что именно
+/// предлагать, решает сервер; приложение не знает правил подбора.
+class _UpsellStrip extends StatelessWidget {
+  final List<UpsellOffer> offers;
+  final ValueChanged<UpsellOffer> onAdd;
+
+  const _UpsellStrip({required this.offers, required this.onAdd});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: Gap.lg),
+        Text(
+          'Добавить к заказу',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontSize: 15,
+          ),
+        ),
+        const SizedBox(height: Gap.md),
+        SizedBox(
+          height: 168,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.zero,
+            itemCount: offers.length,
+            separatorBuilder: (_, _) => const SizedBox(width: Gap.md),
+            itemBuilder: (context, i) {
+              final offer = offers[i];
+              return SizedBox(
+                width: 116,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ClipRRect(
+                      borderRadius: R.thumb,
+                      child: SizedBox(
+                        width: 116,
+                        height: 92,
+                        child: offer.photoUrl == null
+                            ? ColoredBox(color: c.fillSoft)
+                            : Image.network(
+                                offer.photoUrl!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) =>
+                                    ColoredBox(color: c.fillSoft),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: Gap.sm),
+                    Text(
+                      offer.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12.5, height: 1.25),
+                    ),
+                    const Spacer(),
+                    PressScale(
+                      onTap: () => onAdd(offer),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 7),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: c.accentSoft,
+                          borderRadius: R.pill,
+                        ),
+                        child: Text(
+                          '+ ${formatTenge(offer.price)}',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: c.accent,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
