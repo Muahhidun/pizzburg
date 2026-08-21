@@ -8,14 +8,29 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { OptionalCustomerAuthGuard } from '../auth/optional-customer-auth.guard';
 import { CustomerAuthGuard } from '../auth/customer-auth.guard';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './orders.dto';
 import { CancelReasonsService } from './cancel-reasons.service';
 import { ShortageService } from './shortage.service';
+import {
+  MESSAGE_TOPICS,
+  OrderMessagesService,
+} from './order-messages.service';
 import { PrismaService } from '../prisma/prisma.service';
+
+/** Обращение по живому заказу (DECISIONS §12.21) */
+class OrderMessageDto {
+  @IsIn(Object.keys(MESSAGE_TOPICS))
+  topic: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  text?: string;
+}
 
 class CancelOrderDto {
   @IsOptional()
@@ -36,6 +51,7 @@ export class OrdersController {
     private readonly reasons: CancelReasonsService,
     private readonly shortage: ShortageService,
     private readonly prisma: PrismaService,
+    private readonly messages: OrderMessagesService,
   ) {}
 
   @Post(':tenantSlug')
@@ -56,6 +72,22 @@ export class OrdersController {
   @Post('by-id/:orderId/sync-status')
   syncStatus(@Param('orderId') orderId: string) {
     return this.orders.syncStatus(orderId);
+  }
+
+  /**
+   * Написать нам по живому заказу.
+   *
+   * Без входа: заказ можно оформить гостем, и именно гость чаще всего
+   * пишет «не тот адрес». Требовать вход там, где человек уже ждёт еду,
+   * значит закрыть единственный канал связи ровно тогда, когда он нужен.
+   * От спама защищает не вход, а лимит в самом сервисе.
+   */
+  @Post('by-id/:orderId/message')
+  sendMessage(
+    @Param('orderId') orderId: string,
+    @Body() dto: OrderMessageDto,
+  ) {
+    return this.messages.send(orderId, dto);
   }
 
   /** Отмена клиентом в окно, заданное арендатором */

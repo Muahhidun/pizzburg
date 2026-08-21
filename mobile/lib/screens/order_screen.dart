@@ -185,6 +185,8 @@ class _OrderScreenState extends State<OrderScreen> {
     return 1;
   }
 
+  bool _sendingMessage = false;
+
   bool get _canCancel {
     final window = _availability?.cancelWindowMinutes ?? 0;
     if (window <= 0) return false;
@@ -193,6 +195,55 @@ class _OrderScreenState extends State<OrderScreen> {
     final created = DateTime.tryParse(_data?['createdAt']?.toString() ?? '');
     if (created == null) return false;
     return DateTime.now().isBefore(created.add(Duration(minutes: window)));
+  }
+
+  /// Заказ ещё живой — по нему есть о чём писать.
+  ///
+  /// Закрытый обсуждать поздно: смена его уже не видит, и впечатления
+  /// соберёт анкета качества.
+  bool get _isLive {
+    final status = _data?['status'] ?? 'NEW';
+    return status != 'DELIVERED' && status != 'CANCELLED';
+  }
+
+  /// Написать в заведение (DECISIONS §12.21).
+  ///
+  /// Сначала тема из списка, потом — по желанию — пара слов. Кассир
+  /// читает это в разгар смены: помеченный запрос она разбирает за
+  /// секунду, абзац свободного текста — нет. Ровно этим кнопка и лучше
+  /// звонка, из-за которого телефон и не публикуется.
+  Future<void> _writeUs() async {
+    final choice = await showModalBottomSheet<_MessageChoice>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _MessageSheet(),
+    );
+    if (choice == null || !mounted) return;
+
+    setState(() => _sendingMessage = true);
+    try {
+      await context.read<ApiClient>().sendOrderMessage(
+        widget.order.id,
+        topic: choice.topic,
+        text: choice.text,
+      );
+      if (!mounted) return;
+      Haptics.success();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Передали кассиру — скоро ответим')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      await Haptics.warning();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sendingMessage = false);
+    }
   }
 
   Future<void> _cancel() async {
@@ -500,6 +551,47 @@ class _OrderScreenState extends State<OrderScreen> {
                 ),
               ),
 
+              // «Написать нам» — замена телефона кассы, поэтому стоит на
+              // экране заказа и видна, пока заказ живой. Это единственный
+              // канал, по которому человек может сказать «не тот адрес»
+              // или «забыли соус», пока это ещё можно исправить.
+              if (_isLive) ...[
+                const SizedBox(height: Gap.lg),
+                PressScale(
+                  onTap: _sendingMessage ? null : _writeUs,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      borderRadius: R.pill,
+                      color: c.surface.withValues(alpha: 0.10),
+                      border: Border.all(
+                        color: c.surface.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.chat_bubble_outline,
+                          size: 16,
+                          color: c.surface,
+                        ),
+                        const SizedBox(width: Gap.sm),
+                        Text(
+                          _sendingMessage ? 'Отправляем…' : 'Написать нам',
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: c.surface,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+
               if (_canCancel && _cancelLeft == null) ...[
                 const SizedBox(height: Gap.lg),
                 PressScale(
@@ -717,6 +809,151 @@ class _StageRow extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Тема и, по желанию, пара слов
+class _MessageChoice {
+  final String topic;
+  final String? text;
+  const _MessageChoice({required this.topic, this.text});
+}
+
+/// Написать в заведение: тема из списка, затем свободное поле.
+///
+/// Список, а не пустое поле: кассир читает это в разгар смены, и
+/// помеченный запрос она разбирает за секунду. Поле для текста
+/// необязательное — «где мой заказ» сказано уже самой темой.
+class _MessageSheet extends StatefulWidget {
+  const _MessageSheet();
+
+  @override
+  State<_MessageSheet> createState() => _MessageSheetState();
+}
+
+class _MessageSheetState extends State<_MessageSheet> {
+  static const _topics = [
+    ('WHERE', 'Где мой заказ?'),
+    ('ADDRESS', 'Поменять адрес'),
+    ('CANCEL', 'Отменить заказ'),
+    ('MISSING', 'Забыли позицию'),
+    ('OTHER', 'Другое'),
+  ];
+
+  String? _topic;
+  final _text = TextEditingController();
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    // «Другое» без пояснения — пустое сообщение, разбирать в нём нечего
+    final ready = _topic != null && (_topic != 'OTHER' || _text.text.trim().isNotEmpty);
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        Gap.screen,
+        Gap.blockWide,
+        Gap.screen,
+        Gap.blockWide + MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      decoration: BoxDecoration(color: c.page, borderRadius: R.sheetTop),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Что случилось?',
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontSize: 21),
+          ),
+          const SizedBox(height: Gap.xs),
+          Text(
+            'Передадим кассиру вместе с номером заказа',
+            style: Theme.of(context).textTheme.labelMedium,
+          ),
+          const SizedBox(height: Gap.lg),
+          for (final (id, label) in _topics)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Gap.sm),
+              child: PressScale.selection(
+                onTap: () => setState(() => _topic = id),
+                child: AnimatedContainer(
+                  duration: Motion.base,
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Gap.lg,
+                    vertical: 14,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _topic == id ? c.panel : c.fillSoft,
+                    borderRadius: R.field,
+                  ),
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: _topic == id ? c.surface : c.ink,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          const SizedBox(height: Gap.sm),
+          TextField(
+            controller: _text,
+            maxLines: 2,
+            maxLength: 500,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: _topic == 'OTHER'
+                  ? 'Расскажите, что не так'
+                  : 'Пара слов, если нужно',
+              counterText: '',
+              filled: true,
+              fillColor: c.fillSoft,
+              border: OutlineInputBorder(
+                borderRadius: R.field,
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          const SizedBox(height: Gap.md),
+          PressScale(
+            onTap: ready
+                ? () => Navigator.pop(
+                    context,
+                    _MessageChoice(topic: _topic!, text: _text.text),
+                  )
+                : null,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: ready ? c.accent : c.fillSoft,
+                borderRadius: R.pill,
+              ),
+              child: Text(
+                'Отправить',
+                style: TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w700,
+                  color: ready ? c.surface : c.muted,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

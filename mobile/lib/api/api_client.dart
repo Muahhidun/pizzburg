@@ -99,6 +99,26 @@ class ApiClient {
     _ensureOk(res);
   }
 
+  /// Написать по живому заказу (DECISIONS §12.21).
+  ///
+  /// Без токена: заказ можно оформить гостем, и именно гость чаще всего
+  /// пишет «не тот адрес». От спама защищает лимит на сервере.
+  Future<void> sendOrderMessage(
+    String orderId, {
+    required String topic,
+    String? text,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/orders/by-id/$orderId/message'),
+      headers: _headers,
+      body: jsonEncode({
+        'topic': topic,
+        if (text != null && text.trim().isNotEmpty) 'text': text.trim(),
+      }),
+    );
+    _ensureOk(res);
+  }
+
   Future<Map<String, dynamic>> requestOtp(String phone) async {
     final res = await http.post(
       Uri.parse('$baseUrl/auth/$tenant/request-otp'),

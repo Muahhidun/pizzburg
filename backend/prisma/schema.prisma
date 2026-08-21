@@ -626,6 +626,7 @@ model Order {
   items       OrderItem[]
   dispatches  OrderDispatch[]
   loyaltyTxns LoyaltyTransaction[]
+  messages    OrderMessage[]
 
   @@unique([tenantId, number])
   @@index([tenantId, status])
@@ -820,4 +821,22 @@ model PromoCode {
   isActive   Boolean   @default(true)
 
   @@unique([tenantId, code])
+}
+
+/// Обращение клиента по живому заказу (DECISIONS §12.21).
+///
+/// Телефон кассы не публикуется: звонок сбивает смену, где одновременно
+/// идут зал, агрегаторы и наши заказы. Обращение письменное, привязано к
+/// заказу и уже размечено темой — кассир видит запрос, а не абзац.
+model OrderMessage {
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  /// Тема из готового списка; свободный текст — дополнение к ней
+  topic     String
+  text      String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([orderId, createdAt])
 }
