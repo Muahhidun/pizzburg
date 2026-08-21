@@ -3,15 +3,13 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
-import '../services/push_notifications.dart';
 import '../state/auth.dart';
-import '../state/theme.dart';
-import '../theme/themes.dart';
 import 'login_screen.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../utils/haptics.dart';
 import '../widgets/motion.dart';
+import 'app_settings_screen.dart';
 import 'messages_screen.dart';
 import 'legal_screen.dart';
 
@@ -34,7 +32,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final c = context.colors;
     final auth = context.watch<AuthState>();
-    final push = context.watch<PushNotificationsService>();
 
     if (!auth.isAuthenticated) {
       return Scaffold(
@@ -188,11 +185,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
 
               const SizedBox(height: Gap.block),
-              _PushRow(push: push),
-              const _ThemeCard(),
-
-              const SizedBox(height: Gap.block),
-              _NotificationsCard(push: push),
+              const _SettingsRow(),
 
               // Список заказов жил и здесь, и на вкладке «Заказы» — один и
               // тот же `auth.orders` в двух местах. На вкладке он полнее:
@@ -513,263 +506,43 @@ class _LegalLinks extends StatelessWidget {
 /// надо, а не назвать. В каждом кружке видны все три роли палитры — фон,
 /// действие, выгода, — поэтому по нему заранее понятно, каким станет
 /// приложение, а не только «какой тут любимый цвет».
-class _ThemeCard extends StatelessWidget {
-  const _ThemeCard();
 
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final store = context.watch<ThemeStore>();
-
-    return Container(
-      padding: const EdgeInsets.all(Gap.lg),
-      decoration: BoxDecoration(color: c.fillSoft, borderRadius: R.field),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Оформление',
-            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
-          ),
-          Text(
-            store.current.hint,
-            style: Theme.of(context).textTheme.labelMedium,
-          ),
-          const SizedBox(height: Gap.lg),
-          Row(
-            children: [
-              for (final variant in appThemes) ...[
-                Expanded(
-                  child: _ThemeChoice(
-                    variant: variant,
-                    selected: variant.id == store.current.id,
-                    onTap: () {
-                      Haptics.selection();
-                      context.read<ThemeStore>().select(variant);
-                    },
-                  ),
-                ),
-                if (variant != appThemes.last) const SizedBox(width: Gap.sm),
-              ],
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ThemeChoice extends StatelessWidget {
-  final AppThemeVariant variant;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _ThemeChoice({
-    required this.variant,
-    required this.selected,
-    required this.onTap,
-  });
+/// Одна строка вместо трёх карточек.
+///
+/// Тема, уведомления и вибрация настраиваются один раз, а профиль
+/// открывают ради баллов и истории. Три постоянные карточки съедали
+/// экран и отодвигали вниз то, за чем сюда заходят.
+class _SettingsRow extends StatelessWidget {
+  const _SettingsRow();
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     return PressScale(
-      onTap: onTap,
-      child: Column(
-        children: [
-          Container(
-            height: 52,
-            decoration: BoxDecoration(
-              // Кружок показывает фон страницы, а не «светлый» цвет темы:
-              // у тёмной они разные, и белый кружок обещал бы не то.
-              color: variant.page ?? variant.surface,
-              borderRadius: R.thumbRepeat,
-              border: Border.all(
-                color: selected ? c.ink : c.ink.withValues(alpha: 0.12),
-                width: selected ? 2 : 1,
-              ),
-            ),
-            child: Center(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _Dot(variant.ink),
-                  const SizedBox(width: 3),
-                  _Dot(variant.accent),
-                  const SizedBox(width: 3),
-                  _Dot(variant.benefit),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: Gap.xs),
-          Text(
-            variant.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-              color: selected ? c.ink : c.muted,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Dot extends StatelessWidget {
-  final Color color;
-  const _Dot(this.color);
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 12,
-    height: 12,
-    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-  );
-}
-
-class _NotificationsCard extends StatelessWidget {
-  final PushNotificationsService push;
-  const _NotificationsCard({required this.push});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return Container(
-      padding: const EdgeInsets.all(Gap.lg),
-      decoration: BoxDecoration(color: c.fillSoft, borderRadius: R.field),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Вибрация',
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  'Отклик при выборе и подтверждении',
-                  style: Theme.of(context).textTheme.labelMedium,
-                ),
-              ],
-            ),
-          ),
-          _HapticsSwitch(),
-        ],
-      ),
-    );
-  }
-}
-
-/// Уведомления о заказе.
-///
-/// Строка нужна тем, кто отказался в диалоге после первого заказа: iOS
-/// показывает это окно один раз, и без такой строки включить уведомления
-/// обратно можно было бы только угадав путь в настройках телефона.
-class _PushRow extends StatelessWidget {
-  final PushNotificationsService push;
-  const _PushRow({required this.push});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final status = context.watch<PushNotificationsService>().status;
-    if (status == PushNotificationsStatus.unavailable) {
-      return const SizedBox.shrink();
-    }
-
-    final (title, hint) = switch (status) {
-      PushNotificationsStatus.enabled => (
-        'Уведомления включены',
-        'Сообщим, когда заказ будет готов',
-      ),
-      PushNotificationsStatus.denied => (
-        'Уведомления выключены',
-        'Включить можно в Настройках телефона → PizzBurg → Уведомления',
-      ),
-      PushNotificationsStatus.requesting => ('Спрашиваем…', 'Секунду'),
-      _ => ('Уведомления о заказе', 'Сообщим, когда заказ будет готов'),
-    };
-
-    final canAsk =
-        status == PushNotificationsStatus.notRequested ||
-        status == PushNotificationsStatus.error;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: Gap.block),
-      padding: const EdgeInsets.all(Gap.lg),
-      decoration: BoxDecoration(color: c.fillSoft, borderRadius: R.field),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(hint, style: Theme.of(context).textTheme.labelMedium),
-              ],
-            ),
-          ),
-          if (canAsk)
-            PressScale(
-              onTap: () async {
-                Haptics.tap();
-                await push.requestPermission();
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 9,
-                ),
-                decoration: BoxDecoration(
-                  color: c.accent,
-                  borderRadius: R.pill,
-                ),
-                child: Text(
-                  'Включить',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: c.surface,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HapticsSwitch extends StatefulWidget {
-  @override
-  State<_HapticsSwitch> createState() => _HapticsSwitchState();
-}
-
-class _HapticsSwitchState extends State<_HapticsSwitch> {
-  @override
-  Widget build(BuildContext context) {
-    return Switch(
-      value: Haptics.enabled,
-      activeThumbColor: context.colors.accent,
-      onChanged: (v) async {
-        await Haptics.setEnabled(v);
-        if (v) Haptics.selection();
-        if (mounted) setState(() {});
+      onTap: () {
+        Haptics.tap();
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const AppSettingsScreen()),
+        );
       },
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: c.line)),
+        ),
+        child: Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Настройки приложения',
+                style: TextStyle(fontSize: 13.5),
+              ),
+            ),
+            Icon(Icons.chevron_right, size: 18, color: c.muted),
+          ],
+        ),
+      ),
     );
   }
 }
