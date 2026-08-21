@@ -108,7 +108,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     final colors = context.colors;
 
     return Scaffold(
-      backgroundColor: colors.surface,
+      backgroundColor: colors.page,
       // Бар должен лежать поверх контента, а не отрезать ему низ, поэтому
       // Stack, а не bottomNavigationBar.
       body: CartFlightTarget(

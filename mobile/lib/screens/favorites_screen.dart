@@ -94,7 +94,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     final items = _items;
 
     return Scaffold(
-      backgroundColor: c.surface,
+      backgroundColor: c.page,
       body: SafeArea(
         bottom: false,
         child: Column(

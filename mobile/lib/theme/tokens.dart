@@ -36,7 +36,31 @@ class AppColors extends ThemeExtension<AppColors> {
   /// Текст и иконки поверх [benefit].
   final Color onBenefit;
 
+  /// Чернильный текст поверх светлой плашки, лежащей на тёмном или на
+  /// акценте: «Корзина · 3» в нижней панели каталога, «Оформить».
+  ///
+  /// В светлых темах это [ink]. В тёмной — нет: там `ink` светлый, и такая
+  /// надпись слилась бы с собственной плашкой.
+  final Color onSurface;
+
+  /// Светлое поверх тёмного и поверх акцента: текст в шапке каталога, на
+  /// экране заказа, на кнопках. Остаётся светлым во **всех** темах —
+  /// именно поэтому фон страницы вынесен отдельно в [page].
   final Color surface;
+
+  /// Фон страницы и выезжающих панелей.
+  ///
+  /// Отдельно от [surface], потому что у того две роли: он и фон, и текст
+  /// поверх тёмного. В светлых темах они совпадают, в тёмной — нет, и без
+  /// этого разделения текст на шапке каталога пропал бы вместе с фоном.
+  final Color page;
+
+  /// Заливка тёмных блоков: экран заказа, карточка баллов, выбранный чипс.
+  ///
+  /// В светлых темах это [ink]. В тёмной — не он: `ink` там светлый, и
+  /// экран заказа стал бы ослепительно белым.
+  final Color panel;
+
   final Color muted;
 
   /// Разделители строк списка и граница таб-бара
@@ -72,7 +96,10 @@ class AppColors extends ThemeExtension<AppColors> {
     required this.accent,
     required this.benefit,
     required this.onBenefit,
+    required this.onSurface,
     required this.surface,
+    required this.page,
+    required this.panel,
     required this.muted,
     required this.line,
     required this.border,
@@ -84,17 +111,28 @@ class AppColors extends ThemeExtension<AppColors> {
     required this.danger,
   });
 
+  /// Значения по умолчанию описывают светлую тему: [page] совпадает с
+  /// [surface], [panel] — с [ink], а текст на выгоде — это чернила. Тёмная
+  /// тема разводит эти пары, и только она.
   factory AppColors({
     Color ink = const Color(0xFF0B0B14),
     Color accent = const Color(0xFF2B3BEE),
     Color benefit = const Color(0xFFD6F84C),
     Color surface = const Color(0xFFFFFFFF),
+    Color? page,
+    Color? panel,
+    Color? onSurface,
+    Color? onBenefit,
+    Color danger = const Color(0xFFD92D20),
   }) => AppColors._(
     ink: ink,
     accent: accent,
     benefit: benefit,
-    onBenefit: ink,
+    onBenefit: onBenefit ?? onSurface ?? ink,
+    onSurface: onSurface ?? ink,
     surface: surface,
+    page: page ?? surface,
+    panel: panel ?? ink,
     muted: const Color(0xFF8E8EA8),
     line: ink.withValues(alpha: 0.08),
     border: ink.withValues(alpha: 0.12),
@@ -105,7 +143,7 @@ class AppColors extends ThemeExtension<AppColors> {
     // Подпись на бледной подложке акцента: сам акцент на ней сливается,
     // поэтому берём его же, приглушённый чернилами до читаемого.
     warnText: Color.lerp(accent, ink, 0.35)!,
-    danger: const Color(0xFFD92D20),
+    danger: danger,
   );
 
   @override
@@ -124,7 +162,10 @@ class AppColors extends ThemeExtension<AppColors> {
       accent: Color.lerp(accent, other.accent, t)!,
       benefit: Color.lerp(benefit, other.benefit, t)!,
       onBenefit: Color.lerp(onBenefit, other.onBenefit, t)!,
+      onSurface: Color.lerp(onSurface, other.onSurface, t)!,
       surface: Color.lerp(surface, other.surface, t)!,
+      page: Color.lerp(page, other.page, t)!,
+      panel: Color.lerp(panel, other.panel, t)!,
       muted: Color.lerp(muted, other.muted, t)!,
       line: Color.lerp(line, other.line, t)!,
       border: Color.lerp(border, other.border, t)!,

@@ -223,7 +223,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final delivery = _type == 'DELIVERY';
 
     return Scaffold(
-      backgroundColor: c.surface,
+      backgroundColor: c.page,
       body: SafeArea(
         bottom: false,
         child: Form(
@@ -675,7 +675,7 @@ class _Chip extends StatelessWidget {
         curve: Motion.change,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
         decoration: BoxDecoration(
-          color: selected ? c.ink : c.surface,
+          color: selected ? c.panel : c.page,
           borderRadius: R.pill,
           border: selected ? null : Border.all(color: c.border, width: 1.5),
         ),

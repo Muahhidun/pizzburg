@@ -38,7 +38,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     if (!auth.isAuthenticated) {
       return Scaffold(
-        backgroundColor: c.surface,
+        backgroundColor: c.page,
         body: SafeArea(
           child: Center(
             child: Padding(
@@ -137,7 +137,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     return Scaffold(
-      backgroundColor: c.surface,
+      backgroundColor: c.page,
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: auth.refresh,
@@ -579,7 +579,9 @@ class _ThemeChoice extends StatelessWidget {
           Container(
             height: 52,
             decoration: BoxDecoration(
-              color: variant.surface,
+              // Кружок показывает фон страницы, а не «светлый» цвет темы:
+              // у тёмной они разные, и белый кружок обещал бы не то.
+              color: variant.page ?? variant.surface,
               borderRadius: R.thumbRepeat,
               border: Border.all(
                 color: selected ? c.ink : c.ink.withValues(alpha: 0.12),

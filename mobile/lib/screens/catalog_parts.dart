@@ -90,10 +90,10 @@ class _Half extends StatelessWidget {
           ? c.surface.withValues(alpha: 0.35)
           : c.muted.withValues(alpha: 0.6);
     } else if (active) {
-      background = onDark ? c.surface : c.ink;
-      text = onDark ? c.ink : c.surface;
+      background = onDark ? c.surface : c.panel;
+      text = onDark ? c.onSurface : c.surface;
     } else {
-      background = onDark ? c.surface.withValues(alpha: 0.12) : c.surface;
+      background = onDark ? c.surface.withValues(alpha: 0.12) : c.page;
       text = onDark ? c.surface.withValues(alpha: 0.75) : c.muted;
     }
 
@@ -163,13 +163,17 @@ class GlassChipsBar extends StatelessWidget {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
+                      // Считаем от фона страницы, а не от «светлого»: панель
+                      // должна быть на тон отличной от того, на чём лежит.
+                      // В тёмной теме `surface` светлый, и белая панель
+                      // выехала бы поверх тёмного экрана.
                       Color.lerp(
-                        c.surface,
+                        c.page,
                         c.ink,
                         0.045,
                       )!.withValues(alpha: 0.80),
                       Color.lerp(
-                        c.surface,
+                        c.page,
                         c.ink,
                         0.07,
                       )!.withValues(alpha: 0.62),
@@ -570,7 +574,7 @@ class FloatingCart extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: c.ink,
+                      color: c.onSurface,
                     ),
                   ),
                 ),

@@ -73,7 +73,7 @@ class _AddAddressScreenState extends State<AddAddressScreen> {
   Widget build(BuildContext context) {
     final c = context.colors;
     return Scaffold(
-      backgroundColor: c.surface,
+      backgroundColor: c.page,
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(

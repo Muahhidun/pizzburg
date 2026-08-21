@@ -16,24 +16,35 @@ abstract final class AppTheme {
     Color accent = const Color(0xFF2B3BEE),
     Color benefit = const Color(0xFFD6F84C),
     Color surface = const Color(0xFFFFFFFF),
+    Color? page,
+    Color? panel,
+    Color? onSurface,
+    Color? onBenefit,
+    Color danger = const Color(0xFFD92D20),
+    Brightness brightness = Brightness.light,
   }) {
     final colors = AppColors(
       ink: ink,
       accent: accent,
       benefit: benefit,
       surface: surface,
+      page: page,
+      panel: panel,
+      onSurface: onSurface,
+      onBenefit: onBenefit,
+      danger: danger,
     );
 
     return ThemeData(
       useMaterial3: true,
       fontFamily: _text,
-      scaffoldBackgroundColor: colors.surface,
+      scaffoldBackgroundColor: colors.page,
       colorScheme: ColorScheme.fromSeed(
         seedColor: colors.accent,
         primary: colors.accent,
         secondary: colors.benefit,
-        surface: colors.surface,
-        brightness: Brightness.light,
+        surface: colors.page,
+        brightness: brightness,
       ),
       extensions: [colors],
       splashFactory: InkRipple.splashFactory,

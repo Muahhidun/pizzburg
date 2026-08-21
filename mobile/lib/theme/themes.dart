@@ -13,9 +13,11 @@ import 'package:flutter/material.dart';
 /// [AppColors]. Поэтому новая тема — это одна строка здесь, а не правка
 /// каждого экрана.
 ///
-/// Все темы светлые. Тёмная требует не другой палитры, а другой вёрстки:
-/// на экране статуса и в шапке каталога тёмные блоки набираются `surface`
-/// поверх `ink`, и при инверсии текст исчез бы. Это отдельная работа.
+/// Тёмная тема потребовала не другой палитры, а разделения ролей: `ink`
+/// служил и цветом текста, и заливкой тёмных блоков, `surface` — и фоном
+/// страницы, и текстом поверх этих блоков. Поэтому появились `page`
+/// (фон), `panel` (тёмная заливка) и `onSurface` (чернила на светлой
+/// плашке). В светлых темах они совпадают со старыми и ничего не меняют.
 ///
 /// Правила, которые нельзя нарушить при добавлении темы:
 /// — `accent` держит белый текст, поэтому должен быть тёмным;
@@ -35,6 +37,13 @@ class AppThemeVariant {
   final Color benefit;
   final Color surface;
 
+  /// Ниже — только для тёмной темы. У светлых они выводятся сами.
+  final Color? page;
+  final Color? panel;
+  final Color? onSurface;
+  final Color? danger;
+  final Brightness brightness;
+
   const AppThemeVariant({
     required this.id,
     required this.name,
@@ -43,6 +52,11 @@ class AppThemeVariant {
     required this.accent,
     required this.benefit,
     required this.surface,
+    this.page,
+    this.panel,
+    this.onSurface,
+    this.danger,
+    this.brightness = Brightness.light,
   });
 }
 
@@ -75,6 +89,23 @@ const appThemes = <AppThemeVariant>[
     accent: Color(0xFF5C6B3C),
     benefit: Color(0xFFDCE3A8),
     surface: Color(0xFFFAFAF3),
+  ),
+  AppThemeVariant(
+    id: 'night',
+    name: 'Тёмная',
+    hint: 'Для вечера и тёмного экрана',
+    // `ink` и `surface` здесь оба светлые, и это не опечатка: первый —
+    // текст на странице, второй — текст на тёмных блоках. В тёмной теме
+    // они совпадают, потому что светлое и там, и там.
+    ink: Color(0xFFE9ECF3),
+    accent: Color(0xFF5A6BFF),
+    benefit: Color(0xFFCFEF5B),
+    surface: Color(0xFFE9ECF3),
+    page: Color(0xFF12151C),
+    panel: Color(0xFF262E3B),
+    onSurface: Color(0xFF12151C),
+    danger: Color(0xFFFF6B60),
+    brightness: Brightness.dark,
   ),
 ];
 

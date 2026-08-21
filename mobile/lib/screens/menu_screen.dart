@@ -451,7 +451,7 @@ class _MenuScreenState extends State<MenuScreen> {
     final favorites = context.watch<Favorites>();
     final authed = context.watch<AuthState>().isAuthenticated;
     return Scaffold(
-      backgroundColor: colors.surface,
+      backgroundColor: colors.page,
       body: FutureBuilder<_CatalogData>(
         future: _future,
         builder: (context, snapshot) {
@@ -874,7 +874,7 @@ class _AddressSheet extends StatelessWidget {
         Gap.screen,
         Gap.blockWide,
       ),
-      decoration: BoxDecoration(color: c.surface, borderRadius: R.sheetTop),
+      decoration: BoxDecoration(color: c.page, borderRadius: R.sheetTop),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -897,7 +897,7 @@ class _AddressSheet extends StatelessWidget {
                     vertical: 14,
                   ),
                   decoration: BoxDecoration(
-                    color: a.id == selectedId ? c.ink : c.fillSoft,
+                    color: a.id == selectedId ? c.panel : c.fillSoft,
                     borderRadius: R.field,
                   ),
                   child: Text(

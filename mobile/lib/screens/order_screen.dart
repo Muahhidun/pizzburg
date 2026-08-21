@@ -239,7 +239,7 @@ class _OrderScreenState extends State<OrderScreen> {
         statusBarIconBrightness: Brightness.light,
       ),
       child: Scaffold(
-        backgroundColor: c.ink,
+        backgroundColor: c.panel,
         body: SafeArea(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(
@@ -767,7 +767,7 @@ class _CancelSheetState extends State<_CancelSheet> {
         Gap.screen,
         Gap.blockWide + MediaQuery.viewInsetsOf(context).bottom,
       ),
-      decoration: BoxDecoration(color: c.surface, borderRadius: R.sheetTop),
+      decoration: BoxDecoration(color: c.page, borderRadius: R.sheetTop),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -800,7 +800,7 @@ class _CancelSheetState extends State<_CancelSheet> {
                       vertical: 14,
                     ),
                     decoration: BoxDecoration(
-                      color: _selected == reason.id ? c.ink : c.fillSoft,
+                      color: _selected == reason.id ? c.panel : c.fillSoft,
                       borderRadius: R.field,
                     ),
                     child: Text(

@@ -108,9 +108,9 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final c = context.colors;
     return Scaffold(
-      backgroundColor: c.surface,
+      backgroundColor: c.page,
       appBar: AppBar(
-        backgroundColor: c.surface,
+        backgroundColor: c.page,
         elevation: 0,
         title: const Text('Вход'),
       ),

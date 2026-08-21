@@ -47,7 +47,7 @@ class _LegalDocumentScreenState extends State<LegalDocumentScreen> {
     final c = context.colors;
     final doc = _doc;
     return Scaffold(
-      backgroundColor: c.surface,
+      backgroundColor: c.page,
       body: SafeArea(
         child: _error != null
             ? _LegalMessage(text: _error!, onRetry: _load)

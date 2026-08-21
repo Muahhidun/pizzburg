@@ -60,7 +60,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
     final items = _items;
 
     return Scaffold(
-      backgroundColor: c.surface,
+      backgroundColor: c.page,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

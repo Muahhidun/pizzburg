@@ -247,13 +247,17 @@ class _GlassNavBarState extends State<GlassNavBar> {
                     // Лёгкий серый — как системные панели iOS в
                     // светлой теме.
                     colors: [
+                      // Считаем от фона страницы, а не от «светлого»: панель
+                      // должна быть на тон отличной от того, на чём лежит.
+                      // В тёмной теме `surface` светлый, и белая панель
+                      // выехала бы поверх тёмного экрана.
                       Color.lerp(
-                        c.surface,
+                        c.page,
                         c.ink,
                         0.045,
                       )!.withValues(alpha: 0.80),
                       Color.lerp(
-                        c.surface,
+                        c.page,
                         c.ink,
                         0.07,
                       )!.withValues(alpha: 0.62),

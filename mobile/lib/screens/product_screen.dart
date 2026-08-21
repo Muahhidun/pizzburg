@@ -88,7 +88,7 @@ class _ProductScreenState extends State<ProductScreen> {
     final favorites = context.watch<Favorites>();
 
     return Scaffold(
-      backgroundColor: c.surface,
+      backgroundColor: c.page,
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(Gap.screen, Gap.md, Gap.screen, 24),
@@ -217,7 +217,7 @@ class _ProductScreenState extends State<ProductScreen> {
                   onTap: _isComplete ? _addToCart : null,
                   child: Container(
                     padding: const EdgeInsets.fromLTRB(22, 12, 12, 12),
-                    decoration: BoxDecoration(color: c.ink, borderRadius: R.pill),
+                    decoration: BoxDecoration(color: c.panel, borderRadius: R.pill),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -340,7 +340,7 @@ class _StopListBlock extends StatelessWidget {
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   alignment: Alignment.center,
-                  decoration: BoxDecoration(color: c.ink, borderRadius: R.pill),
+                  decoration: BoxDecoration(color: c.panel, borderRadius: R.pill),
                   child: Text(
                     'Сообщить о поступлении',
                     style: TextStyle(

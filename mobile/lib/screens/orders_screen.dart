@@ -107,7 +107,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
         .toList();
 
     return Scaffold(
-      backgroundColor: colors.surface,
+      backgroundColor: colors.page,
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: auth.refresh,
@@ -190,7 +190,7 @@ class _ActiveCard extends StatelessWidget {
       scale: 0.985,
       child: Container(
         padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(color: c.ink, borderRadius: R.block),
+        decoration: BoxDecoration(color: c.panel, borderRadius: R.block),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

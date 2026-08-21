@@ -4,8 +4,25 @@
     {
       "name": "admin",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "admin"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--prefix",
+        "admin"
+      ],
       "port": 3211
+    },
+    {
+      "name": "app-web",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "3219",
+        "--directory",
+        "mobile/build/web"
+      ],
+      "port": 3219
     }
   ]
 }

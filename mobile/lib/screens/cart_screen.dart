@@ -169,7 +169,7 @@ class _CartScreenState extends State<CartScreen> {
     }
 
     return Scaffold(
-      backgroundColor: c.surface,
+      backgroundColor: c.page,
       body: SafeArea(
         bottom: false,
         child: cart.isEmpty
@@ -343,7 +343,7 @@ class _CartScreenState extends State<CartScreen> {
                             style: TextStyle(
                               fontSize: 14.5,
                               fontWeight: FontWeight.w600,
-                              color: c.ink,
+                              color: c.onSurface,
                             ),
                           ),
                         ),
@@ -662,7 +662,7 @@ class _PointsBlock extends StatelessWidget {
     final c = context.colors;
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: c.ink, borderRadius: R.block),
+      decoration: BoxDecoration(color: c.panel, borderRadius: R.block),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
