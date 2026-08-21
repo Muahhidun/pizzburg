@@ -54,6 +54,7 @@ export default function OperationsPage() {
       </div>
 
       <StatusBanner now={data.availabilityNow} />
+      <RushCard now={data.availabilityNow} onSave={save} />
       <OrderingCard settings={data} onSave={save} />
       <ScheduleCard settings={data} onSave={save} />
       <PreorderCard settings={data} onSave={save} />
@@ -66,6 +67,79 @@ export default function OperationsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Высокий спрос: добавка к сроку на час (DECISIONS §12.17).
+ *
+ * Кнопки, а не поле ввода: в разгар смены выбирают из трёх, а не
+ * набирают число. Под каждой ступенью написана своя фраза для клиента —
+ * поэтому произвольные значения и не принимаются.
+ *
+ * Час не продлевается сам. Через час придёт сообщение в чат, и решение
+ * «завал ушёл или ставим ещё» примет человек, а не забытая настройка.
+ */
+function RushCard({ now, onSave }: { now: AvailabilityNow; onSave: SaveFn }) {
+  const active = now.rushExtraMinutes > 0;
+  const until = now.rushUntil
+    ? new Date(now.rushUntil).toLocaleTimeString('ru-RU', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : null;
+
+  return (
+    <Card
+      title="Высокий спрос"
+      hint="Добавка к сроку на час. Через час снимется сама и напомнит в чат."
+    >
+      <div className="flex flex-wrap gap-2">
+        {[20, 40, 60].map((m) => (
+          <button
+            key={m}
+            onClick={() =>
+              onSave(
+                '/admin/settings/rush',
+                { extraMinutes: m },
+                `Поставили +${m} минут на час`,
+              )
+            }
+            className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
+              now.rushExtraMinutes === m
+                ? 'bg-amber-600 text-white'
+                : 'border border-black/10 hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10'
+            }`}
+          >
+            +{m} мин
+          </button>
+        ))}
+        {active && (
+          <button
+            onClick={() =>
+              onSave(
+                '/admin/settings/rush',
+                { extraMinutes: 0 },
+                'Работаем в обычном режиме',
+              )
+            }
+            className="rounded-xl px-4 py-2 text-sm text-neutral-500 hover:bg-black/5 dark:hover:bg-white/10"
+          >
+            Снять
+          </button>
+        )}
+      </div>
+
+      {active ? (
+        <div className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+          Действует до {until}. Клиенты видят: «{now.rushNotice}»
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-neutral-500">
+          Сейчас обещаем обычный срок.
+        </p>
+      )}
+    </Card>
   );
 }
 

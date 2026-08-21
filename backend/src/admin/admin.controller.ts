@@ -16,6 +16,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { AdminGuard } from './admin.guard';
 import { AdminService } from './admin.service';
 import { MessagesService } from '../messages/messages.service';
+import { RushService } from '../availability/rush.service';
 import {
   PosterAccountDto,
   PromotionDto,
@@ -27,6 +28,7 @@ import {
   UpdateMessageDto,
   UpdateAddressDto,
   UpdateCancellationDto,
+  UpdateRushDto,
   UpdateLoyaltyLevelsDto,
   UpdateOrderingDto,
   UpdatePaymentsDto,
@@ -51,6 +53,7 @@ export class AdminController {
   constructor(
     private readonly admin: AdminService,
     private readonly messages: MessagesService,
+    private readonly rush: RushService,
   ) {}
 
   @Get('storefront')
@@ -308,6 +311,11 @@ export class AdminController {
   @Put('settings/loyalty-levels')
   updateLoyaltyLevels(@Body() dto: UpdateLoyaltyLevelsDto) {
     return this.admin.updateLoyaltyLevels(dto);
+  }
+
+  @Patch('settings/rush')
+  updateRush(@Body() dto: UpdateRushDto) {
+    return this.rush.set(dto.extraMinutes);
   }
 
   @Patch('settings/cancellation')

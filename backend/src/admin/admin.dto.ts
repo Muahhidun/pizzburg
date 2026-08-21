@@ -161,6 +161,17 @@ export class UpdatePaymentsDto {
   @IsOptional() @IsBoolean() askChangeFrom?: boolean;
 }
 
+/**
+ * Добавка к сроку при наплыве (DECISIONS §12.17).
+ *
+ * Ноль означает «снять»: отдельной кнопки удаления не нужно, а
+ * произвольные значения не принимаем — под каждую ступень написана своя
+ * формулировка для клиента, и «+37» показать было бы нечем.
+ */
+export class UpdateRushDto {
+  @IsInt() @IsIn([0, 20, 40, 60]) extraMinutes: number;
+}
+
 export class UpdateCancellationDto {
   @IsInt() @Min(0) @Max(120) customerWindowMinutes: number;
 }

@@ -206,6 +206,47 @@ class CatalogHeader extends StatelessWidget {
               ),
             ],
 
+            // Наплыв — не то же самое, что закрытие: заказ принять можно,
+            // просто срок другой. Поэтому отдельная строка, а не подмена
+            // сообщения о закрытии, и без крупного заголовка — это уточнение
+            // к сроку, а не запрет.
+            if (!closed && availability.rushNotice != null) ...[
+              const SizedBox(height: Gap.lg),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: Gap.lg,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: c.surface.withValues(alpha: 0.14),
+                  borderRadius: R.field,
+                  border: Border.all(color: c.surface.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.schedule,
+                      size: 16,
+                      color: c.surface.withValues(alpha: 0.85),
+                    ),
+                    const SizedBox(width: Gap.sm),
+                    Expanded(
+                      child: Text(
+                        availability.rushNotice!,
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.4,
+                          color: c.surface.withValues(alpha: 0.9),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
             // Активный заказ вытесняет блок повтора: пока еда едет, человек
             // заходит в приложение посмотреть «где мой заказ», а не заказать
             // ещё раз.

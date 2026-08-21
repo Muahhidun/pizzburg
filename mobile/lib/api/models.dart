@@ -239,6 +239,11 @@ class Availability {
   final bool askChangeFrom;
   final int cancelWindowMinutes;
 
+  /// Что сказать про наплыв: сервер отдаёт готовую фразу, а не число.
+  /// «Плюс сорок минут» звучит как обещание с точностью до минуты,
+  /// которого кухня в завале дать не может.
+  final String? rushNotice;
+
   const Availability({
     required this.mode,
     required this.isOpenNow,
@@ -253,6 +258,7 @@ class Availability {
     required this.kaspiOnlineEnabled,
     required this.askChangeFrom,
     required this.cancelWindowMinutes,
+    this.rushNotice,
   });
 
   /// Отсутствие блока в ответе не должно ломать приложение:
@@ -281,6 +287,7 @@ class Availability {
       // появлялась ни разу, сколько бы минут ни стояло в настройках.
       cancelWindowMinutes:
           (j['cancellation'] ?? const {})['customerWindowMinutes'] ?? 0,
+      rushNotice: j['rushNotice'],
     );
   }
 }

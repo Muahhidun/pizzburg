@@ -62,6 +62,20 @@ export interface CancellationSettings {
   customerWindowMinutes: number;
 }
 
+/**
+ * Режим повышенного спроса (DECISIONS §12.17).
+ *
+ * Срок обязателен по той же причине, что и у стоп-листа: включённое
+ * «плюс сорок минут» никто не снимет, если о нём не напомнить, и во
+ * вторник мы будем обещать задержку, которой нет.
+ */
+export interface RushSettings {
+  /** Насколько дольше готовим и везём, минут; 0 — обычный режим */
+  extraMinutes: number;
+  /** До какого момента держится; после — снимается само */
+  until: string | null;
+}
+
 export interface AvailabilityState {
   timezone: string;
   mode: OrderingMode;
@@ -80,9 +94,29 @@ export interface AvailabilityState {
   preorder: PreorderSettings;
   payments: PaymentSettings;
   cancellation: CancellationSettings;
+  /** Сколько минут добавлено к сроку из-за наплыва; 0 — обычный режим */
+  rushExtraMinutes: number;
+  /** До какого момента держится добавка — для админки */
+  rushUntil: string | null;
+  /**
+   * Что об этом сказать клиенту.
+   *
+   * Словами, а не числом: «плюс сорок минут» звучит как обещание с
+   * точностью до минуты, которого мы дать не можем.
+   */
+  rushNotice: string | null;
 }
 
 const DEFAULT_TIMEZONE = 'Asia/Almaty';
+
+const DEFAULT_RUSH: RushSettings = { extraMinutes: 0, until: null };
+
+/** Заранее написанные формулировки для кнопок админки */
+const RUSH_NOTICES: Record<number, string> = {
+  20: 'Сейчас много заказов — привезём на 15–20 минут позже обычного',
+  40: 'Большая нагрузка на кухню — задержка примерно 35–40 минут',
+  60: 'Очень много заказов — задержка может доходить до часа',
+};
 
 const DEFAULT_PREORDER: PreorderSettings = {
   enabled: true,
@@ -204,6 +238,16 @@ export class AvailabilityService {
       ...(s.cancellation ?? {}),
     };
 
+    // Добавка живёт до `until` и после него исчезает сама, даже если
+    // фоновая задача не сработала: состояние считается на каждый запрос,
+    // и просроченная добавка не должна пережить свой срок ни на минуту.
+    const rushRaw: RushSettings = { ...DEFAULT_RUSH, ...(s.rush ?? {}) };
+    const rushAlive =
+      rushRaw.extraMinutes > 0 &&
+      Boolean(rushRaw.until) &&
+      new Date(rushRaw.until as string).getTime() > now.getTime();
+    const rushExtraMinutes = rushAlive ? rushRaw.extraMinutes : 0;
+
     const { weekday, minutes, ymd } = this.localParts(now, timezone);
     const profiles: ScheduleProfile[] = Array.isArray(s.schedule?.profiles)
       ? s.schedule.profiles
@@ -258,7 +302,28 @@ export class AvailabilityService {
       preorder,
       payments,
       cancellation,
+      rushExtraMinutes,
+      rushUntil: rushAlive ? rushRaw.until : null,
+      rushNotice: rushExtraMinutes
+        ? (RUSH_NOTICES[rushExtraMinutes] ??
+          `Сейчас много заказов — задержка примерно ${rushExtraMinutes} минут`)
+        : null,
     };
+  }
+
+  /**
+   * Ближайшее время, на которое можно оформить заказ, минут от сейчас.
+   *
+   * Наплыв прибавляется здесь, а не в настройках предзаказа: настройки —
+   * это то, что владелец задал однажды, а добавка живёт час. Смешивать их
+   * значит однажды сохранить наплыв в постоянные настройки.
+   */
+  leadMinutes(state: AvailabilityState, type: 'DELIVERY' | 'PICKUP'): number {
+    const base =
+      type === 'DELIVERY'
+        ? state.preorder.deliveryLeadMinutes
+        : state.preorder.pickupLeadMinutes;
+    return base + state.rushExtraMinutes;
   }
 
   /**
@@ -322,10 +387,7 @@ export class AvailabilityService {
       throw new BadRequestException('Некорректное время предзаказа');
     }
 
-    const leadMinutes =
-      order.type === 'DELIVERY'
-        ? state.preorder.deliveryLeadMinutes
-        : state.preorder.pickupLeadMinutes;
+    const leadMinutes = this.leadMinutes(state, order.type);
     const minAt = new Date(now.getTime() + leadMinutes * 60_000);
     if (scheduledAt < minAt) {
       throw new BadRequestException(
@@ -365,10 +427,7 @@ export class AvailabilityService {
     const state = this.getState(tenantSettings, now);
     if (!state.preorder.enabled) return [];
 
-    const lead =
-      type === 'DELIVERY'
-        ? state.preorder.deliveryLeadMinutes
-        : state.preorder.pickupLeadMinutes;
+    const lead = this.leadMinutes(state, type);
     const step = state.preorder.slotStepMinutes;
     const padding = state.preorder.displayPaddingMinutes;
 

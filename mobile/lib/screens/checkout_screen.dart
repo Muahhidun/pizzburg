@@ -280,6 +280,37 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 const SizedBox(height: Gap.lg),
               ],
 
+              // Про наплыв напоминаем и здесь. На витрине человек читал это
+              // до того, как собрал корзину, — а решение «готов ли я ждать»
+              // принимается в момент оформления.
+              if (_availability.rushNotice != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(Gap.lg),
+                  decoration: BoxDecoration(
+                    color: c.warnSoft,
+                    borderRadius: R.field,
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.schedule, size: 16, color: c.warnText),
+                      const SizedBox(width: Gap.sm),
+                      Expanded(
+                        child: Text(
+                          _availability.rushNotice!,
+                          style: TextStyle(
+                            fontSize: 13,
+                            height: 1.4,
+                            color: c.warnText,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: Gap.lg),
+              ],
+
               // ─── Способ получения ────────────────────────────────
               //
               // Тот же выбор есть в шапке каталога, и это осознанный

@@ -345,6 +345,9 @@ export interface AvailabilityNow {
   preorder: PreorderSettings;
   payments: PaymentSettings;
   cancellation: { customerWindowMinutes: number };
+  rushExtraMinutes: number;
+  rushUntil: string | null;
+  rushNotice: string | null;
 }
 
 export interface Settings {

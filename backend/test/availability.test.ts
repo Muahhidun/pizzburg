@@ -228,3 +228,71 @@ test('слоты предзаказа попадают только в рабо�
     assert.equal(state.isOpenNow, true, `слот ${slot.label} вне рабочих часов`);
   }
 });
+
+// ─── Высокий спрос (DECISIONS §12.17) ────────────────────────────
+
+/** Наплыв, поставленный за полчаса до `thursdayAfternoon` на час */
+const rushLive = {
+  ...weekdaySchedule,
+  rush: { extraMinutes: 40, until: '2026-08-13T09:30:00Z' },
+};
+
+/** Тот же наплыв, но срок уже прошёл */
+const rushStale = {
+  ...weekdaySchedule,
+  rush: { extraMinutes: 40, until: '2026-08-13T08:30:00Z' },
+};
+
+test('наплыв добавляет минуты к сроку и объясняет это словами', () => {
+  const state = availability.getState(rushLive, thursdayAfternoon);
+
+  assert.equal(state.rushExtraMinutes, 40);
+  assert.match(state.rushNotice ?? '', /35–40 минут/);
+  // Число клиенту не показываем — только готовую фразу
+  assert.doesNotMatch(state.rushNotice ?? '', /\+40/);
+
+  // Заказы всё равно принимаем: наплыв — это не закрытие
+  assert.equal(state.isOpenNow, true);
+  assert.equal(state.deliveryAvailable, true);
+});
+
+test('просроченный наплыв не доживает до следующего запроса', () => {
+  const state = availability.getState(rushStale, thursdayAfternoon);
+
+  // Даже если фоновая задача не сработала, срок решает всё
+  assert.equal(state.rushExtraMinutes, 0);
+  assert.equal(state.rushNotice, null);
+  assert.equal(state.rushUntil, null);
+});
+
+test('наплыв отодвигает ближайшее время, но не портит настройки', () => {
+  const calm = availability.getState(weekdaySchedule, thursdayAfternoon);
+  const busy = availability.getState(rushLive, thursdayAfternoon);
+
+  assert.equal(
+    availability.leadMinutes(busy, 'DELIVERY'),
+    availability.leadMinutes(calm, 'DELIVERY') + 40,
+  );
+  assert.equal(
+    availability.leadMinutes(busy, 'PICKUP'),
+    availability.leadMinutes(calm, 'PICKUP') + 40,
+  );
+
+  // Настройки предзаказа при этом остаются прежними: добавка живёт час,
+  // а они заданы владельцем однажды
+  assert.equal(
+    busy.preorder.deliveryLeadMinutes,
+    calm.preorder.deliveryLeadMinutes,
+  );
+});
+
+test('первый слот предзаказа сдвигается на время наплыва', () => {
+  const calm = availability.slots(weekdaySchedule, 'DELIVERY', thursdayAfternoon);
+  const busy = availability.slots(rushLive, 'DELIVERY', thursdayAfternoon);
+
+  assert.ok(calm.length > 0 && busy.length > 0);
+  const shift =
+    new Date(busy[0].at).getTime() - new Date(calm[0].at).getTime();
+  // Слоты округляются вверх до шага, поэтому сдвиг не меньше добавки
+  assert.ok(shift >= 40 * 60_000 - 1, `сдвиг оказался ${shift / 60_000} мин`);
+});
