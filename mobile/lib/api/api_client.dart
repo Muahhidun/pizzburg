@@ -119,6 +119,48 @@ class ApiClient {
     _ensureOk(res);
   }
 
+  /// Заказ, по которому ждём отзыв. null — спрашивать нечего.
+  Future<Map<String, dynamic>?> pendingReview() async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/orders/$tenant/pending-review'),
+      headers: _headers,
+    );
+    if (res.statusCode == 401) return null;
+    _ensureOk(res);
+    final body = utf8.decode(res.bodyBytes).trim();
+    if (body.isEmpty || body == 'null') return null;
+    return jsonDecode(body) as Map<String, dynamic>;
+  }
+
+  /// Вопросы анкеты под конкретный заказ (DECISIONS §12.23).
+  ///
+  /// Держит сервер, а не приложение: формулировки будут меняться, а
+  /// менять их через релиз в App Store — значит не менять никогда.
+  Future<Map<String, dynamic>> fetchReviewForm(String orderId) async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/orders/by-id/$orderId/review'),
+      headers: _headers,
+    );
+    _ensureOk(res);
+    return jsonDecode(utf8.decode(res.bodyBytes));
+  }
+
+  Future<void> submitReview(
+    String orderId, {
+    required Map<String, String> answers,
+    String? text,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/orders/by-id/$orderId/review'),
+      headers: _headers,
+      body: jsonEncode({
+        'answers': answers,
+        if (text != null && text.trim().isNotEmpty) 'text': text.trim(),
+      }),
+    );
+    _ensureOk(res);
+  }
+
   Future<Map<String, dynamic>> requestOtp(String phone) async {
     final res = await http.post(
       Uri.parse('$baseUrl/auth/$tenant/request-otp'),

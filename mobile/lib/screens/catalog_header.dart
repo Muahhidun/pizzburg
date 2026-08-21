@@ -21,6 +21,11 @@ class CatalogHeader extends StatelessWidget {
 
   /// Активный заказ: пока он в работе, он важнее предложения повторить.
   final Widget? activeOrderBlock;
+
+  /// Просьба оценить прошлый заказ. Стоит в том же месте, что и «Тот же
+  /// заказ?», и вытесняет его на день: сначала мы спрашиваем, как всё
+  /// прошло, и только потом предлагаем повторить.
+  final Widget? reviewBlock;
   final VoidCallback? onAddressTap;
   final ValueChanged<String> onModeChanged;
 
@@ -37,6 +42,7 @@ class CatalogHeader extends StatelessWidget {
     required this.deliveryAvailable,
     this.repeatBlock,
     this.activeOrderBlock,
+    this.reviewBlock,
     this.onAddressTap,
   });
 
@@ -219,6 +225,16 @@ class CatalogHeader extends StatelessWidget {
               ),
               const SizedBox(height: Gap.md),
               BenefitReveal(child: activeOrderBlock!),
+            ] else if (reviewBlock != null) ...[
+              const SizedBox(height: 20),
+              Text(
+                'Как всё прошло?',
+                style: Theme.of(
+                  context,
+                ).textTheme.displaySmall?.copyWith(color: c.surface),
+              ),
+              const SizedBox(height: Gap.md),
+              BenefitReveal(child: reviewBlock!),
             ] else if (repeatBlock != null) ...[
               const SizedBox(height: 20),
               Text(

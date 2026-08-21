@@ -8,8 +8,13 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
-import { OptionalCustomerAuthGuard } from '../auth/optional-customer-auth.guard';
+import {
+  IsIn,
+  IsObject,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 import { CustomerAuthGuard } from '../auth/customer-auth.guard';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './orders.dto';
@@ -19,7 +24,19 @@ import {
   MESSAGE_TOPICS,
   OrderMessagesService,
 } from './order-messages.service';
+import { ReviewsService } from './reviews.service';
 import { PrismaService } from '../prisma/prisma.service';
+
+/** Ответы анкеты: ключ вопроса — выбранный вариант */
+class ReviewDto {
+  @IsObject()
+  answers: Record<string, string>;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1_000)
+  text?: string;
+}
 
 /** Обращение по живому заказу (DECISIONS §12.21) */
 class OrderMessageDto {
@@ -52,10 +69,18 @@ export class OrdersController {
     private readonly shortage: ShortageService,
     private readonly prisma: PrismaService,
     private readonly messages: OrderMessagesService,
+    private readonly reviews: ReviewsService,
   ) {}
 
+  /**
+   * Оформление заказа. Только для вошедших (DECISIONS §12.22).
+   *
+   * Гостевой заказ убран сознательно: подтверждённый по SMS номер — это
+   * защита от ложных заказов. Без неё любой может отправить на кухню
+   * чужой адрес, и узнаем мы об этом, когда курьер уже уехал.
+   */
   @Post(':tenantSlug')
-  @UseGuards(OptionalCustomerAuthGuard)
+  @UseGuards(CustomerAuthGuard)
   create(
     @Param('tenantSlug') tenantSlug: string,
     @Body() dto: CreateOrderDto,
@@ -88,6 +113,30 @@ export class OrdersController {
     @Body() dto: OrderMessageDto,
   ) {
     return this.messages.send(orderId, dto);
+  }
+
+  /**
+   * Анкета о заказе (DECISIONS §12.23).
+   *
+   * Вопросы отдаёт сервер, а не хранит приложение: формулировки будут
+   * меняться, и менять их через релиз в App Store — значит не менять
+   * никогда. Заодно у самовывоза не спрашивают про курьера.
+   */
+  /** Заказ, по которому ждём отзыв: блок на главной */
+  @Get(':tenantSlug/pending-review')
+  @UseGuards(CustomerAuthGuard)
+  pendingReview(@Req() req: any) {
+    return this.reviews.pending(req.customer.sub);
+  }
+
+  @Get('by-id/:orderId/review')
+  reviewForm(@Param('orderId') orderId: string) {
+    return this.reviews.form(orderId);
+  }
+
+  @Post('by-id/:orderId/review')
+  submitReview(@Param('orderId') orderId: string, @Body() dto: ReviewDto) {
+    return this.reviews.submit(orderId, dto);
   }
 
   /** Отмена клиентом в окно, заданное арендатором */

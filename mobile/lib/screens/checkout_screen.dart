@@ -8,6 +8,7 @@ import '../services/push_notifications.dart';
 import '../state/auth.dart';
 import '../state/cart.dart';
 import 'catalog_parts.dart';
+import 'login_screen.dart';
 import '../widgets/address_picker.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
@@ -160,6 +161,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       _points.clamp(0, widget.preview.subtotal);
 
   Future<void> _submit() async {
+    // Заказ только для вошедших (DECISIONS §12.22): подтверждённый по SMS
+    // номер — защита от ложных заказов. Отправляем на вход отсюда, а не
+    // получаем отказ сервера после нажатия «Заказать».
+    if (!context.read<AuthState>().isAuthenticated) {
+      await Haptics.warning();
+      if (!mounted) return;
+      final entered = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+      );
+      if (entered != true || !mounted) return;
+    }
     if (!_formKey.currentState!.validate()) {
       await Haptics.warning();
       return;

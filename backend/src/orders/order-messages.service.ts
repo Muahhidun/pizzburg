@@ -18,9 +18,16 @@ export const MESSAGE_TOPICS: Record<string, string> = {
   OTHER: 'Другое',
 };
 
-/** Не чаще одного раза в минуту и не больше пяти на заказ */
-export const MESSAGE_COOLDOWN_MS = 60_000;
-export const MESSAGE_LIMIT_PER_ORDER = 5;
+/**
+ * Не чаще раза в три минуты и не больше трёх на заказ.
+ *
+ * Минуты мало: за минуту кассир не успевает даже прочитать, и человек
+ * успевал отправить пять сообщений подряд об одном и том же. Три
+ * обращения по одному заказу — это уже разговор, который лучше вести
+ * голосом, а не кнопкой.
+ */
+export const MESSAGE_COOLDOWN_MS = 3 * 60_000;
+export const MESSAGE_LIMIT_PER_ORDER = 3;
 
 @Injectable()
 export class OrderMessagesService {
@@ -77,7 +84,7 @@ export class OrderMessagesService {
       );
     }
     if (last && now.getTime() - last.createdAt.getTime() < MESSAGE_COOLDOWN_MS) {
-      throw new BadRequestException('Сообщение уже отправлено, подождите минуту');
+      throw new BadRequestException('Сообщение уже отправлено, подождите пару минут');
     }
 
     const text = (input.text ?? '').trim().slice(0, 500);

@@ -8,6 +8,7 @@ import { CancelReasonsService } from './cancel-reasons.service';
 import { ShortageService } from './shortage.service';
 import { ServiceReceiptService } from './service-receipt.service';
 import { OrderMessagesService } from './order-messages.service';
+import { ReviewsService } from './reviews.service';
 import { AuthModule } from '../auth/auth.module';
 import { LoyaltyModule } from '../loyalty/loyalty.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -28,6 +29,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     ShortageService,
     ServiceReceiptService,
     OrderMessagesService,
+    ReviewsService,
   ],
   exports: [
     OrdersService,
@@ -35,6 +37,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     ShortageService,
     ServiceReceiptService,
     OrderMessagesService,
+    ReviewsService,
   ],
 })
 export class OrdersModule {}

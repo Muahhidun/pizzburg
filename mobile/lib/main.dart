@@ -11,6 +11,7 @@ import 'state/auth.dart';
 import 'services/push_notifications.dart';
 import 'screens/messages_screen.dart';
 import 'screens/order_screen.dart';
+import 'screens/review_screen.dart';
 import 'screens/legal_screen.dart';
 import 'screens/splash_screen.dart';
 import 'api/models.dart';
@@ -59,6 +60,20 @@ Future<void> main() async {
     if (data['type'] == 'message') {
       _navigatorKey.currentState?.push(
         MaterialPageRoute(builder: (_) => const MessagesScreen()),
+      );
+      return;
+    }
+    // Пуш анкеты ведёт в анкету, а не на шкалу статусов: заказ уже
+    // доставлен, и смотреть там нечего (DECISIONS §12.23).
+    if (data['type'] == 'review') {
+      final reviewId = data['orderId']?.toString();
+      final reviewNumber = int.tryParse(data['orderNumber']?.toString() ?? '');
+      if (reviewId == null || reviewNumber == null) return;
+      _navigatorKey.currentState?.push(
+        MaterialPageRoute(
+          builder: (_) =>
+              ReviewScreen(orderId: reviewId, orderNumber: reviewNumber),
+        ),
       );
       return;
     }

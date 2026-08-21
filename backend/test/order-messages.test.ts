@@ -109,7 +109,7 @@ test('по закрытому заказу писать некуда', async () 
   }
 });
 
-test('второе сообщение в ту же минуту не проходит', async () => {
+test('второе сообщение подряд не проходит', async () => {
   const { service, sent } = serviceWith({
     order: liveOrder,
     count: 1,
@@ -117,7 +117,7 @@ test('второе сообщение в ту же минуту не прохо�
   });
   await assert.rejects(
     () => service.send('o1', { topic: 'WHERE' }, now),
-    /подождите минуту/,
+    /подождите пару минут/,
   );
   assert.equal(sent.length, 0);
 

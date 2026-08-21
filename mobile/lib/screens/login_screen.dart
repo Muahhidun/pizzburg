@@ -85,7 +85,9 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       await context.read<AuthState>().verifyOtp(_digits, _code.text.trim());
       Haptics.success();
-      if (mounted) Navigator.pop(context);
+      // true — «вход состоялся»: оформление ждёт этого ответа, чтобы
+      // продолжить прерванный заказ, а не начинать его заново.
+      if (mounted) Navigator.pop(context, true);
     } catch (e) {
       Haptics.warning();
       setState(() {

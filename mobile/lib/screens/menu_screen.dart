@@ -17,6 +17,7 @@ import 'cart_screen.dart';
 import 'catalog_header.dart';
 import 'catalog_parts.dart';
 import 'order_screen.dart';
+import 'review_screen.dart';
 import 'add_address_screen.dart';
 import 'product_screen.dart';
 
@@ -145,6 +146,24 @@ class _MenuScreenState extends State<MenuScreen> {
   Map<String, dynamic>? _activeOrder;
   Timer? _activeOrderTimer;
 
+  /// Заказ, по которому ждём отзыв (DECISIONS §12.23). Пуш можно
+  /// смахнуть, и тогда анкета исчезнет навсегда, — поэтому просьба живёт
+  /// ещё и здесь, в том месте, куда человек и так заходит.
+  Map<String, dynamic>? _pendingReview;
+
+  /// Есть ли заказ, о котором стоит спросить впечатления
+  Future<void> _refreshPendingReview(ApiClient api) async {
+    try {
+      final pending = await api.pendingReview();
+      if (!mounted) return;
+      if (pending?['id'] != _pendingReview?['id']) {
+        setState(() => _pendingReview = pending);
+      }
+    } catch (_) {
+      // Не критично: блок просто не появится до следующего круга
+    }
+  }
+
   /// id адреса, выбранного человеком; null — берём первый сохранённый
   String? _selectedAddressId;
 
@@ -175,6 +194,7 @@ class _MenuScreenState extends State<MenuScreen> {
   Future<void> _refreshActiveOrder() async {
     // Клиента берём до первого await: после него виджет мог уйти с экрана
     final api = context.read<ApiClient>();
+    unawaited(_refreshPendingReview(api));
     final remembered = await LastPlacedOrder.restore();
     if (remembered == null) {
       if (mounted && _activeOrder != null) setState(() => _activeOrder = null);
@@ -525,6 +545,28 @@ class _MenuScreenState extends State<MenuScreen> {
                                     ),
                                   ),
                                 ),
+                              ),
+                        reviewBlock: _pendingReview == null
+                            ? null
+                            : _ReviewPrompt(
+                                onTap: () async {
+                                  // Клиента берём до перехода: после
+                                  // возврата контекст уже не наш
+                                  final api = context.read<ApiClient>();
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => ReviewScreen(
+                                        orderId: _pendingReview!['id']
+                                            .toString(),
+                                        orderNumber:
+                                            (_pendingReview!['number'] as num)
+                                                .toInt(),
+                                      ),
+                                    ),
+                                  );
+                                  await _refreshPendingReview(api);
+                                },
                               ),
                         // Блок повтора прячем, когда заведение закрыто:
                         // предлагать действие, которое сейчас не выполнить,
@@ -939,6 +981,52 @@ class _AddressSheet extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Просьба оценить заказ на главной.
+///
+/// Светлая карточка на акцентной шапке, как и блок повтора: место одно и
+/// то же, меняется только повод.
+class _ReviewPrompt extends StatelessWidget {
+  final VoidCallback onTap;
+  const _ReviewPrompt({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return PressScale(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(Gap.lg),
+        decoration: BoxDecoration(
+          color: c.page,
+          borderRadius: const BorderRadius.all(Radius.circular(24)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Оцените прошлый заказ',
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Пара нажатий — и мы будем знать, что чинить',
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, size: 20, color: c.muted),
+          ],
+        ),
       ),
     );
   }

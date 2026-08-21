@@ -29,6 +29,7 @@ model Tenant {
   loyaltyTxns    LoyaltyTransaction[]
   stopEvents     StopEvent[]
   upsells        UpsellItem[]
+  reviews        OrderReview[]
 }
 
 /// Аккаунт Poster = отдел на своём планшете. У тенанта их может быть
@@ -623,10 +624,13 @@ model Order {
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
-  items       OrderItem[]
-  dispatches  OrderDispatch[]
-  loyaltyTxns LoyaltyTransaction[]
-  messages    OrderMessage[]
+  items         OrderItem[]
+  dispatches    OrderDispatch[]
+  loyaltyTxns   LoyaltyTransaction[]
+  messages      OrderMessage[]
+  /// Когда спросили впечатления. Пусто — ещё не спрашивали
+  reviewAskedAt DateTime?
+  review        OrderReview?
 
   @@unique([tenantId, number])
   @@index([tenantId, status])
@@ -839,4 +843,29 @@ model OrderMessage {
   createdAt DateTime @default(now())
 
   @@index([orderId, createdAt])
+}
+
+/// Впечатление о заказе (DECISIONS §12.23).
+///
+/// Не звёзды: прямая оценка даёт либо пять, либо один — среднего люди не
+/// ставят. Спрашиваем факты по нескольким сторонам заказа, а оценку
+/// выводим сами.
+model OrderReview {
+  id       String @id @default(cuid())
+  orderId  String @unique
+  order    Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  /// { timing: 'ON_TIME', complete: 'YES', ... } — ключи вопросов
+  answers Json
+  /// 1–5, посчитана из ответов
+  rating  Int
+  text    String  @default("")
+  /// Ушло ли в чаты: низкая оценка требует человека, хорошая — нет
+  alerted Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, createdAt])
 }
