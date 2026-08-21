@@ -143,3 +143,46 @@ test('больше пяти сообщений на заказ не приним
   );
   assert.equal(sent.length, 0);
 });
+
+test('состояние лимита видно до нажатия, а не после отказа', async () => {
+  const now = new Date('2026-08-21T12:00:00Z');
+
+  // Ещё ничего не писали
+  const fresh = serviceWith({ order: liveOrder, count: 0, last: null });
+  assert.deepEqual(await fresh.service.state('o1', now), {
+    sent: 0,
+    limit: MESSAGE_LIMIT_PER_ORDER,
+    nextAllowedAt: null,
+  });
+
+  // Написали минуту назад — ждём до конца паузы
+  const waiting = serviceWith({
+    order: liveOrder,
+    count: 1,
+    last: { createdAt: new Date(now.getTime() - 60_000) },
+  });
+  const state = await waiting.service.state('o1', now);
+  assert.equal(state.sent, 1);
+  assert.equal(
+    state.nextAllowedAt,
+    new Date(now.getTime() - 60_000 + MESSAGE_COOLDOWN_MS).toISOString(),
+  );
+
+  // Лимит исчерпан: ждать больше нечего, поэтому времени не обещаем
+  const done = serviceWith({
+    order: liveOrder,
+    count: MESSAGE_LIMIT_PER_ORDER,
+    last: { createdAt: new Date(now.getTime() - 60_000) },
+  });
+  const full = await done.service.state('o1', now);
+  assert.equal(full.sent, MESSAGE_LIMIT_PER_ORDER);
+  assert.equal(full.nextAllowedAt, null);
+});
+
+test('ответ на отправку сразу говорит, сколько осталось', async () => {
+  const now = new Date('2026-08-21T12:00:00Z');
+  const { service } = serviceWith({ order: liveOrder, count: 0, last: null });
+  const result = await service.send('o1', { topic: 'WHERE' }, now);
+  assert.equal(result.limit, MESSAGE_LIMIT_PER_ORDER);
+  assert.ok('sent' in result);
+});

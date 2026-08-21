@@ -65,7 +65,10 @@ class _OrderScreenState extends State<OrderScreen> {
     // по нехватке позиции. Опрашивать сервер раз в секунду ради этого
     // незачем: срок известен заранее.
     _countdown = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && (_awaitingShortage || _cancelLeft != null)) {
+      // Сюда же обратный отсчёт паузы между обращениями: он тикает
+      // локально, срок известен заранее, сервер дёргать незачем.
+      if (mounted &&
+          (_awaitingShortage || _cancelLeft != null || _messageWait != null)) {
         setState(() {});
       }
     });
@@ -162,7 +165,11 @@ class _OrderScreenState extends State<OrderScreen> {
       // ради чего этот экран держат открытым.
       if (_lastStage >= 0 && stage > _lastStage) Haptics.success();
       _lastStage = stage;
-      setState(() => _data = data);
+      setState(() {
+        _data = data;
+        final state = data['messages'];
+        if (state is Map<String, dynamic>) _messageState = state;
+      });
       if (data['status'] == 'DELIVERED' || data['status'] == 'CANCELLED') {
         await LastPlacedOrder.forget();
       }
@@ -186,6 +193,29 @@ class _OrderScreenState extends State<OrderScreen> {
   }
 
   bool _sendingMessage = false;
+
+  /// Сколько обращений уже отправлено и когда можно снова.
+  ///
+  /// Приходит вместе со статусом заказа: кнопка должна знать своё
+  /// состояние до нажатия, а не узнавать об отказе после (§12.21).
+  Map<String, dynamic>? _messageState;
+
+  int get _messagesSent =>
+      (_messageState?['sent'] as num?)?.toInt() ?? 0;
+  int get _messagesLimit =>
+      (_messageState?['limit'] as num?)?.toInt() ?? 3;
+
+  /// Сколько ещё ждать до следующего обращения; null — можно писать
+  Duration? get _messageWait {
+    final at = DateTime.tryParse(
+      _messageState?['nextAllowedAt']?.toString() ?? '',
+    );
+    if (at == null) return null;
+    final left = at.difference(DateTime.now());
+    return left.isNegative ? null : left;
+  }
+
+  bool get _messagesExhausted => _messagesSent >= _messagesLimit;
 
   bool get _canCancel {
     final window = _availability?.cancelWindowMinutes ?? 0;
@@ -223,12 +253,13 @@ class _OrderScreenState extends State<OrderScreen> {
 
     setState(() => _sendingMessage = true);
     try {
-      await context.read<ApiClient>().sendOrderMessage(
+      final state = await context.read<ApiClient>().sendOrderMessage(
         widget.order.id,
         topic: choice.topic,
         text: choice.text,
       );
       if (!mounted) return;
+      setState(() => _messageState = state);
       Haptics.success();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Передали кассиру — скоро ответим')),
@@ -557,38 +588,13 @@ class _OrderScreenState extends State<OrderScreen> {
               // или «забыли соус», пока это ещё можно исправить.
               if (_isLive) ...[
                 const SizedBox(height: Gap.lg),
-                PressScale(
-                  onTap: _sendingMessage ? null : _writeUs,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 15),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      borderRadius: R.pill,
-                      color: c.surface.withValues(alpha: 0.10),
-                      border: Border.all(
-                        color: c.surface.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.chat_bubble_outline,
-                          size: 16,
-                          color: c.surface,
-                        ),
-                        const SizedBox(width: Gap.sm),
-                        Text(
-                          _sendingMessage ? 'Отправляем…' : 'Написать нам',
-                          style: TextStyle(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w600,
-                            color: c.surface,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                _WriteUsButton(
+                  sending: _sendingMessage,
+                  wait: _messageWait,
+                  sent: _messagesSent,
+                  limit: _messagesLimit,
+                  exhausted: _messagesExhausted,
+                  onTap: _writeUs,
                 ),
               ],
 
@@ -811,6 +817,113 @@ class _StageRow extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Кнопка «Написать нам» со своим состоянием.
+///
+/// Три вида: можно писать, идёт пауза, обращений больше нет. Молча
+/// гасить кнопку нельзя — человек решит, что приложение сломалось; и
+/// нельзя оставлять её рабочей — тогда он получит отказ на действие,
+/// которое мы сами предложили.
+class _WriteUsButton extends StatelessWidget {
+  final bool sending;
+  final Duration? wait;
+  final int sent;
+  final int limit;
+  final bool exhausted;
+  final VoidCallback onTap;
+
+  const _WriteUsButton({
+    required this.sending,
+    required this.wait,
+    required this.sent,
+    required this.limit,
+    required this.exhausted,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final blocked = exhausted || wait != null;
+
+    final label = sending
+        ? 'Отправляем…'
+        : exhausted
+        ? 'Мы получили ваши сообщения'
+        : wait != null
+        ? 'Написать снова можно через ${_left(wait!)}'
+        : sent > 0
+        ? 'Написать ещё'
+        : 'Написать нам';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        PressScale(
+          onTap: sending || blocked ? null : onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 15),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: R.pill,
+              color: c.surface.withValues(alpha: blocked ? 0.04 : 0.10),
+              border: Border.all(
+                color: c.surface.withValues(alpha: blocked ? 0.12 : 0.3),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  exhausted
+                      ? Icons.check_circle_outline
+                      : wait != null
+                      ? Icons.schedule
+                      : Icons.chat_bubble_outline,
+                  size: 16,
+                  color: c.surface.withValues(alpha: blocked ? 0.5 : 1),
+                ),
+                const SizedBox(width: Gap.sm),
+                Flexible(
+                  child: Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: c.surface.withValues(alpha: blocked ? 0.5 : 1),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (sent > 0) ...[
+          const SizedBox(height: Gap.sm),
+          Text(
+            exhausted
+                ? 'Кассир их видит и разбирается'
+                : 'Отправлено $sent из $limit',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              color: c.surface.withValues(alpha: 0.6),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  static String _left(Duration d) {
+    final total = d.inSeconds;
+    final minutes = total ~/ 60;
+    final seconds = total % 60;
+    if (minutes == 0) return '$seconds с';
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 }
 

@@ -18,6 +18,7 @@ import { LegalService } from '../legal/legal.service';
 import { AddressesService } from '../auth/addresses.service';
 import { TelegramService } from '../telegram/telegram.service';
 import { ServiceReceiptService } from './service-receipt.service';
+import { OrderMessagesService } from './order-messages.service';
 
 /**
  * Окно, в котором повторный такой же заказ считается сорвавшимся
@@ -106,6 +107,7 @@ export class OrdersService {
     private readonly addresses: AddressesService,
     private readonly telegram: TelegramService,
     private readonly serviceReceipt: ServiceReceiptService,
+    private readonly messages: OrderMessagesService,
   ) {}
 
   async createOrder(
@@ -1376,6 +1378,9 @@ export class OrdersService {
       },
     });
     if (!o) throw new NotFoundException('Заказ не найден');
-    return o;
+    // Лимит обращений отдаём вместе со статусом: экран заказа его и так
+    // опрашивает, а кнопка «Написать нам» должна знать своё состояние
+    // до нажатия, а не после отказа (DECISIONS §12.21).
+    return { ...o, messages: await this.messages.state(orderId) };
   }
 }

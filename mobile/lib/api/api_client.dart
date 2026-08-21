@@ -103,7 +103,8 @@ class ApiClient {
   ///
   /// Без токена: заказ можно оформить гостем, и именно гость чаще всего
   /// пишет «не тот адрес». От спама защищает лимит на сервере.
-  Future<void> sendOrderMessage(
+  /// Возвращает состояние лимита: сколько отправлено и когда можно снова
+  Future<Map<String, dynamic>> sendOrderMessage(
     String orderId, {
     required String topic,
     String? text,
@@ -117,6 +118,7 @@ class ApiClient {
       }),
     );
     _ensureOk(res);
+    return jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
   }
 
   /// Заказ, по которому ждём отзыв. null — спрашивать нечего.

@@ -36,6 +36,39 @@ export class OrderMessagesService {
     private readonly telegram: TelegramService,
   ) {}
 
+  /**
+   * Сколько уже написано и когда можно снова.
+   *
+   * Нужно приложению, а не только серверу: без этого кнопка выглядит
+   * рабочей, человек жмёт её ещё раз и получает отказ вместо ответа.
+   * Отказ на действие, которое мы сами предложили, — худший способ
+   * объяснить правило.
+   */
+  async state(orderId: string, now = new Date()) {
+    const [sent, last] = await Promise.all([
+      this.prisma.orderMessage.count({ where: { orderId } }),
+      this.prisma.orderMessage.findFirst({
+        where: { orderId },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      }),
+    ]);
+
+    const nextAt = last
+      ? new Date(last.createdAt.getTime() + MESSAGE_COOLDOWN_MS)
+      : null;
+
+    return {
+      sent,
+      limit: MESSAGE_LIMIT_PER_ORDER,
+      /// Когда снова можно писать; null — прямо сейчас
+      nextAllowedAt:
+        sent >= MESSAGE_LIMIT_PER_ORDER || !nextAt || nextAt <= now
+          ? null
+          : nextAt.toISOString(),
+    };
+  }
+
   async send(
     orderId: string,
     input: { topic: string; text?: string },
@@ -108,7 +141,9 @@ export class OrderMessagesService {
         (where ? ` · ${where}` : ''),
     );
 
-    return { id: message.id, sent: true };
+    // Возвращаем состояние сразу: экран заказа обновит кнопку, не
+    // дожидаясь следующего опроса статуса
+    return { id: message.id, ...(await this.state(orderId, now)) };
   }
 
   /** Адрес одной строкой; в заказе он лежит структурой */
