@@ -238,7 +238,21 @@ export class NotificationsService implements OnModuleInit {
       },
     });
     const tokens = [...new Set(order?.customer?.pushDevices.map((d) => d.token) ?? [])];
-    if (!order || tokens.length === 0) return;
+    if (!order || tokens.length === 0) {
+      // Молчать здесь нельзя: «некому отправлять» и «отправлено успешно»
+      // выглядели в логе одинаково, и разобраться, почему уведомление не
+      // пришло, было невозможно — а это первое, что проверяют.
+      if (order) {
+        this.logger.log(
+          `Заказ №${order.number}: уведомление не отправлено — у клиента нет включённых устройств`,
+        );
+      }
+      return;
+    }
+
+    this.logger.log(
+      `Заказ №${order.number}: отправляем уведомление на ${tokens.length} устройств`,
+    );
 
     for (let offset = 0; offset < tokens.length; offset += 500) {
       const batch = tokens.slice(offset, offset + 500);
