@@ -599,7 +599,7 @@ class _PromoField extends StatelessWidget {
                     vertical: 12,
                   ),
                   decoration: BoxDecoration(
-                    color: c.ink,
+                    color: c.panel,
                     borderRadius: R.pill,
                   ),
                   child: Text(

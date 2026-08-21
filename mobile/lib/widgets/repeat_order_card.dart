@@ -85,7 +85,10 @@ class RepeatOrderCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
       decoration: BoxDecoration(
-        color: onDark ? colors.surface : Colors.transparent,
+        // Фон страницы, а не «светлое»: карточка лежит на акцентной
+        // шапке, но текст в ней — из темы. В тёмной теме светлая
+        // карточка означала бы светлый текст на светлом.
+        color: onDark ? colors.page : Colors.transparent,
         borderRadius: const BorderRadius.all(Radius.circular(24)),
         border: onDark ? null : Border.all(color: colors.border, width: 1.5),
       ),

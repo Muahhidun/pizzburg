@@ -188,6 +188,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
 
               const SizedBox(height: Gap.block),
+              _PushRow(push: push),
               const _ThemeCard(),
 
               const SizedBox(height: Gap.block),
@@ -661,6 +662,92 @@ class _NotificationsCard extends StatelessWidget {
             ),
           ),
           _HapticsSwitch(),
+        ],
+      ),
+    );
+  }
+}
+
+/// Уведомления о заказе.
+///
+/// Строка нужна тем, кто отказался в диалоге после первого заказа: iOS
+/// показывает это окно один раз, и без такой строки включить уведомления
+/// обратно можно было бы только угадав путь в настройках телефона.
+class _PushRow extends StatelessWidget {
+  final PushNotificationsService push;
+  const _PushRow({required this.push});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final status = context.watch<PushNotificationsService>().status;
+    if (status == PushNotificationsStatus.unavailable) {
+      return const SizedBox.shrink();
+    }
+
+    final (title, hint) = switch (status) {
+      PushNotificationsStatus.enabled => (
+        'Уведомления включены',
+        'Сообщим, когда заказ будет готов',
+      ),
+      PushNotificationsStatus.denied => (
+        'Уведомления выключены',
+        'Включить можно в Настройках телефона → PizzBurg → Уведомления',
+      ),
+      PushNotificationsStatus.requesting => ('Спрашиваем…', 'Секунду'),
+      _ => ('Уведомления о заказе', 'Сообщим, когда заказ будет готов'),
+    };
+
+    final canAsk =
+        status == PushNotificationsStatus.notRequested ||
+        status == PushNotificationsStatus.error;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: Gap.block),
+      padding: const EdgeInsets.all(Gap.lg),
+      decoration: BoxDecoration(color: c.fillSoft, borderRadius: R.field),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(hint, style: Theme.of(context).textTheme.labelMedium),
+              ],
+            ),
+          ),
+          if (canAsk)
+            PressScale(
+              onTap: () async {
+                Haptics.tap();
+                await push.requestPermission();
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 9,
+                ),
+                decoration: BoxDecoration(
+                  color: c.accent,
+                  borderRadius: R.pill,
+                ),
+                child: Text(
+                  'Включить',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: c.surface,
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );

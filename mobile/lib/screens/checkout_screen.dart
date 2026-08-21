@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../services/push_notifications.dart';
 import '../state/auth.dart';
 import '../state/cart.dart';
 import 'catalog_parts.dart';
@@ -196,6 +197,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       // этого вернуться к статусу после закрытия приложения было бы нельзя.
       await LastPlacedOrder.remember(order.id, order.number, order.total);
       if (!mounted) return;
+
+      // Разрешение на уведомления спрашиваем здесь, а не на первом
+      // запуске.
+      //
+      // На старте человек ещё не понимает, о чём его просят, и отказывает
+      // — а второй раз система окно не покажет, только через настройки
+      // телефона. Сразу после оформления вопрос «сообщать ли о заказе»
+      // отвечает сам себе: человек как раз хочет знать, когда всё готово.
+      //
+      // Не ждём ответа: диалог всплывёт поверх экрана заказа, а переход
+      // туда задерживать незачем.
+      unawaited(context.read<PushNotificationsService>().requestPermission());
+
       Haptics.success();
       final auth = context.read<AuthState>();
       if (auth.isAuthenticated) await auth.refresh();
