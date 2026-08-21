@@ -284,8 +284,20 @@ export class NotificationsService implements OnModuleInit {
           });
         }
         if (response.failureCount > 0) {
+          // С кодом и платформой, а не просто счётчиком: «1 из 2 не
+          // отправлено» не отличает протухший токен от неверного ключа
+          // APNs, а чинятся они по-разному.
+          const reasons = response.responses
+            .map((result, index) =>
+              result.error
+                ? `${batch[index].slice(0, 12)}… → ${result.error.code}`
+                : null,
+            )
+            .filter(Boolean)
+            .join('; ');
           this.logger.warn(
-            `Заказ №${order.number}: ${response.failureCount}/${batch.length} FCM-уведомлений не отправлено`,
+            `Заказ №${order.number}: ${response.failureCount}/${batch.length} ` +
+              `FCM-уведомлений не отправлено — ${reasons}`,
           );
         }
       } catch (error) {
