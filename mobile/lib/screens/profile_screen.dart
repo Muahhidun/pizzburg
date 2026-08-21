@@ -5,6 +5,8 @@ import '../api/api_client.dart';
 import '../api/models.dart';
 import '../services/push_notifications.dart';
 import '../state/auth.dart';
+import '../state/theme.dart';
+import '../theme/themes.dart';
 import 'login_screen.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
@@ -184,6 +186,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
               ],
+
+              const SizedBox(height: Gap.block),
+              const _ThemeCard(),
 
               const SizedBox(height: Gap.block),
               _NotificationsCard(push: push),
@@ -499,6 +504,128 @@ class _LegalLinks extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Выбор оформления.
+///
+/// Не список с галочками, а кружки: тему выбирают глазами, и показать её
+/// надо, а не назвать. В каждом кружке видны все три роли палитры — фон,
+/// действие, выгода, — поэтому по нему заранее понятно, каким станет
+/// приложение, а не только «какой тут любимый цвет».
+class _ThemeCard extends StatelessWidget {
+  const _ThemeCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final store = context.watch<ThemeStore>();
+
+    return Container(
+      padding: const EdgeInsets.all(Gap.lg),
+      decoration: BoxDecoration(color: c.fillSoft, borderRadius: R.field),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Оформление',
+            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+          ),
+          Text(
+            store.current.hint,
+            style: Theme.of(context).textTheme.labelMedium,
+          ),
+          const SizedBox(height: Gap.lg),
+          Row(
+            children: [
+              for (final variant in appThemes) ...[
+                Expanded(
+                  child: _ThemeChoice(
+                    variant: variant,
+                    selected: variant.id == store.current.id,
+                    onTap: () {
+                      Haptics.selection();
+                      context.read<ThemeStore>().select(variant);
+                    },
+                  ),
+                ),
+                if (variant != appThemes.last) const SizedBox(width: Gap.sm),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ThemeChoice extends StatelessWidget {
+  final AppThemeVariant variant;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ThemeChoice({
+    required this.variant,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return PressScale(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            height: 52,
+            decoration: BoxDecoration(
+              color: variant.surface,
+              borderRadius: R.thumbRepeat,
+              border: Border.all(
+                color: selected ? c.ink : c.ink.withValues(alpha: 0.12),
+                width: selected ? 2 : 1,
+              ),
+            ),
+            child: Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _Dot(variant.ink),
+                  const SizedBox(width: 3),
+                  _Dot(variant.accent),
+                  const SizedBox(width: 3),
+                  _Dot(variant.benefit),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: Gap.xs),
+          Text(
+            variant.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              color: selected ? c.ink : c.muted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Dot extends StatelessWidget {
+  final Color color;
+  const _Dot(this.color);
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 12,
+    height: 12,
+    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+  );
 }
 
 class _NotificationsCard extends StatelessWidget {

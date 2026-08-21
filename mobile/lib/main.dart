@@ -14,6 +14,8 @@ import 'screens/order_screen.dart';
 import 'screens/legal_screen.dart';
 import 'screens/splash_screen.dart';
 import 'api/models.dart';
+import 'state/theme.dart';
+import 'theme/themes.dart';
 import 'theme/app_theme.dart';
 import 'utils/haptics.dart';
 
@@ -38,6 +40,10 @@ Future<void> main() async {
     favorites.clear();
   };
   await Haptics.restore();
+  final theme = ThemeStore();
+  // До первого кадра: иначе приложение стартует в чужой теме и
+  // перекрашивается на глазах.
+  await theme.restore();
   await auth.restore();
   if (auth.isAuthenticated) unawaited(favorites.restore());
   push.onForegroundMessage = (title, body) {
@@ -74,7 +80,15 @@ Future<void> main() async {
       ),
     );
   };
-  runApp(PizzBurgApp(api: api, auth: auth, push: push, favorites: favorites));
+  runApp(
+    PizzBurgApp(
+      api: api,
+      auth: auth,
+      push: push,
+      favorites: favorites,
+      themes: theme,
+    ),
+  );
   unawaited(push.initialize());
 }
 
@@ -83,12 +97,14 @@ class PizzBurgApp extends StatelessWidget {
   final AuthState auth;
   final PushNotificationsService push;
   final Favorites favorites;
+  final ThemeStore themes;
   const PizzBurgApp({
     super.key,
     required this.api,
     required this.auth,
     required this.push,
     required this.favorites,
+    required this.themes,
   });
 
   @override
@@ -100,8 +116,16 @@ class PizzBurgApp extends StatelessWidget {
         ChangeNotifierProvider.value(value: push),
         ChangeNotifierProvider.value(value: favorites),
         ChangeNotifierProvider(create: (_) => Cart()),
+        ChangeNotifierProvider.value(value: themes),
       ],
-      child: MaterialApp(
+      child: Consumer<ThemeStore>(
+        builder: (context, themes, _) => _app(context, themes.current),
+      ),
+    );
+  }
+
+  Widget _app(BuildContext context, AppThemeVariant variant) {
+    return MaterialApp(
         navigatorKey: _navigatorKey,
         scaffoldMessengerKey: _messengerKey,
         title: 'PizzBurg',
@@ -109,7 +133,12 @@ class PizzBurgApp extends StatelessWidget {
         // Направление «Сигнал» из design_handoff_pizzburg_app.
         // accent и benefit — параметры темы: платформа мультитенантная,
         // следующее заведение придёт со своими цветами.
-        theme: AppTheme.build(),
+        theme: AppTheme.build(
+          ink: variant.ink,
+          accent: variant.accent,
+          benefit: variant.benefit,
+          surface: variant.surface,
+        ),
         // Макет мобильный (390 pt по хендоффу). «Адаптивный» не означает
         // «растянуть телефонный экран на 1600 px»: миниатюра 76 px рядом
         // со строкой во всю ширину монитора выглядит сломанной. На широком
@@ -139,8 +168,7 @@ class PizzBurgApp extends StatelessWidget {
             ),
           ),
         ),
-        home: const _LegalGate(child: AppShell()),
-      ),
+      home: const _LegalGate(child: AppShell()),
     );
   }
 }

@@ -12,10 +12,17 @@ abstract final class AppTheme {
   static const _text = 'Golos Text';
 
   static ThemeData build({
+    Color ink = const Color(0xFF0B0B14),
     Color accent = const Color(0xFF2B3BEE),
     Color benefit = const Color(0xFFD6F84C),
+    Color surface = const Color(0xFFFFFFFF),
   }) {
-    final colors = AppColors(accent: accent, benefit: benefit);
+    final colors = AppColors(
+      ink: ink,
+      accent: accent,
+      benefit: benefit,
+      surface: surface,
+    );
 
     return ThemeData(
       useMaterial3: true,
