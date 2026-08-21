@@ -124,6 +124,10 @@ class _PushRow extends StatelessWidget {
     }
 
     final (title, hint) = switch (status) {
+      PushNotificationsStatus.enabled when push.isProvisional => (
+        'Уведомления приходят тихо',
+        'Без баннера и звука. Включить их: Настройки телефона → PizzBurg',
+      ),
       PushNotificationsStatus.enabled => (
         'Уведомления включены',
         'Сообщим, когда заказ будет готов',

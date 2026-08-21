@@ -75,6 +75,8 @@ class PushNotificationsService extends ChangeNotifier {
       final permission = await _messaging!.getNotificationSettings();
       if (_isGranted(permission.authorizationStatus)) {
         _permissionGranted = true;
+        _isProvisional =
+            permission.authorizationStatus == AuthorizationStatus.provisional;
         await _activateMessaging();
         _setStatus(PushNotificationsStatus.enabled);
         return;
@@ -119,6 +121,8 @@ class PushNotificationsService extends ChangeNotifier {
       }
 
       _permissionGranted = true;
+      _isProvisional =
+          permission.authorizationStatus == AuthorizationStatus.provisional;
       await _activateMessaging();
       _setStatus(PushNotificationsStatus.enabled);
       return true;
@@ -225,6 +229,15 @@ class PushNotificationsService extends ChangeNotifier {
     await Firebase.initializeApp();
     return true;
   }
+
+  /// Разрешение выдано «тихо».
+  ///
+  /// iOS умеет разрешать уведомления без диалога: они приходят сразу в
+  /// центр уведомлений, но не показывают баннер и не звучат. Для нас это
+  /// «включено», а для человека — «ничего не приходит», и без этого
+  /// признака объяснить расхождение нечем.
+  bool get isProvisional => _isProvisional;
+  bool _isProvisional = false;
 
   bool _isGranted(AuthorizationStatus status) {
     return status == AuthorizationStatus.authorized ||
