@@ -44,7 +44,7 @@
 - Firebase Cloud Messaging подключён к backend, Flutter и web.
 - Web push в Safari подтверждён в foreground и background, включая статусы «В пути» и «Доставлен».
 - Обычный опрос статуса остаётся резервным каналом.
-- Нативные iOS push/APNs и TestFlight требуют Apple Developer Program. Регистрация аккаунта пока заблокирована Apple; пользователь написал в поддержку.
+- Нативные iOS push/APNs и TestFlight требуют Apple Developer Program. Аккаунт оформлен (август 2026); entitlement `aps-environment` снова входит в сборку, сборку больше не нужно чистить перед установкой на устройство.
 
 ## 6. Kaspi QR
 

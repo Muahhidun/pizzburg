@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 
 /// Оформление на выбор человека.
 ///
+/// Названия — по цвету, а не по адресату. «Детская», «для девушек» и
+/// прочее сужает выбор там, где сужать нечего: взрослому может нравиться
+/// яркое, брутальному человеку — мягкое, и подпись под кружком не должна
+/// объяснять ему, что он выбрал не своё.
+///
 /// Тема — это четыре цвета, а не четыре набора экранов: `ink` (текст и
 /// тёмные поверхности), `accent` (все действия), `benefit` (только выгода,
 /// только заливкой) и `surface` (фон). Всё остальное считается от них в
@@ -46,41 +51,33 @@ const kDefaultThemeId = 'signal';
 const appThemes = <AppThemeVariant>[
   AppThemeVariant(
     id: kDefaultThemeId,
-    name: 'Сдержанная',
-    hint: 'Как было: чернила, кобальт, лайм',
+    name: 'Базовая',
+    hint: 'Чернила, кобальт, лайм',
     ink: Color(0xFF0B0B14),
     accent: Color(0xFF2B3BEE),
     benefit: Color(0xFFD6F84C),
     surface: Color(0xFFFFFFFF),
   ),
   AppThemeVariant(
-    id: 'neon',
-    name: 'Молодёжная',
-    hint: 'Фиолет и кислотный лайм',
-    ink: Color(0xFF17122A),
-    accent: Color(0xFF6C2BD9),
-    benefit: Color(0xFFC8FF4D),
-    surface: Color(0xFFFFFFFF),
+    id: 'ember',
+    name: 'Оранжевая',
+    hint: 'Оранжевый, как на вывеске',
+    ink: Color(0xFF22140C),
+    accent: Color(0xFFDD5B0C),
+    benefit: Color(0xFFD6F84C),
+    surface: Color(0xFFFFFCF8),
   ),
   AppThemeVariant(
-    id: 'blossom',
-    name: 'Нежная',
-    hint: 'Розовый и тёплое золото',
-    ink: Color(0xFF2E1A24),
-    accent: Color(0xFFD63A78),
-    benefit: Color(0xFFFFC857),
-    surface: Color(0xFFFFF8FA),
-  ),
-  AppThemeVariant(
-    id: 'kids',
-    name: 'Детская',
-    hint: 'Синий и жёлтый, как в мультике',
-    ink: Color(0xFF172A4A),
-    accent: Color(0xFF1668E3),
-    benefit: Color(0xFFFFD93D),
-    surface: Color(0xFFF5FAFF),
+    id: 'olive',
+    name: 'Оливковая',
+    hint: 'Приглушённая, без ярких пятен',
+    ink: Color(0xFF1E2116),
+    accent: Color(0xFF5C6B3C),
+    benefit: Color(0xFFDCE3A8),
+    surface: Color(0xFFFAFAF3),
   ),
 ];
+
 
 AppThemeVariant themeById(String? id) => appThemes.firstWhere(
   (t) => t.id == id,
