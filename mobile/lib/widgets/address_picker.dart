@@ -310,7 +310,10 @@ class FieldCard extends StatelessWidget {
         labelStyle: TextStyle(fontSize: 13, color: c.muted),
         floatingLabelBehavior: FloatingLabelBehavior.always,
         filled: true,
-        fillColor: c.surface,
+        // Фон страницы, а не «светлое»: поле должно быть цветом того, на
+        // чём лежит, — рамка и так его очерчивает. Иначе в тёмной теме
+        // получается белый прямоугольник со светлым текстом внутри.
+        fillColor: c.page,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: Gap.lg,
           vertical: Gap.md,

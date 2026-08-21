@@ -361,7 +361,7 @@ class _OrderScreenState extends State<OrderScreen> {
                       status == 'DELIVERED' ? 'доставлен' : 'в работе',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontSize: 15.5,
-                        color: c.ink,
+                        color: c.onBenefit,
                       ),
                     ),
                   ),
@@ -615,7 +615,7 @@ class _OrderScreenState extends State<OrderScreen> {
                   style: TextStyle(
                     fontSize: 14.5,
                     fontWeight: FontWeight.w700,
-                    color: c.ink,
+                    color: c.onBenefit,
                   ),
                 ),
               ),
@@ -703,7 +703,7 @@ class _StageRow extends StatelessWidget {
                       ),
               ),
               child: done
-                  ? Icon(Icons.check, size: 14, color: c.ink)
+                  ? Icon(Icons.check, size: 14, color: c.onBenefit)
                   : null,
             ),
             const SizedBox(width: Gap.md),

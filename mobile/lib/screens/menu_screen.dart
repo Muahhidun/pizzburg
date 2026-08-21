@@ -815,7 +815,10 @@ class _ActiveOrderCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(Gap.lg),
         decoration: BoxDecoration(
-          color: c.surface,
+          // Фон страницы, а не «светлое»: карточка лежит на акцентной
+          // шапке, но текст в ней берётся из темы. Оставь тут светлое — в
+          // тёмной теме получится светлый текст на светлой карточке.
+          color: c.page,
           borderRadius: const BorderRadius.all(Radius.circular(24)),
           border: needsAnswer ? Border.all(color: c.accent, width: 2) : null,
         ),

@@ -276,7 +276,7 @@ class _PointsCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: c.ink.withValues(alpha: 0.65),
+              color: c.onBenefit.withValues(alpha: 0.65),
             ),
           ),
           const SizedBox(height: Gap.sm),
@@ -285,7 +285,7 @@ class _PointsCard extends StatelessWidget {
             withCurrency: false,
             style: Theme.of(
               context,
-            ).textTheme.displayLarge?.copyWith(color: c.ink),
+            ).textTheme.displayLarge?.copyWith(color: c.onBenefit),
           ),
           const SizedBox(height: Gap.xs),
           Text(
@@ -293,11 +293,11 @@ class _PointsCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 12.5,
               height: 1.4,
-              color: c.ink.withValues(alpha: 0.8),
+              color: c.onBenefit.withValues(alpha: 0.8),
             ),
           ),
           const SizedBox(height: Gap.lg),
-          Divider(color: c.ink.withValues(alpha: 0.16), height: 1),
+          Divider(color: c.onBenefit.withValues(alpha: 0.16), height: 1),
           const SizedBox(height: Gap.md),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -307,7 +307,7 @@ class _PointsCard extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: c.ink,
+                  color: c.onBenefit,
                 ),
               ),
               Text(
@@ -317,7 +317,7 @@ class _PointsCard extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: c.ink,
+                  color: c.onBenefit,
                 ),
               ),
             ],

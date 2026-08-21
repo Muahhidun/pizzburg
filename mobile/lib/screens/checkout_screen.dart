@@ -611,7 +611,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       style: TextStyle(
                         fontSize: 14.5,
                         fontWeight: FontWeight.w600,
-                        color: c.ink,
+                        color: c.onBenefit,
                       ),
                     ),
                   ),
