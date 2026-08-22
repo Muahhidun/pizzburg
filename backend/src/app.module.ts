@@ -18,6 +18,8 @@ import { StopListModule } from './stoplist/stoplist.module';
 import { UpsellModule } from './upsell/upsell.module';
 import { EventsModule } from './events/events.module';
 import { SmsModule } from './sms/sms.module';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TelegramModule } from './telegram/telegram.module';
 
 @Controller()
@@ -60,6 +62,17 @@ class RootController {
     UpsellModule,
     EventsModule,
     SmsModule,
+    /**
+     * Общий потолок частоты (DECISIONS §12.26).
+     *
+     * Публичный API печатает на живые планшеты и оплачивает SMS: без
+     * предела скрипт сжигает и бумагу, и баланс. Здесь широкий потолок
+     * «на всякого» — точечные лимиты стоят на самих маршрутах.
+     */
+    ThrottlerModule.forRoot([
+      { name: 'short', ttl: 10_000, limit: 30 },
+      { name: 'long', ttl: 60_000, limit: 120 },
+    ]),
     TelegramModule,
     GeoModule,
     FavoritesModule,
@@ -73,5 +86,6 @@ class RootController {
     AdminModule,
   ],
   controllers: [RootController],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

@@ -15,7 +15,9 @@ import {
   IsString,
   MaxLength,
 } from 'class-validator';
+import { Throttle } from '@nestjs/throttler';
 import { CustomerAuthGuard } from '../auth/customer-auth.guard';
+import { OrderOwnerGuard } from '../auth/order-owner.guard';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './orders.dto';
 import { CancelReasonsService } from './cancel-reasons.service';
@@ -79,6 +81,7 @@ export class OrdersController {
    * защита от ложных заказов. Без неё любой может отправить на кухню
    * чужой адрес, и узнаем мы об этом, когда курьер уже уехал.
    */
+  @Throttle({ short: { ttl: 60_000, limit: 3 }, long: { ttl: 3_600_000, limit: 20 } })
   @Post(':tenantSlug')
   @UseGuards(CustomerAuthGuard)
   create(
@@ -89,12 +92,21 @@ export class OrdersController {
     return this.orders.createOrder(tenantSlug, dto, req.customer);
   }
 
+  /**
+   * Статус заказа. Только своего (DECISIONS §12.26).
+   *
+   * Раньше был открыт: идентификатор не угадать, но ссылка утекает как
+   * угодно — через историю браузера, лог прокси, пересланное сообщение,
+   * — а в ответе лежат адрес доставки и телефон.
+   */
   @Get('by-id/:orderId')
+  @UseGuards(CustomerAuthGuard, OrderOwnerGuard)
   get(@Param('orderId') orderId: string) {
     return this.orders.getOrder(orderId);
   }
 
   @Post('by-id/:orderId/sync-status')
+  @UseGuards(CustomerAuthGuard, OrderOwnerGuard)
   syncStatus(@Param('orderId') orderId: string) {
     return this.orders.syncStatus(orderId);
   }
@@ -102,12 +114,14 @@ export class OrdersController {
   /**
    * Написать нам по живому заказу.
    *
-   * Без входа: заказ можно оформить гостем, и именно гость чаще всего
-   * пишет «не тот адрес». Требовать вход там, где человек уже ждёт еду,
-   * значит закрыть единственный канал связи ровно тогда, когда он нужен.
-   * От спама защищает не вход, а лимит в самом сервисе.
+   * Пересмотрено: раньше работало без входа ради гостей, но гостевых
+   * заказов больше нет (§12.22), и открытость перестала что-либо
+   * покупать — осталась только возможность писать в чужой заказ.
+   * Лимит частоты в сервисе при этом никуда не делся.
    */
+  @Throttle({ short: { ttl: 60_000, limit: 3 }, long: { ttl: 3_600_000, limit: 20 } })
   @Post('by-id/:orderId/message')
+  @UseGuards(CustomerAuthGuard, OrderOwnerGuard)
   sendMessage(
     @Param('orderId') orderId: string,
     @Body() dto: OrderMessageDto,
@@ -130,18 +144,20 @@ export class OrdersController {
   }
 
   @Get('by-id/:orderId/review')
+  @UseGuards(CustomerAuthGuard, OrderOwnerGuard)
   reviewForm(@Param('orderId') orderId: string) {
     return this.reviews.form(orderId);
   }
 
   @Post('by-id/:orderId/review')
+  @UseGuards(CustomerAuthGuard, OrderOwnerGuard)
   submitReview(@Param('orderId') orderId: string, @Body() dto: ReviewDto) {
     return this.reviews.submit(orderId, dto);
   }
 
   /** Отмена клиентом в окно, заданное арендатором */
   @Post('by-id/:orderId/cancel')
-  @UseGuards(CustomerAuthGuard)
+  @UseGuards(CustomerAuthGuard, OrderOwnerGuard)
   cancel(
     @Param('orderId') orderId: string,
     @Body() dto: CancelOrderDto,

@@ -9,6 +9,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { IsIn, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import { Prisma, PushPlatform } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -101,6 +102,16 @@ export class AuthController {
     private readonly addresses: AddressesService,
   ) {}
 
+  /**
+   * Запрос кода — единственный маршрут, где каждая попытка стоит денег
+   * (DECISIONS §12.26).
+   *
+   * Потолки на номер уже есть — минута между запросами и десять в сутки,
+   * — но они не мешают перебирать чужие номера: тысяча разных номеров
+   * укладывается в них полностью и сжигает баланс за ночь. Поэтому
+   * отдельный потолок на источник запросов.
+   */
+  @Throttle({ short: { ttl: 60_000, limit: 3 }, long: { ttl: 3_600_000, limit: 10 } })
   @Post(':tenantSlug/request-otp')
   requestOtp(@Body() dto: RequestOtpDto) {
     return this.auth.requestOtp(dto.phone);
