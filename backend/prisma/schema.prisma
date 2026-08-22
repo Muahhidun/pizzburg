@@ -844,6 +844,14 @@ model OrderMessage {
   text      String   @default("")
   createdAt DateTime @default(now())
 
+  /// Ответ заведения. Пишет его пока некому — механизм будет в §12.27,
+  /// — но место под него заведено сразу: без ответа лента обращений
+  /// показывает только половину разговора, и понять, разобрались ли с
+  /// человеком, по ней нельзя.
+  answeredAt DateTime?
+  answeredBy String?
+  answerText String?
+
   @@index([orderId, createdAt])
 }
 
@@ -866,6 +874,11 @@ model OrderReview {
   text    String  @default("")
   /// Ушло ли в чаты: низкая оценка требует человека, хорошая — нет
   alerted Boolean @default(false)
+
+  /// Ответ заведения на отзыв — тем же местом, что и у обращений
+  answeredAt DateTime?
+  answeredBy String?
+  answerText String?
 
   createdAt DateTime @default(now())
 

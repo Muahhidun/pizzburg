@@ -28,6 +28,8 @@ import { LoyaltyService } from '../loyalty/loyalty.service';
 import { OrdersService } from '../orders/orders.service';
 import { AvailabilityService } from '../availability/availability.service';
 import { UpsellService } from '../upsell/upsell.service';
+import { reviewBreakdown } from '../orders/feedback-report';
+import { MESSAGE_TOPICS } from '../orders/order-messages.service';
 import { LegalService } from '../legal/legal.service';
 import { CancelReasonsService } from '../orders/cancel-reasons.service';
 import { ShortageService } from '../orders/shortage.service';
@@ -930,6 +932,126 @@ export class AdminService {
       where: { id },
       data: { resolvedAt: new Date() },
     });
+  }
+
+  // ─── Отзывы и обращения (DECISIONS §12.23, §12.21) ───────────
+
+  /**
+   * Лента отзывов со сводкой.
+   *
+   * Сводка идёт вместе с лентой, а не отдельной страницей: цифра без
+   * примеров ничего не объясняет, а примеры без цифры не показывают,
+   * единичный это случай или система.
+   */
+  async reviews(params: { from?: string; to?: string } = {}) {
+    const tenant = await this.tenant();
+    const { from, to } = this.range(params);
+
+    const rows = await this.prisma.orderReview.findMany({
+      where: { tenantId: tenant.id, createdAt: { gte: from, lt: to } },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      select: {
+        id: true,
+        rating: true,
+        answers: true,
+        text: true,
+        alerted: true,
+        createdAt: true,
+        answeredAt: true,
+        answeredBy: true,
+        answerText: true,
+        order: {
+          select: {
+            number: true,
+            type: true,
+            total: true,
+            customer: { select: { name: true, phone: true } },
+          },
+        },
+      },
+    });
+
+    return {
+      from,
+      to,
+      ...reviewBreakdown(
+        rows.map((r) => ({
+          rating: r.rating,
+          answers: (r.answers ?? {}) as Record<string, string>,
+        })),
+      ),
+      items: rows.map(({ order, answers, ...rest }) => ({
+        ...rest,
+        answers: (answers ?? {}) as Record<string, string>,
+        orderNumber: order.number,
+        orderType: order.type,
+        orderTotal: order.total,
+        customerName: order.customer?.name ?? null,
+        customerPhone: order.customer?.phone ?? null,
+      })),
+    };
+  }
+
+  /** Лента обращений по живым заказам */
+  async orderMessages(params: { from?: string; to?: string } = {}) {
+    const tenant = await this.tenant();
+    const { from, to } = this.range(params);
+
+    const rows = await this.prisma.orderMessage.findMany({
+      where: {
+        order: { tenantId: tenant.id },
+        createdAt: { gte: from, lt: to },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      select: {
+        id: true,
+        topic: true,
+        text: true,
+        createdAt: true,
+        answeredAt: true,
+        answeredBy: true,
+        answerText: true,
+        order: {
+          select: {
+            number: true,
+            status: true,
+            customer: { select: { name: true, phone: true } },
+          },
+        },
+      },
+    });
+
+    const byTopic = new Map<string, number>();
+    for (const row of rows) {
+      byTopic.set(row.topic, (byTopic.get(row.topic) ?? 0) + 1);
+    }
+
+    return {
+      from,
+      to,
+      total: rows.length,
+      topics: MESSAGE_TOPICS,
+      byTopic: Object.fromEntries(byTopic),
+      items: rows.map(({ order, ...rest }) => ({
+        ...rest,
+        label: MESSAGE_TOPICS[rest.topic] ?? rest.topic,
+        orderNumber: order.number,
+        orderStatus: order.status,
+        customerName: order.customer?.name ?? null,
+        customerPhone: order.customer?.phone ?? null,
+      })),
+    };
+  }
+
+  /** Период по умолчанию — последние 30 дней */
+  private range(params: { from?: string; to?: string }) {
+    const to = params.to ? new Date(params.to) : new Date();
+    const from = params.from
+      ? new Date(params.from)
+      : new Date(to.getTime() - 30 * 24 * 60 * 60_000);
+    return { from, to };
   }
 
   /** Сырая техкарта из Poster по нашему productId */

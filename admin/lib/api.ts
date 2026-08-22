@@ -91,6 +91,64 @@ export interface AdminCategory {
   products: AdminProduct[];
 }
 
+/** Отзыв о заказе (DECISIONS §12.23) */
+export interface AdminReview {
+  id: string;
+  rating: number;
+  answers: Record<string, string>;
+  text: string;
+  alerted: boolean;
+  createdAt: string;
+  answeredAt: string | null;
+  answeredBy: string | null;
+  answerText: string | null;
+  orderNumber: number;
+  orderType: 'DELIVERY' | 'PICKUP';
+  orderTotal: number;
+  customerName: string | null;
+  customerPhone: string | null;
+}
+
+export interface ReviewsReport {
+  from: string;
+  to: string;
+  total: number;
+  averageRating: number;
+  questions: {
+    id: string;
+    label: string;
+    answered: number;
+    worstPct: number;
+    options: { id: string; label: string; count: number; worst: boolean }[];
+  }[];
+  items: AdminReview[];
+}
+
+/** Обращение по живому заказу (DECISIONS §12.21) */
+export interface AdminOrderMessage {
+  id: string;
+  topic: string;
+  label: string;
+  text: string;
+  createdAt: string;
+  answeredAt: string | null;
+  answeredBy: string | null;
+  answerText: string | null;
+  orderNumber: number;
+  orderStatus: string;
+  customerName: string | null;
+  customerPhone: string | null;
+}
+
+export interface MessagesReport {
+  from: string;
+  to: string;
+  total: number;
+  topics: Record<string, string>;
+  byTopic: Record<string, number>;
+  items: AdminOrderMessage[];
+}
+
 /** Позиция допродажи (DECISIONS §12.20) */
 export interface UpsellItem {
   id: string;

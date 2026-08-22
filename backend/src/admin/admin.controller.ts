@@ -329,6 +329,18 @@ export class AdminController {
     return this.admin.posterProductRaw(id);
   }
 
+  // ─── Отзывы и обращения ──────────────────────────────────────
+
+  @Get('reviews')
+  reviews(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.admin.reviews({ from, to });
+  }
+
+  @Get('order-messages')
+  orderMessages(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.admin.orderMessages({ from, to });
+  }
+
   // ─── Допродажи ───────────────────────────────────────────────
 
   @Get('upsells')
