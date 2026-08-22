@@ -932,6 +932,27 @@ export class AdminService {
     });
   }
 
+  /** Сырая техкарта из Poster по нашему productId */
+  async posterProductRaw(productId: string) {
+    const product = await this.prisma.product.findUniqueOrThrow({
+      where: { id: productId },
+      select: {
+        posterId: true,
+        name: true,
+        posterAccount: { select: { name: true, token: true } },
+      },
+    });
+    if (!product.posterId) return { error: 'У позиции нет posterId' };
+    return {
+      name: product.name,
+      department: product.posterAccount.name,
+      raw: await this.poster.getProductRaw(
+        product.posterAccount.token,
+        product.posterId,
+      ),
+    };
+  }
+
   // ─── Допродажи (DECISIONS §12.20) ────────────────────────────
 
   async listUpsells() {

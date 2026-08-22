@@ -317,6 +317,18 @@ export class AdminController {
     return this.admin.updateLoyaltyLevels(dto);
   }
 
+  /**
+   * Сырая техкарта из Poster — чтобы увидеть, что там вообще есть.
+   *
+   * Диагностический маршрут: структура ответа у Poster отличается для
+   * товара, блюда и техкарты, а документация рисуется скриптом и не
+   * читается. Проще посмотреть на живом ответе, чем гадать.
+   */
+  @Get('poster/product/:id')
+  posterProduct(@Param('id') id: string) {
+    return this.admin.posterProductRaw(id);
+  }
+
   // ─── Допродажи ───────────────────────────────────────────────
 
   @Get('upsells')

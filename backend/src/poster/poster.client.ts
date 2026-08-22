@@ -71,6 +71,22 @@ export class PosterClient {
     return this.call<PosterProduct[]>(token, 'menu.getProducts');
   }
 
+  /**
+   * Техкарта блюда: состав с ингредиентами.
+   *
+   * Poster отдаёт её только поштучно, `menu.getProducts` состава не
+   * содержит — там лежит `product_production_description`, и у PizzBurg
+   * оно заполнено у восьми позиций из ста девяноста девяти.
+   *
+   * Возвращаем сырой ответ: структура у Poster разная для товара,
+   * блюда и техкарты, и разбирать её лучше по факту, а не по догадке.
+   */
+  getProductRaw(token: string, productId: string) {
+    return this.call<Record<string, unknown>>(token, 'menu.getProduct', {
+      product_id: productId,
+    });
+  }
+
   /** Входящий заказ в кассу. service_mode: 2 — самовывоз, 3 — доставка. */
   createIncomingOrder(
     token: string,
