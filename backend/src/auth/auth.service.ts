@@ -7,6 +7,7 @@ import {
 import { randomInt } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
+import { SmsService } from '../sms/sms.service';
 import { normalizeKzPhone } from '../common/phone';
 
 const OTP_TTL_MS = 5 * 60 * 1000;
@@ -41,8 +42,11 @@ function testPhones(logger: Logger): Set<string> {
 
 /**
  * Вход по телефону + SMS-код. Телефон — идентификатор клиента (профили
- * переживут миграцию с FoodPicasso). SMS-провайдер подключается позже:
- * пока OTP_DEV_MODE=1 код пишется в лог и возвращается в ответе.
+ * переживут миграцию с FoodPicasso).
+ *
+ * Код уходит настоящей SMS через Mobizon. Dev-режим остаётся запасным
+ * путём: он включается, только если провайдер не настроен, — чтобы
+ * локальная разработка не требовала оплаченного баланса.
  */
 @Injectable()
 export class AuthService {
@@ -51,6 +55,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly sms: SmsService,
   ) {}
 
   async requestOtp(phone: string) {
@@ -93,18 +98,37 @@ export class AuthService {
       },
     });
 
-    // TODO: SMS-провайдер (Mobizon и т.п.). До подключения — dev-режим.
-    if (process.env.OTP_DEV_MODE === '1') {
-      this.logger.warn(`OTP для ${normalized}: ${code}`);
-      // Код в ответе — только для заранее названных тестовых номеров.
-      // Staging публичен, а в его базе лежат реальные клиенты: отдавать
-      // код кому попало значит пускать в чужой профиль по одному телефону.
-      if (testPhones(this.logger).has(normalized)) {
-        return { sent: true, devCode: code };
+    // Тестовые номера обслуживаем без SMS даже при живом провайдере:
+    // проверять вход десять раз подряд за деньги незачем, а список
+    // задаётся вручную и в бою пуст.
+    if (testPhones(this.logger).has(normalized)) {
+      this.logger.warn(`OTP для тестового номера ${normalized}: ${code}`);
+      return { sent: true, devCode: code };
+    }
+
+    if (this.sms.configured) {
+      try {
+        await this.sms.sendOtp(normalized, code);
+      } catch (error) {
+        // Причину пишем в лог, клиенту не показываем: в тексте ошибки
+        // провайдера бывает и остаток баланса, и номер счёта.
+        this.logger.error(
+          `SMS с кодом не отправлена на ${normalized}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        throw new BadRequestException(
+          'Не удалось отправить SMS. Попробуйте ещё раз через минуту',
+        );
       }
       return { sent: true };
     }
-    // сюда встанет вызов SMS-шлюза
+
+    // Провайдер не настроен — только для локальной разработки
+    if (process.env.OTP_DEV_MODE === '1') {
+      this.logger.warn(`OTP для ${normalized}: ${code}`);
+      return { sent: true };
+    }
     this.logger.error('SMS-провайдер не настроен, а OTP_DEV_MODE выключен');
     throw new BadRequestException('Отправка SMS временно недоступна');
   }
