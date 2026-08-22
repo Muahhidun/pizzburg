@@ -125,17 +125,23 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     } catch (_) {}
   }
 
-  void _prefillProfile() {
+  /// `keepAddress` — не трогать то, что человек набрал руками.
+  ///
+  /// Гость вводит адрес, жмёт «Заказать», входит по коду — и его адрес
+  /// не должен подмениться сохранённым. Он ввёл его минуту назад, везти
+  /// надо туда. Сохранённые адреса просто становятся доступны на
+  /// будущее.
+  void _prefillProfile({bool keepAddress = false}) {
     final auth = context.read<AuthState>();
     if (!auth.isAuthenticated) return;
     setState(() {
       _phone.text = auth.phone;
       if (_name.text.isEmpty && auth.name.isNotEmpty) _name.text = auth.name;
     });
-    _loadAddresses();
+    _loadAddresses(keepChosen: keepAddress);
   }
 
-  Future<void> _loadAddresses() async {
+  Future<void> _loadAddresses({bool keepChosen = false}) async {
     try {
       final list = await context.read<ApiClient>().fetchAddresses();
       if (!mounted || list.isEmpty) return;
@@ -145,9 +151,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (!mounted) return;
       setState(() {
         _addresses = list;
-        _applyAddress(
-          list.firstWhere((a) => a.id == chosenId, orElse: () => list.first),
-        );
+        // Список пополняем всегда, а выбор подменяем только когда его
+        // делать было некому
+        if (!keepChosen) {
+          _applyAddress(
+            list.firstWhere((a) => a.id == chosenId, orElse: () => list.first),
+          );
+        }
       });
     } catch (_) {}
   }
@@ -179,12 +189,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         MaterialPageRoute(builder: (_) => const LoginScreen()),
       );
       if (entered != true || !mounted) return;
-      // Подставляем то, что человек только что подтвердил.
-      //
-      // Без этого он вводил номер в окне входа, получал код, входил — и
-      // упирался в пустое поле «Телефон» с требованием ввести тот же
-      // номер ещё раз. Заодно подтягиваются имя и сохранённые адреса.
-      _prefillProfile();
+      // Подставляем телефон, который человек только что подтвердил, но
+      // не трогаем адрес: он набрал его минуту назад, и везти надо туда.
+      // Дальше метод идёт своим чередом и оформляет заказ — второй раз
+      // жать «Заказать» не нужно.
+      _prefillProfile(keepAddress: true);
     }
     if (!_formKey.currentState!.validate()) {
       await Haptics.warning();
