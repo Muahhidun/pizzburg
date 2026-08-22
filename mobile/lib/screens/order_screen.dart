@@ -167,14 +167,22 @@ class _OrderScreenState extends State<OrderScreen> {
       _lastStage = stage;
       setState(() {
         _data = data;
+        _loadError = null;
         final state = data['messages'];
         if (state is Map<String, dynamic>) _messageState = state;
       });
       if (data['status'] == 'DELIVERED' || data['status'] == 'CANCELLED') {
         await LastPlacedOrder.forget();
       }
-    } catch (_) {
-      // попробуем на следующем тике
+    } catch (e) {
+      // Пока заказ уже показан, молчим: следующий тик перечитает. А вот
+      // если показывать нечего — говорим прямо, иначе экран врёт, что
+      // всё ещё грузится.
+      if (mounted && _data == null) {
+        setState(
+          () => _loadError = e.toString().replaceFirst('Exception: ', ''),
+        );
+      }
     }
   }
 
@@ -193,6 +201,14 @@ class _OrderScreenState extends State<OrderScreen> {
   }
 
   bool _sendingMessage = false;
+
+  /// Почему не удалось прочитать заказ.
+  ///
+  /// Раньше ошибка глоталась молча, и экран навсегда застревал на
+  /// «Загружаем…». Так спряталась целая регрессия: запрос статуса
+  /// перестал слать токен, все ответы стали 401, а выглядело это как
+  /// вечная загрузка.
+  String? _loadError;
 
   /// Сколько обращений уже отправлено и когда можно снова.
   ///
@@ -370,6 +386,8 @@ class _OrderScreenState extends State<OrderScreen> {
                           : _cancelLeft != null
                           ? 'Ещё можно отменить'
                           : (_headlines[status] ?? status))
+                    : _loadError != null
+                    ? 'Не удалось загрузить'
                     : 'Загружаем…',
                 style: Theme.of(context).textTheme.displayMedium?.copyWith(
                   color: loaded
@@ -377,6 +395,43 @@ class _OrderScreenState extends State<OrderScreen> {
                       : c.surface.withValues(alpha: 0.35),
                 ),
               ),
+
+              if (!loaded && _loadError != null) ...[
+                const SizedBox(height: Gap.md),
+                Text(
+                  _loadError!,
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.4,
+                    color: c.surface.withValues(alpha: 0.7),
+                  ),
+                ),
+                const SizedBox(height: Gap.lg),
+                PressScale(
+                  onTap: () {
+                    setState(() => _loadError = null);
+                    _load();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      borderRadius: R.pill,
+                      border: Border.all(
+                        color: c.surface.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Text(
+                      'Попробовать снова',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: c.surface,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
 
               if (_awaitingShortage) _shortageChoice(),
 

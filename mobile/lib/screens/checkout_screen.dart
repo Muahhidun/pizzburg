@@ -179,6 +179,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         MaterialPageRoute(builder: (_) => const LoginScreen()),
       );
       if (entered != true || !mounted) return;
+      // Подставляем то, что человек только что подтвердил.
+      //
+      // Без этого он вводил номер в окне входа, получал код, входил — и
+      // упирался в пустое поле «Телефон» с требованием ввести тот же
+      // номер ещё раз. Заодно подтягиваются имя и сохранённые адреса.
+      _prefillProfile();
     }
     if (!_formKey.currentState!.validate()) {
       await Haptics.warning();

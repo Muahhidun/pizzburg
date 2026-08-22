@@ -445,6 +445,7 @@ class ApiClient {
   Future<void> syncOrderStatus(String orderId) async {
     final res = await http.post(
       Uri.parse('$baseUrl/orders/by-id/$orderId/sync-status'),
+      headers: _headers,
     );
     _ensureOk(res);
   }
@@ -472,7 +473,11 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> orderStatus(String orderId) async {
-    final res = await http.get(Uri.parse('$baseUrl/orders/by-id/$orderId'));
+    // С токеном: заказ читает только его хозяин (DECISIONS §12.26)
+    final res = await http.get(
+      Uri.parse('$baseUrl/orders/by-id/$orderId'),
+      headers: _headers,
+    );
     _ensureOk(res);
     return jsonDecode(utf8.decode(res.bodyBytes));
   }
