@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../services/analytics.dart';
 import '../state/auth.dart';
 import '../state/cart.dart';
 import '../theme/app_theme.dart';
@@ -79,6 +80,14 @@ class _CartScreenState extends State<CartScreen> {
         _previewedFor = signature;
         _loading = false;
         _error = null;
+        // Показ допродаж пишем здесь, вместе с пересчётом: build
+        // вызывается по многу раз, и событие в нём превратилось бы в
+        // поток одинаковых записей.
+        if (preview.upsell.isNotEmpty) {
+          context.read<Analytics>().log(Ev.upsellShown, {
+            'productIds': preview.upsell.map((o) => o.productId).toList(),
+          });
+        }
         // Состав изменился — списание сбрасываем: иначе оно может
         // превысить новую сумму заказа.
         //
@@ -249,6 +258,13 @@ class _CartScreenState extends State<CartScreen> {
                         offers: preview.upsell,
                         onAdd: (offer) {
                           Haptics.tap();
+                          // Без «показали» число «взяли» не значит
+                          // ничего: пять добавлений — это успех или
+                          // провал, смотря сколько раз предложили
+                          context.read<Analytics>().log(Ev.upsellAdded, {
+                            'productId': offer.productId,
+                            'name': offer.name,
+                          });
                           cart.add(offer.toProduct());
                           _refresh();
                         },

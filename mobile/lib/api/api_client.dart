@@ -121,6 +121,23 @@ class ApiClient {
     return jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
   }
 
+  /// Пачка поведенческих событий (DECISIONS §12.24).
+  ///
+  /// Без токена работает тоже: меню смотрят и не входя, и это поведение
+  /// тоже нужно видеть.
+  Future<void> sendEvents(
+    List<Map<String, dynamic>> events, {
+    String? deviceId,
+  }) async {
+    if (events.isEmpty) return;
+    final res = await http.post(
+      Uri.parse('$baseUrl/events/$tenant'),
+      headers: _headers,
+      body: jsonEncode({'events': events, 'deviceId': ?deviceId}),
+    );
+    _ensureOk(res);
+  }
+
   /// Заказ, по которому ждём отзыв. null — спрашивать нечего.
   Future<Map<String, dynamic>?> pendingReview() async {
     final res = await http.get(

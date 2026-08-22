@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../services/analytics.dart';
 import '../services/push_notifications.dart';
 import '../state/auth.dart';
 import '../state/cart.dart';
@@ -73,6 +74,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   @override
   void initState() {
     super.initState();
+    // Дошёл до оформления. Заказ следом или нет — видно по заказам:
+    // так считается доля брошенных корзин.
+    context.read<Analytics>().log(Ev.checkoutOpen, {
+      'subtotal': widget.preview.subtotal,
+      'gifts': widget.preview.gifts.length,
+    });
     if (!widget.preview.deliveryAvailable) _type = 'PICKUP';
     _payment = _firstEnabledPayment();
     _points = widget.initialPoints;

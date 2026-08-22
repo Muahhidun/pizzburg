@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import '../api/api_client.dart';
+import '../services/analytics.dart';
 import '../api/models.dart';
 import '../state/cart.dart';
 import '../state/favorites.dart';
@@ -137,6 +138,10 @@ class _MenuScreenState extends State<MenuScreen> {
   final _search = TextEditingController();
   String _query = '';
 
+  /// Поиск пишем не на каждую букву, а когда человек остановился: иначе
+  /// «пицца» превратится в пять событий, из которых четыре — обрывки.
+  Timer? _searchLog;
+
   /// Активный заказ держим отдельно от загрузки каталога.
   ///
   /// Каталог живёт в IndexedStack и грузится один раз, а заказ появляется
@@ -225,8 +230,25 @@ class _MenuScreenState extends State<MenuScreen> {
     _ownedController?.dispose();
     _chipsController.dispose();
     _floatingChipsController.dispose();
+    _searchLog?.cancel();
     _search.dispose();
     super.dispose();
+  }
+
+  /// Записать поиск через паузу после последней буквы.
+  ///
+  /// Нас интересует не набор, а результат — и особенно результат пустой:
+  /// «искал и не нашёл» видно только отсюда, в заказах этого нет.
+  void _logSearchLater(MenuResponse menu) {
+    _searchLog?.cancel();
+    _searchLog = Timer(const Duration(milliseconds: 900), () {
+      final q = _query.trim();
+      if (q.length < 2 || !mounted) return;
+      context.read<Analytics>().log(Ev.search, {
+        'query': q,
+        'results': _found(menu).length,
+      });
+    });
   }
 
   /// Ищем и по названию, и по составу: человек чаще помнит «с халапеньо»,
@@ -598,7 +620,10 @@ class _MenuScreenState extends State<MenuScreen> {
                         ),
                         child: MenuSearch(
                           controller: _search,
-                          onChanged: (v) => setState(() => _query = v),
+                          onChanged: (v) {
+                            setState(() => _query = v);
+                            _logSearchLater(data.menu);
+                          },
                           onClear: () => setState(() {
                             _search.clear();
                             _query = '';

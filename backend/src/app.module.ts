@@ -16,6 +16,7 @@ import { GeoModule } from './geo/geo.module';
 import { LegalModule } from './legal/legal.module';
 import { StopListModule } from './stoplist/stoplist.module';
 import { UpsellModule } from './upsell/upsell.module';
+import { EventsModule } from './events/events.module';
 import { TelegramModule } from './telegram/telegram.module';
 
 @Controller()
@@ -56,6 +57,7 @@ class RootController {
     LegalModule,
     StopListModule,
     UpsellModule,
+    EventsModule,
     TelegramModule,
     GeoModule,
     FavoritesModule,

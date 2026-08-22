@@ -30,6 +30,7 @@ model Tenant {
   stopEvents     StopEvent[]
   upsells        UpsellItem[]
   reviews        OrderReview[]
+  events         AppEvent[]
 }
 
 /// Аккаунт Poster = отдел на своём планшете. У тенанта их может быть
@@ -296,6 +297,7 @@ model Customer {
   addresses       CustomerAddress[]
   favorites       Favorite[]
   addressRequests AddressRequest[]
+  events          AppEvent[]
 
   @@unique([tenantId, phone])
 }
@@ -868,4 +870,37 @@ model OrderReview {
   createdAt DateTime @default(now())
 
   @@index([tenantId, createdAt])
+}
+
+/// Поведенческое событие (DECISIONS §12.24).
+///
+/// Заказы отвечают, что купили. Эти события отвечают, что смотрели и не
+/// купили, — а это разные вопросы, и второй важнее для решений «что
+/// убрать из меню» и «работают ли допродажи». Задним числом такие данные
+/// не восстановить: не записал в тот день — не узнаешь никогда.
+model AppEvent {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  /// Тип из белого списка на сервере: свободные строки превращают
+  /// таблицу в свалку, по которой нельзя построить ни одного отчёта
+  type String
+
+  /// Кто, если вошёл. Гость смотрит меню, не входя, и его поведение
+  /// тоже важно — его опознаём по устройству
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  deviceId   String?
+
+  /// Полезная нагрузка под тип: { query, results } у поиска,
+  /// { productId } у просмотра
+  payload Json @default("{}")
+
+  /// Время на устройстве могло уехать, поэтому пишем серверное
+  at DateTime @default(now())
+
+  @@index([tenantId, type, at])
+  @@index([tenantId, at])
+  @@index([customerId, at])
 }

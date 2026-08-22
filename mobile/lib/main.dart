@@ -8,6 +8,7 @@ import 'state/cart.dart';
 import 'state/favorites.dart';
 import 'screens/app_shell.dart';
 import 'state/auth.dart';
+import 'services/analytics.dart';
 import 'services/push_notifications.dart';
 import 'screens/messages_screen.dart';
 import 'screens/order_screen.dart';
@@ -41,6 +42,9 @@ Future<void> main() async {
     favorites.clear();
   };
   await Haptics.restore();
+  final analytics = Analytics(api);
+  await analytics.restore();
+  analytics.log(Ev.appOpen);
   final theme = ThemeStore();
   // До первого кадра: иначе приложение стартует в чужой теме и
   // перекрашивается на глазах.
@@ -102,6 +106,7 @@ Future<void> main() async {
       push: push,
       favorites: favorites,
       themes: theme,
+      analytics: analytics,
     ),
   );
   unawaited(push.initialize());
@@ -113,6 +118,7 @@ class PizzBurgApp extends StatelessWidget {
   final PushNotificationsService push;
   final Favorites favorites;
   final ThemeStore themes;
+  final Analytics analytics;
   const PizzBurgApp({
     super.key,
     required this.api,
@@ -120,6 +126,7 @@ class PizzBurgApp extends StatelessWidget {
     required this.push,
     required this.favorites,
     required this.themes,
+    required this.analytics,
   });
 
   @override
@@ -132,6 +139,7 @@ class PizzBurgApp extends StatelessWidget {
         ChangeNotifierProvider.value(value: favorites),
         ChangeNotifierProvider(create: (_) => Cart()),
         ChangeNotifierProvider.value(value: themes),
+        Provider.value(value: analytics),
       ],
       child: Consumer<ThemeStore>(
         builder: (context, themes, _) => _app(context, themes.current),

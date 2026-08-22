@@ -5,6 +5,7 @@ import '../state/auth.dart';
 import '../state/cart.dart';
 import '../state/favorites.dart';
 import '../theme/app_theme.dart';
+import '../services/analytics.dart';
 import '../theme/tokens.dart';
 import '../utils/haptics.dart';
 import '../widgets/favorite_heart.dart';
@@ -41,6 +42,11 @@ class _ProductScreenState extends State<ProductScreen> {
   @override
   void initState() {
     super.initState();
+    // Что смотрели и не купили — вопрос, на который заказы не отвечают
+    context.read<Analytics>().log(Ev.productView, {
+      'productId': widget.product.id,
+      'name': widget.product.name,
+    });
     // Обязательные группы предзаполняем первым вариантом: иначе кнопка
     // «В корзину» неактивна без единой подсказки, почему.
     for (final group in widget.product.modifierGroups) {
