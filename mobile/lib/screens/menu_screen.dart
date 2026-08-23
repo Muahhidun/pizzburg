@@ -77,16 +77,30 @@ class _HeaderRow extends _Row {
   const _HeaderRow(this.categoryId, this.title);
 }
 
-class _ProductRowItem extends _Row {
+/// Первая позиция категории во всю ширину (DECISIONS §12.27)
+class _HeroRow extends _Row {
   final String categoryId;
   final Product product;
-  const _ProductRowItem(this.categoryId, this.product);
+  const _HeroRow(this.categoryId, this.product);
+}
+
+/// Ряд сетки: две карточки, либо одна, если позиция последняя нечётная
+class _PairRow extends _Row {
+  final String categoryId;
+  final Product left;
+  final Product? right;
+  const _PairRow(this.categoryId, this.left, this.right);
 }
 
 /// Высота закреплённой строки категорий: поля по 12 вокруг тап-зоны 44.
 const _chipsExtent = Hit.min + Gap.md * 2;
 const _categoryTitleHeight = 58.0;
+
+/// Высота строки в результатах поиска — там список остался списком
 const _productRowHeight = 101.0;
+
+/// Промежуток между рядами сетки
+const _gridGap = Gap.md;
 
 class _MenuScreenState extends State<MenuScreen> {
   late Future<_CatalogData> _future;
@@ -321,17 +335,73 @@ class _MenuScreenState extends State<MenuScreen> {
     });
   }
 
-  void _buildRows(MenuResponse menu) {
+  void _openProduct(Product product) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProductScreen(
+          product: product,
+          inStopList: !product.isAvailable,
+        ),
+      ),
+    );
+  }
+
+  /// Товар с выбором нельзя добавить одним тапом: сначала нужно собрать
+  /// состав, иначе в кассу уедет заказ без обязательного модификатора.
+  void _addToCart(Product product) {
+    if (product.hasChoices) {
+      _openProduct(product);
+      return;
+    }
+    context.read<Cart>().add(product);
+  }
+
+  /// Ширина карточки в сетке при текущей ширине экрана
+  double _cardWidth(BuildContext context) {
+    final content = MediaQuery.sizeOf(context).width - Gap.screen * 2;
+    return (content - _gridGap) / 2;
+  }
+
+  /// Высоты рядов зависят от ширины экрана, поэтому строим их с контекстом
+  /// на руках, а не при загрузке меню.
+  void _buildRows(BuildContext context, MenuResponse menu) {
     if (_rows.isNotEmpty) return;
     _categories = menu.categories;
+
+    final card = _cardWidth(context);
+    // Внутренние поля карточки по 8 с каждой стороны — фото уже их
+    final photo = (card - Gap.sm * 2) / kCardPhotoRatio;
+    final cardHeight = photo + kCardTextHeight;
+    final heroPhoto =
+        (MediaQuery.sizeOf(context).width - Gap.screen * 2 - Gap.sm * 2) /
+        kHeroPhotoRatio;
+    final heroHeight = heroPhoto + kHeroTextHeight;
+
     var offset = 0.0;
     for (final category in menu.categories) {
       _offsets[category.id] = offset;
       _rows.add(_HeaderRow(category.id, category.name));
       offset += _categoryTitleHeight;
-      for (final product in category.products) {
-        _rows.add(_ProductRowItem(category.id, product));
-        offset += _productRowHeight;
+
+      final products = [...category.products];
+      // Крупной делаем первый хит категории. Нет хита — нет и крупной
+      // карточки: назначать её первой попавшейся значит обещать людям
+      // особенное там, где его нет.
+      final heroAt = products.indexWhere((p) => p.isHit);
+      if (heroAt >= 0) {
+        _rows.add(_HeroRow(category.id, products.removeAt(heroAt)));
+        offset += heroHeight + _gridGap;
+      }
+      for (var i = 0; i < products.length; i += 2) {
+        _rows.add(
+          _PairRow(
+            category.id,
+            products[i],
+            i + 1 < products.length ? products[i + 1] : null,
+          ),
+        );
+        offset += cardHeight + _gridGap;
       }
     }
     _activeCategory = menu.categories.isEmpty ? null : menu.categories.first.id;
@@ -511,7 +581,7 @@ class _MenuScreenState extends State<MenuScreen> {
           }
 
           final data = snapshot.data!;
-          _buildRows(data.menu);
+          _buildRows(context, data.menu);
 
           // top: false — хедер сам заходит под статус-бар и красит его
           return SafeArea(
@@ -758,49 +828,73 @@ class _MenuScreenState extends State<MenuScreen> {
                                 ),
                               );
                             }
-                            final product = (row as _ProductRowItem).product;
+                            final authedNow = authed;
+                            Widget tile(Product product) => Consumer<Cart>(
+                              builder: (context, cart, _) => ProductCard(
+                                product: product,
+                                inStopList: !product.isAvailable,
+                                favorite: authedNow
+                                    ? favorites.contains(product.id)
+                                    : null,
+                                onToggleFavorite: () =>
+                                    _toggleFavorite(product.id),
+                                inCart: cart.qtyOf(product),
+                                onRemove: () => cart.decrementProduct(product),
+                                onTap: () => _openProduct(product),
+                                onAdd: () => _addToCart(product),
+                              ),
+                            );
+
+                            if (row is _HeroRow) {
+                              return StaggeredEntrance(
+                                index: index,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(
+                                    bottom: _gridGap,
+                                  ),
+                                  child: Consumer<Cart>(
+                                    builder: (context, cart, _) => ProductHero(
+                                      product: row.product,
+                                      inStopList: !row.product.isAvailable,
+                                      favorite: authedNow
+                                          ? favorites.contains(row.product.id)
+                                          : null,
+                                      onToggleFavorite: () =>
+                                          _toggleFavorite(row.product.id),
+                                      inCart: cart.qtyOf(row.product),
+                                      onRemove: () =>
+                                          cart.decrementProduct(row.product),
+                                      onTap: () => _openProduct(row.product),
+                                      onAdd: () => _addToCart(row.product),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+
+                            final pair = row as _PairRow;
                             return StaggeredEntrance(
                               index: index,
-                              child: SizedBox(
-                                height: _productRowHeight,
-                                child: Consumer<Cart>(
-                                  builder: (context, cart, _) => ProductRow(
-                                    inStopList: !product.isAvailable,
-                                    favorite: authed
-                                        ? favorites.contains(product.id)
-                                        : null,
-                                    onToggleFavorite: () =>
-                                        _toggleFavorite(product.id),
-                                    inCart: cart.qtyOf(product),
-                                    onRemove: () =>
-                                        cart.decrementProduct(product),
-                                    product: product,
-                                    onTap: () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => ProductScreen(
-                                          product: product,
-                                          inStopList: !product.isAvailable,
-                                        ),
+                              child: Padding(
+                                padding: const EdgeInsets.only(
+                                  bottom: _gridGap,
+                                ),
+                                child: IntrinsicHeight(
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      Expanded(child: tile(pair.left)),
+                                      const SizedBox(width: _gridGap),
+                                      // Пустая ячейка вместо растянутой
+                                      // карточки: нечётная позиция не должна
+                                      // становиться вдвое шире соседей
+                                      Expanded(
+                                        child: pair.right == null
+                                            ? const SizedBox.shrink()
+                                            : tile(pair.right!),
                                       ),
-                                    ),
-                                    onAdd: () {
-                                      // Товар с выбором нельзя добавить одним
-                                      // тапом: сначала нужно собрать состав.
-                                      if (product.hasChoices) {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => ProductScreen(
-                                              product: product,
-                                              inStopList: !product.isAvailable,
-                                            ),
-                                          ),
-                                        );
-                                        return;
-                                      }
-                                      context.read<Cart>().add(product);
-                                    },
+                                    ],
                                   ),
                                 ),
                               ),

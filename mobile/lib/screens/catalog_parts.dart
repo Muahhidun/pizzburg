@@ -266,6 +266,343 @@ class CategoryChips extends StatelessWidget {
 /// Стоп-лист не прячет позицию, а гасит её и объясняет причину: человек
 /// должен понимать, что блюдо существует и вернётся, а не решить, что его
 /// убрали из меню навсегда.
+/// Пропорции фото в сетке и у крупной карточки.
+///
+/// Четыре к трём, а не квадрат: карточка выходит ниже, и на экран влезает
+/// шесть позиций вместо четырёх — при том же размере снимка по ширине.
+const double kCardPhotoRatio = 4 / 3;
+const double kHeroPhotoRatio = 16 / 9;
+
+/// Сколько карточка занимает под фотографией: имя в две строки, состав в
+/// две, строка цены. Считаем константой, потому что список знает свои
+/// высоты заранее — по ним он находит начало категории при переходе.
+const double kCardTextHeight = 132;
+const double kHeroTextHeight = 64;
+
+/// Карточка товара в сетке (DECISIONS §12.27).
+///
+/// Фото сверху, под ним имя, состав и цена. Состав в узкой карточке
+/// помещается едва-едва — две строки и многоточие, — но без него сетка
+/// превращается в витрину без слов, а половина решения о покупке в
+/// доставке принимается именно по составу.
+class ProductCard extends StatelessWidget {
+  final Product product;
+  final VoidCallback onTap;
+  final VoidCallback onAdd;
+  final VoidCallback? onRemove;
+  final int inCart;
+  final bool inStopList;
+  final bool? favorite;
+  final VoidCallback? onToggleFavorite;
+
+  const ProductCard({
+    super.key,
+    required this.product,
+    required this.onTap,
+    required this.onAdd,
+    this.onRemove,
+    this.inCart = 0,
+    this.inStopList = false,
+    this.favorite,
+    this.onToggleFavorite,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final subtitle = [
+      if (product.weightLabel.isNotEmpty) product.weightLabel,
+      if (product.description.isNotEmpty) product.description,
+    ].join(' · ');
+
+    return PressScale(
+      onTap: onTap,
+      scale: 0.99,
+      child: Opacity(
+        opacity: inStopList ? 0.45 : 1,
+        child: Container(
+          padding: const EdgeInsets.all(Gap.sm),
+          decoration: BoxDecoration(
+            color: c.fillSoft,
+            borderRadius: R.block,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  ClipRRect(
+                    borderRadius: R.thumb,
+                    child: AspectRatio(
+                      aspectRatio: kCardPhotoRatio,
+                      child: _Photo(
+                        url: product.photoUrl,
+                        grayscale: inStopList,
+                        fallback: c.border,
+                      ),
+                    ),
+                  ),
+                  if (favorite != null && onToggleFavorite != null)
+                    Positioned(
+                      top: -4,
+                      right: -4,
+                      child: FavoriteHeart(
+                        active: favorite!,
+                        onTap: onToggleFavorite!,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: Gap.sm),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        product.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                      const SizedBox(height: 3),
+                      Expanded(
+                        child: Text(
+                          inStopList ? 'Временно недоступно' : subtitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.labelMedium,
+                        ),
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Text(
+                            formatTenge(product.price, withCurrency: false),
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          _AddControl(
+                            inStopList: inStopList,
+                            inCart: inCart,
+                            onAdd: onAdd,
+                            onRemove: onRemove,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Крупная карточка: первая позиция категории во всю ширину.
+///
+/// Нужна, чтобы витрина не была однообразной сеткой и чтобы у категории
+/// был вход — то, на чём глаз останавливается первым.
+class ProductHero extends StatelessWidget {
+  final Product product;
+  final VoidCallback onTap;
+  final VoidCallback onAdd;
+  final VoidCallback? onRemove;
+  final int inCart;
+  final bool inStopList;
+  final bool? favorite;
+  final VoidCallback? onToggleFavorite;
+
+  const ProductHero({
+    super.key,
+    required this.product,
+    required this.onTap,
+    required this.onAdd,
+    this.onRemove,
+    this.inCart = 0,
+    this.inStopList = false,
+    this.favorite,
+    this.onToggleFavorite,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final subtitle = [
+      if (product.weightLabel.isNotEmpty) product.weightLabel,
+      if (product.description.isNotEmpty) product.description,
+    ].join(' · ');
+
+    return PressScale(
+      onTap: onTap,
+      scale: 0.99,
+      child: Opacity(
+        opacity: inStopList ? 0.45 : 1,
+        child: Container(
+          padding: const EdgeInsets.all(Gap.sm),
+          decoration: BoxDecoration(
+            color: c.fillSoft,
+            borderRadius: R.block,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  ClipRRect(
+                    borderRadius: R.thumb,
+                    child: AspectRatio(
+                      aspectRatio: kHeroPhotoRatio,
+                      child: _Photo(
+                        url: product.photoUrl,
+                        grayscale: inStopList,
+                        fallback: c.border,
+                      ),
+                    ),
+                  ),
+                  if (product.isHit)
+                    Positioned(
+                      top: 10,
+                      left: 10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: c.benefit,
+                          borderRadius: R.pill,
+                        ),
+                        child: Text(
+                          'хит',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: c.onBenefit,
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (favorite != null && onToggleFavorite != null)
+                    Positioned(
+                      top: -4,
+                      right: -4,
+                      child: FavoriteHeart(
+                        active: favorite!,
+                        onTap: onToggleFavorite!,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: Gap.sm),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(6, 0, 6, 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              product.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodyLarge,
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              inStopList ? 'Временно недоступно' : subtitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.labelMedium,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: Gap.md),
+                      Text(
+                        formatTenge(product.price, withCurrency: false),
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(width: Gap.sm),
+                      _AddControl(
+                        inStopList: inStopList,
+                        inCart: inCart,
+                        onAdd: onAdd,
+                        onRemove: onRemove,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// «+», счётчик или «нет» — одна и та же тройка состояний в строке,
+/// в карточке и в крупной карточке.
+class _AddControl extends StatelessWidget {
+  final bool inStopList;
+  final int inCart;
+  final VoidCallback onAdd;
+  final VoidCallback? onRemove;
+
+  const _AddControl({
+    required this.inStopList,
+    required this.inCart,
+    required this.onAdd,
+    this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    if (inStopList) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(color: c.fillSoft, borderRadius: R.pill),
+        child: Text('нет', style: TextStyle(fontSize: 13, color: c.muted)),
+      );
+    }
+    if (inCart > 0) {
+      return _QtyStepper(qty: inCart, onAdd: onAdd, onRemove: onRemove);
+    }
+    return Builder(
+      builder: (btn) => PressScale(
+        onTap: () {
+          flyToCart(btn);
+          onAdd();
+        },
+        child: Container(
+          constraints: const BoxConstraints(
+            minWidth: Hit.min,
+            minHeight: Hit.min,
+          ),
+          alignment: Alignment.centerRight,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(color: c.accent, borderRadius: R.pill),
+            child: Icon(Icons.add, size: 16, color: c.surface),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class ProductRow extends StatelessWidget {
   final Product product;
   final VoidCallback onTap;
