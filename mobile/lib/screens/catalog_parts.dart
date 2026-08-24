@@ -570,6 +570,20 @@ class _AddControl extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+
+    // Высота одна на все три состояния.
+    //
+    // Счётчик ростом 34, кнопка «+» вместе с тап-зоной — 44, и без общей
+    // рамки строка цены подпрыгивала на десять пикселей в тот момент,
+    // когда человек добавлял товар. Двигаться под пальцем не должно
+    // ничего, кроме того, на что нажали.
+    return SizedBox(
+      height: Hit.min,
+      child: Align(alignment: Alignment.centerRight, child: _control(c)),
+    );
+  }
+
+  Widget _control(AppColors c) {
     if (inStopList) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -587,16 +601,9 @@ class _AddControl extends StatelessWidget {
           onAdd();
         },
         child: Container(
-          constraints: const BoxConstraints(
-            minWidth: Hit.min,
-            minHeight: Hit.min,
-          ),
-          alignment: Alignment.centerRight,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(color: c.accent, borderRadius: R.pill),
-            child: Icon(Icons.add, size: 16, color: c.surface),
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(color: c.accent, borderRadius: R.pill),
+          child: Icon(Icons.add, size: 16, color: c.surface),
         ),
       ),
     );

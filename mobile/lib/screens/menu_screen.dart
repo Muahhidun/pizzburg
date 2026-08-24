@@ -335,14 +335,18 @@ class _MenuScreenState extends State<MenuScreen> {
     });
   }
 
+  /// Высоты рядов сетки: считаются один раз при построении и хранятся,
+  /// потому что по ним же список ищет начало категории. Меряй ряд по
+  /// содержимому — и переход по чипсу начнёт промахиваться.
+  double _cardHeight = 0;
+  double _heroHeight = 0;
+
   void _openProduct(Product product) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ProductScreen(
-          product: product,
-          inStopList: !product.isAvailable,
-        ),
+        builder: (_) =>
+            ProductScreen(product: product, inStopList: !product.isAvailable),
       ),
     );
   }
@@ -373,10 +377,12 @@ class _MenuScreenState extends State<MenuScreen> {
     // Внутренние поля карточки по 8 с каждой стороны — фото уже их
     final photo = (card - Gap.sm * 2) / kCardPhotoRatio;
     final cardHeight = photo + kCardTextHeight;
+    _cardHeight = cardHeight;
     final heroPhoto =
         (MediaQuery.sizeOf(context).width - Gap.screen * 2 - Gap.sm * 2) /
         kHeroPhotoRatio;
     final heroHeight = heroPhoto + kHeroTextHeight;
+    _heroHeight = heroHeight;
 
     var offset = 0.0;
     for (final category in menu.categories) {
@@ -540,7 +546,9 @@ class _MenuScreenState extends State<MenuScreen> {
       backgroundColor: Colors.transparent,
       builder: (_) => _AddressSheet(
         addresses: addresses,
-        selectedId: _selectedAddressId ?? (addresses.isNotEmpty ? addresses.first.id : ''),
+        selectedId:
+            _selectedAddressId ??
+            (addresses.isNotEmpty ? addresses.first.id : ''),
       ),
     );
     if (!mounted || picked == null) return;
@@ -625,9 +633,8 @@ class _MenuScreenState extends State<MenuScreen> {
                                     builder: (_) => OrderScreen(
                                       order: CreatedOrder(
                                         id: _activeOrder!['id'].toString(),
-                                        number:
-                                            (_activeOrder!['number'] as num)
-                                                .toInt(),
+                                        number: (_activeOrder!['number'] as num)
+                                            .toInt(),
                                         total:
                                             (_activeOrder!['total'] as num?)
                                                 ?.toInt() ??
@@ -852,20 +859,29 @@ class _MenuScreenState extends State<MenuScreen> {
                                   padding: const EdgeInsets.only(
                                     bottom: _gridGap,
                                   ),
-                                  child: Consumer<Cart>(
-                                    builder: (context, cart, _) => ProductHero(
-                                      product: row.product,
-                                      inStopList: !row.product.isAvailable,
-                                      favorite: authedNow
-                                          ? favorites.contains(row.product.id)
-                                          : null,
-                                      onToggleFavorite: () =>
-                                          _toggleFavorite(row.product.id),
-                                      inCart: cart.qtyOf(row.product),
-                                      onRemove: () =>
-                                          cart.decrementProduct(row.product),
-                                      onTap: () => _openProduct(row.product),
-                                      onAdd: () => _addToCart(row.product),
+                                  child: SizedBox(
+                                    height: _heroHeight,
+                                    child: Consumer<Cart>(
+                                      builder: (context, cart, _) =>
+                                          ProductHero(
+                                            product: row.product,
+                                            inStopList:
+                                                !row.product.isAvailable,
+                                            favorite: authedNow
+                                                ? favorites.contains(
+                                                    row.product.id,
+                                                  )
+                                                : null,
+                                            onToggleFavorite: () =>
+                                                _toggleFavorite(row.product.id),
+                                            inCart: cart.qtyOf(row.product),
+                                            onRemove: () => cart
+                                                .decrementProduct(row.product),
+                                            onTap: () =>
+                                                _openProduct(row.product),
+                                            onAdd: () =>
+                                                _addToCart(row.product),
+                                          ),
                                     ),
                                   ),
                                 ),
@@ -879,7 +895,8 @@ class _MenuScreenState extends State<MenuScreen> {
                                 padding: const EdgeInsets.only(
                                   bottom: _gridGap,
                                 ),
-                                child: IntrinsicHeight(
+                                child: SizedBox(
+                                  height: _cardHeight,
                                   child: Row(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.stretch,
@@ -1045,7 +1062,9 @@ class _AddressSheet extends StatelessWidget {
         children: [
           Text(
             'Куда доставить',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 21),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontSize: 21),
           ),
           const SizedBox(height: Gap.lg),
           for (final a in addresses)
