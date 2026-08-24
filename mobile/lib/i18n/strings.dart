@@ -225,4 +225,164 @@ class S {
   static String get addWords => t('Хотите добавить словами?', 'Сөзбен қосқыңыз келе ме?');
   static String get sending => t('Отправляем…', 'Жіберілуде…');
   static String get send => t('Отправить', 'Жіберу');
+
+  // ── Корзина ──
+  static String get cart => t('Корзина', 'Себет');
+  static String get noSuchPromo => t('Такого промокода нет', 'Мұндай промокод жоқ');
+  static String addMoreForGift(String sum, String gift) => t(
+        'Добавьте ещё на $sum — $gift в подарок',
+        'Тағы $sum қосыңыз — сыйлыққа $gift',
+      );
+  static String get checkout => t('Оформить', 'Рәсімдеу');
+  static String get gift => t('Подарок', 'Сыйлық');
+  static String get addToOrder => t('Добавить к заказу', 'Тапсырысқа қосу');
+  static String get promoCode => t('Промокод', 'Промокод');
+  static String get apply => t('Применить', 'Қолдану');
+  static String promoApplied(String code) =>
+      t('Промокод $code применён', '$code промокоды қолданылды');
+  static String get spendPoints => t('Списать баллы', 'Ұпайларды жұмсау');
+  static String get unavailableShort => t('недоступно', 'қолжетімсіз');
+  static String pointsAvailable(int balance) =>
+      t('$balance доступно', '$balance қолжетімді');
+  static String get pointsBlockedByPromo => t(
+        'В заказе есть акция — баллы к ней не добавляются. Уберите акцию, если хотите списать баллы.',
+        'Тапсырыста акция бар — оған ұпай қосылмайды. Ұпай жұмсағыңыз келсе, акцияны алып тастаңыз.',
+      );
+  static String get dontSpend => t('Не списывать', 'Жұмсамау');
+  static String get maximum => t('Максимум', 'Барынша');
+  static String get goods => t('Товары', 'Тауарлар');
+  static String get free => t('бесплатно', 'тегін');
+  static String get promoGift => t('Подарок по акции', 'Акция бойынша сыйлық');
+  static String get points => t('Баллы', 'Ұпайлар');
+
+  // ── Оформление ──
+  static String get checkoutTitle => t('Оформление', 'Рәсімдеу');
+  static String get whereToBring => t('Куда привезти', 'Қайда әкелеміз');
+  static String get newAddress => t('+ Новый адрес', '+ Жаңа мекенжай');
+  static String get whereToPickUp => t('Откуда забрать', 'Қайдан аласыз');
+  static String get name => t('Имя', 'Аты');
+  static String get phone => t('Телефон', 'Телефон');
+  static String get time => t('Время', 'Уақыт');
+  static String get asap => t('Ближайшее', 'Ең жақын');
+  static String get payment => t('Оплата', 'Төлем');
+  static String get cash => t('Наличными', 'Қолма-қол');
+  static String get cardToCourier => t('Картой курьеру', 'Курьерге картамен');
+  static String get online => t('Онлайн', 'Онлайн');
+  static String get prepareChangeFrom =>
+      t('Подготовить сдачу с', 'Қайырымды дайындау');
+  static String get bigBillHint => t(
+        'Сумма заказа больше обычных купюр — скажите курьеру, с чего готовить сдачу',
+        'Тапсырыс сомасы кәдімгі купюралардан үлкен — курьерге қайырымды неден дайындау керегін айтыңыз',
+      );
+  static String get commentToCourier =>
+      t('Комментарий курьеру', 'Курьерге түсініктеме');
+  static String get placeOrder => t('Заказать', 'Тапсырыс беру');
+  static String get soon => t('скоро', 'жақында');
+  static String entrance(String value) =>
+      t('подъезд $value', '$value кіреберіс');
+  static String floor(String value) => t('этаж $value', '$value қабат');
+  static String get flatLabel => t('Квартира', 'Пәтер');
+  static String get entranceLabel => t('Подъезд', 'Кіреберіс');
+  static String get floorLabel => t('Этаж', 'Қабат');
+  static String get byTappingYouAgree =>
+      t('Нажимая кнопку, вы соглашаетесь с ', 'Түймені басу арқылы сіз ');
+  static String get publicOffer => t('Публичная оферта', 'Жария оферта');
+  static String get offerLink => t('офертой', 'офертамен');
+  static String get and => t(' и ', ' және ');
+  static String get privacyPolicy =>
+      t('Политика конфиденциальности', 'Құпиялылық саясаты');
+  static String get privacyLink => t(
+        'политикой обработки данных',
+        'деректерді өңдеу саясатымен келісесіз',
+      );
+
+  /// Адрес точки самовывоза. Пока зашит: точка одна, и настройка ради
+  /// одной строки была бы дороже строки.
+  static String get pickupPointShort =>
+      t('Ауэзова 47б, MaxiMall', 'Әуезов 47б, MaxiMall');
+  static String get pickupPointFull => t(
+        'Ауэзова 47б, ТРЦ «MaxiMall», 3 этаж',
+        'Әуезов 47б, «MaxiMall» СОО, 3-қабат',
+      );
+
+  // ── Экран заказа ──
+  static String get statusReadyPickup => t('Готов к выдаче', 'Беруге дайын');
+  static String get statusCancelledOrder => t('Заказ отменён', 'Тапсырыс тоқтатылды');
+  static String get passedToCashier =>
+      t('Передали кассиру — скоро ответим', 'Кассирге жеткіздік — жақында жауап береміз');
+  static String orderNo(int number) => t('Заказ № $number', '№ $number тапсырыс');
+  static String get onePositionMissing =>
+      t('Одной позиции не оказалось', 'Бір позиция табылмады');
+  static String get canStillCancel => t('Ещё можно отменить', 'Әлі болдырмауға болады');
+  static String cancelWindowLeft(int seconds) => t(
+        'Отменить без последствий можно ещё $seconds с — заведение о заказе пока не знает.',
+        'Салдарсыз болдырмауға тағы $seconds с бар — мекеме тапсырыс туралы әлі білмейді.',
+      );
+  static String get cancelling => t('Отменяем…', 'Тоқтатудамыз…');
+  static String get cancelOrder => t('Отменить заказ', 'Тапсырысты тоқтату');
+  static String get deliveredLower => t('доставлен', 'жеткізілді');
+  static String get inProgressLower => t('в работе', 'орындалуда');
+  static String get acceptedPickupHint => t(
+        'Заказ приняли и готовят. Мы позвоним, когда его можно будет забрать.',
+        'Тапсырыс қабылданды, дайындалып жатыр. Дайын болғанда қоңырау шаламыз.',
+      );
+  static String get acceptedDeliveryHint => t(
+        'Заказ приняли и готовят. Как только он будет готов, курьер привезёт его и занесёт до двери.',
+        'Тапсырыс қабылданды, дайындалып жатыр. Дайын болған соң курьер есікке дейін жеткізеді.',
+      );
+  static String get outOfStockLower => t('нет в наличии', 'қоймада жоқ');
+  static String get giftLower => t('подарок', 'сыйлық');
+  static String get cancelUnavailableCourier => t(
+        'Отмена недоступна — заказ уже у курьера',
+        'Болдырмау мүмкін емес — тапсырыс курьерде',
+      );
+  static String get positionsMissing =>
+      t('Позиции нет в наличии', 'Позиция қоймада жоқ');
+  static String missingList(String names) => t('Нет: $names', 'Жоқ: $names');
+  static String get shortageQuestion => t(
+        'Остальное уже готовится. Везём без этой позиции — или отменяем заказ целиком?',
+        'Қалғаны дайындалып жатыр. Осы позициясыз әкелейік пе — әлде тапсырысты толық тоқтатайық па?',
+      );
+  static String get shortageTimeUp => t(
+        'Время вышло — сейчас оформим доставку остального',
+        'Уақыт бітті — қалғанын жеткізуге рәсімдейміз',
+      );
+  static String shortageCountdown(int minutes, String seconds) => t(
+        'Если не ответите за $minutes:$seconds, привезём остальное',
+        '$minutes:$seconds ішінде жауап бермесеңіз, қалғанын әкелеміз',
+      );
+  static String get oneSecond => t('Секунду…', 'Бір секунд…');
+  static String get bringWithoutIt => t('Везите без неё', 'Онсыз әкеліңіз');
+  static String get cancelWholeOrder =>
+      t('Отменить заказ целиком', 'Тапсырысты толық тоқтату');
+  static String positionsShort(int count, String type) =>
+      t('$count поз. · $type', '$count поз. · $type');
+  static String get weGotYourMessages =>
+      t('Мы получили ваши сообщения', 'Хабарламаларыңызды алдық');
+  static String writeAgainIn(String left) =>
+      t('Написать снова можно через $left', 'Қайта жазуға $left кейін болады');
+  static String get writeMore => t('Написать ещё', 'Тағы жазу');
+  static String get writeToUs => t('Написать нам', 'Бізге жазу');
+  static String get cashierSeesThem =>
+      t('Кассир их видит и разбирается', 'Кассир оларды көріп, реттеп жатыр');
+  static String sentOf(int sent, int limit) =>
+      t('Отправлено $sent из $limit', '$limit-тен $sent жіберілді');
+  static String secondsShort(int seconds) => t('$seconds с', '$seconds с');
+
+  // ── Написать нам: темы ──
+  static String get topicWhere => t('Где мой заказ?', 'Тапсырысым қайда?');
+  static String get topicAddress => t('Поменять адрес', 'Мекенжайды өзгерту');
+  static String get topicMissing => t('Забыли позицию', 'Позицияны ұмытыпсыздар');
+  static String get topicOther => t('Другое', 'Басқа');
+  static String get whatHappened => t('Что случилось?', 'Не болды?');
+  static String get willPassWithOrderNumber => t(
+        'Передадим кассиру вместе с номером заказа',
+        'Тапсырыс нөмірімен бірге кассирге жеткіземіз',
+      );
+  static String get tellWhatIsWrong =>
+      t('Расскажите, что не так', 'Не дұрыс емес екенін айтыңыз');
+  static String get fewWordsIfNeeded =>
+      t('Пара слов, если нужно', 'Қажет болса, бірер сөз');
+  static String get whyCancelling => t('Почему отменяете?', 'Неге тоқтатып жатырсыз?');
+  static String get keepOrder => t('Оставить заказ', 'Тапсырысты қалдыру');
 }

@@ -18,6 +18,7 @@ import '../utils/input_validation.dart';
 import '../widgets/motion.dart';
 import 'legal_screen.dart';
 import 'order_screen.dart';
+import '../i18n/strings.dart';
 
 /// Оформление заказа по прототипу «Сигнал».
 ///
@@ -303,7 +304,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   ),
                   const SizedBox(width: Gap.md),
                   Text(
-                    'Оформление',
+                    S.checkoutTitle,
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                 ],
@@ -356,7 +357,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Куда привезти',
+                        S.whereToBring,
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -399,7 +400,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: Gap.sm),
                             child: Text(
-                              '+ Новый адрес',
+                              S.newAddress,
                               style: TextStyle(
                                 fontSize: 13.5,
                                 fontWeight: FontWeight.w600,
@@ -417,7 +418,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Откуда забрать',
+                        S.whereToPickUp,
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -425,9 +426,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         ),
                       ),
                       const SizedBox(height: Gap.sm),
-                      const Text(
-                        'Ауэзова 47б, ТРЦ «MaxiMall», 3 этаж',
-                        style: TextStyle(
+                      Text(
+                        S.pickupPointFull,
+                        style: const TextStyle(
                           fontSize: 13.5,
                           fontWeight: FontWeight.w600,
                         ),
@@ -444,7 +445,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 children: [
                   Expanded(
                     child: FieldCard(
-                      label: 'Имя',
+                      label: S.name,
                       controller: _name,
                       formatters: nameInputFormatters,
                       validator: validateName,
@@ -454,7 +455,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   const SizedBox(width: Gap.sm),
                   Expanded(
                     child: FieldCard(
-                      label: 'Телефон',
+                      label: S.phone,
                       controller: _phone,
                       formatters: [KzPhoneInputFormatter()],
                       keyboard: TextInputType.phone,
@@ -466,7 +467,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
               // ─── Время ───────────────────────────────────────────
               const SizedBox(height: Gap.blockWide),
-              const _Label('Время'),
+              _Label(S.time),
               const SizedBox(height: Gap.md),
               Wrap(
                 spacing: 7,
@@ -474,7 +475,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 children: [
                   if (_availability.asapAvailable)
                     _Chip(
-                      label: 'Ближайшее',
+                      label: S.asap,
                       selected: _slot == null,
                       onTap: () => setState(() => _slot = null),
                     ),
@@ -489,7 +490,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
               // ─── Оплата ──────────────────────────────────────────
               const SizedBox(height: Gap.blockWide),
-              const _Label('Оплата'),
+              _Label(S.payment),
               const SizedBox(height: Gap.md),
               Wrap(
                 spacing: 7,
@@ -497,19 +498,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 children: [
                   if (_availability.cashEnabled)
                     _Chip(
-                      label: 'Наличными',
+                      label: S.cash,
                       selected: _payment == 'CASH',
                       onTap: () => setState(() => _payment = 'CASH'),
                     ),
                   if (_availability.cardOnDeliveryEnabled)
                     _Chip(
-                      label: 'Картой курьеру',
+                      label: S.cardToCourier,
                       selected: _payment == 'CARD_ON_DELIVERY',
                       onTap: () =>
                           setState(() => _payment = 'CARD_ON_DELIVERY'),
                     ),
                   _Chip(
-                    label: 'Онлайн',
+                    label: S.online,
                     selected: false,
                     disabled: true,
                     onTap: () {},
@@ -529,7 +530,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Подготовить сдачу с',
+                        S.prepareChangeFrom,
                         style: TextStyle(fontSize: 13, color: c.muted),
                       ),
                       const SizedBox(height: Gap.md),
@@ -554,8 +555,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                             ),
                           if (_changeOptions.every((a) => a <= _total))
                             Text(
-                              'Сумма заказа больше обычных купюр — '
-                              'скажите курьеру, с чего готовить сдачу',
+                              S.bigBillHint,
                               style: TextStyle(fontSize: 12.5, color: c.muted),
                             ),
                         ],
@@ -568,7 +568,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               // ─── Комментарий ─────────────────────────────────────
               const SizedBox(height: Gap.blockWide),
               FieldCard(
-                label: 'Комментарий курьеру',
+                label: S.commentToCourier,
                 controller: _comment,
                 maxLines: 2,
               ),
@@ -656,7 +656,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       borderRadius: R.pill,
                     ),
                     child: Text(
-                      _sending ? 'Отправляем…' : 'Заказать',
+                      _sending ? S.sending : S.placeOrder,
                       style: TextStyle(
                         fontSize: 14.5,
                         fontWeight: FontWeight.w600,
@@ -745,7 +745,7 @@ class _Chip extends StatelessWidget {
             ),
             if (disabled)
               Text(
-                'скоро',
+                S.soon,
                 style: TextStyle(fontSize: 11, color: c.muted),
               ),
           ],
@@ -770,9 +770,9 @@ class _AddressRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final details = [
-      if (address.flat.isNotEmpty) 'кв. ${address.flat}',
-      if (address.entrance.isNotEmpty) 'подъезд ${address.entrance}',
-      if (address.floor.isNotEmpty) 'этаж ${address.floor}',
+      if (address.flat.isNotEmpty) S.flat(address.flat),
+      if (address.entrance.isNotEmpty) S.entrance(address.entrance),
+      if (address.floor.isNotEmpty) S.floor(address.floor),
     ].join(' · ');
 
     return PressScale.selection(
@@ -853,7 +853,7 @@ class _AddressForm extends StatelessWidget {
         AddressPicker(street: street, house: house),
         const SizedBox(height: Gap.sm),
         FieldCard(
-          label: 'Квартира',
+          label: S.flatLabel,
           controller: flat,
           formatters: flatInputFormatters,
           validator: validateFlat,
@@ -864,7 +864,7 @@ class _AddressForm extends StatelessWidget {
           children: [
             Expanded(
               child: FieldCard(
-                label: 'Подъезд',
+                label: S.entranceLabel,
                 controller: entrance,
                 keyboard: TextInputType.number,
                 formatters: entranceInputFormatters,
@@ -874,7 +874,7 @@ class _AddressForm extends StatelessWidget {
             const SizedBox(width: Gap.sm),
             Expanded(
               child: FieldCard(
-                label: 'Этаж',
+                label: S.floorLabel,
                 controller: floor,
                 // Именно number, без signed: на iOS «signed» открывает
                 // клавиатуру с буквами, а фильтр их не пропускает —
@@ -902,36 +902,36 @@ class _ConsentText extends StatelessWidget {
     return Wrap(
       children: [
         Text(
-          'Нажимая кнопку, вы соглашаетесь с ',
+          S.byTappingYouAgree,
           style: TextStyle(fontSize: 9.5, height: 1.45, color: c.muted),
         ),
         GestureDetector(
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => const LegalDocumentScreen(
+              builder: (_) => LegalDocumentScreen(
                 type: 'OFFER',
-                title: 'Публичная оферта',
+                title: S.publicOffer,
               ),
             ),
           ),
-          child: Text('офертой', style: link),
+          child: Text(S.offerLink, style: link),
         ),
         Text(
-          ' и ',
+          S.and,
           style: TextStyle(fontSize: 9.5, height: 1.45, color: c.muted),
         ),
         GestureDetector(
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => const LegalDocumentScreen(
+              builder: (_) => LegalDocumentScreen(
                 type: 'PRIVACY',
-                title: 'Политика конфиденциальности',
+                title: S.privacyPolicy,
               ),
             ),
           ),
-          child: Text('политикой обработки данных', style: link),
+          child: Text(S.privacyLink, style: link),
         ),
       ],
     );

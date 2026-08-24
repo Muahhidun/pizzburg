@@ -10,6 +10,7 @@ import '../theme/tokens.dart';
 import '../utils/haptics.dart';
 import '../widgets/motion.dart';
 import 'checkout_screen.dart';
+import '../i18n/strings.dart';
 
 /// Корзина по прототипу «Сигнал».
 ///
@@ -138,7 +139,7 @@ class _CartScreenState extends State<CartScreen> {
       await Haptics.warning();
       if (mounted) {
         setState(() {
-          _promoError = 'Такого промокода нет';
+          _promoError = S.noSuchPromo;
           _promoApplied = null;
         });
       }
@@ -215,7 +216,7 @@ class _CartScreenState extends State<CartScreen> {
                           ),
                         ),
                       Text(
-                        'Корзина',
+                        S.cart,
                         style: Theme.of(context).textTheme.headlineMedium,
                       ),
                     ],
@@ -244,8 +245,10 @@ class _CartScreenState extends State<CartScreen> {
                     if (preview.nextGift != null)
                       _Hint(
                         text:
-                            'Добавьте ещё на ${formatTenge(preview.nextGift!.missing)} — '
-                            '${preview.nextGift!.giftName.toLowerCase()} в подарок',
+                            S.addMoreForGift(
+                          formatTenge(preview.nextGift!.missing),
+                          preview.nextGift!.giftName.toLowerCase(),
+                        ),
                       ),
 
                     // Допродажи идут после состава и подарков, но до
@@ -370,7 +373,7 @@ class _CartScreenState extends State<CartScreen> {
                             borderRadius: R.pill,
                           ),
                           child: Text(
-                            'Оформить',
+                            S.checkout,
                             style: TextStyle(
                               fontSize: 14.5,
                               fontWeight: FontWeight.w600,
@@ -550,7 +553,7 @@ class _GiftRow extends StatelessWidget {
               borderRadius: R.pill,
             ),
             child: Text(
-              'Подарок',
+              S.gift,
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
@@ -602,7 +605,7 @@ class _UpsellStrip extends StatelessWidget {
       children: [
         const SizedBox(height: Gap.lg),
         Text(
-          'Добавить к заказу',
+          S.addToOrder,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
             fontSize: 15,
           ),
@@ -704,8 +707,8 @@ class _PromoField extends StatelessWidget {
                 child: TextField(
                   controller: controller,
                   textCapitalization: TextCapitalization.characters,
-                  decoration: const InputDecoration(
-                    hintText: 'Промокод',
+                  decoration: InputDecoration(
+                    hintText: S.promoCode,
                     border: InputBorder.none,
                     isDense: true,
                   ),
@@ -727,7 +730,7 @@ class _PromoField extends StatelessWidget {
                     borderRadius: R.pill,
                   ),
                   child: Text(
-                    'Применить',
+                    S.apply,
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -743,7 +746,7 @@ class _PromoField extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: Gap.sm, left: Gap.xs),
             child: Text(
-              'Промокод $applied применён',
+              S.promoApplied(applied!),
               style: TextStyle(fontSize: 13, color: c.accent),
             ),
           ),
@@ -794,7 +797,7 @@ class _PointsBlock extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Списать баллы',
+                S.spendPoints,
                 style: TextStyle(
                   fontSize: 13.5,
                   fontWeight: FontWeight.w600,
@@ -802,7 +805,7 @@ class _PointsBlock extends StatelessWidget {
                 ),
               ),
               Text(
-                blockedByPromo ? 'недоступно' : '$balance доступно',
+                blockedByPromo ? S.unavailableShort : S.pointsAvailable(balance),
                 style: TextStyle(
                   fontSize: 12,
                   color: c.surface.withValues(alpha: 0.6),
@@ -813,8 +816,7 @@ class _PointsBlock extends StatelessWidget {
           if (blockedByPromo) ...[
             const SizedBox(height: Gap.sm),
             Text(
-              'В заказе есть акция — баллы к ней не добавляются. '
-              'Уберите акцию, если хотите списать баллы.',
+              S.pointsBlockedByPromo,
               style: TextStyle(
                 fontSize: 12.5,
                 height: 1.4,
@@ -876,14 +878,14 @@ class _PointsBlock extends StatelessWidget {
             children: [
               Expanded(
                 child: _DarkButton(
-                  label: 'Не списывать',
+                  label: S.dontSpend,
                   onTap: blockedByPromo ? null : () => onChanged(0),
                 ),
               ),
               const SizedBox(width: Gap.sm),
               Expanded(
                 child: _DarkButton(
-                  label: 'Максимум',
+                  label: S.maximum,
                   onTap: blockedByPromo || max <= 0
                       ? null
                       : () => onChanged(max.toDouble()),
@@ -948,25 +950,25 @@ class _Totals extends StatelessWidget {
 
     return Column(
       children: [
-        _row('Товары', formatTenge(preview.subtotal), line(), line()),
+        _row(S.goods, formatTenge(preview.subtotal), line(), line()),
         _row(
-          'Доставка',
+          S.delivery,
           preview.deliveryFee == 0
-              ? 'бесплатно'
+              ? S.free
               : formatTenge(preview.deliveryFee),
           line(),
           line(),
         ),
         if (preview.promoDiscount > 0)
           _row(
-            'Подарок по акции',
+            S.promoGift,
             formatTenge(preview.promoDiscount),
             line(c.accent),
             line(c.accent),
           ),
         if (points > 0)
           _row(
-            'Баллы',
+            S.points,
             '−${formatTenge(points)}',
             line(c.accent),
             line(c.accent),
@@ -1009,14 +1011,14 @@ class _Empty extends StatelessWidget {
             ),
             const SizedBox(height: Gap.block),
             Text(
-              'Пока пусто',
+              S.cartEmpty,
               style: Theme.of(
                 context,
               ).textTheme.titleLarge?.copyWith(fontSize: 20),
             ),
             const SizedBox(height: Gap.sm),
             Text(
-              'Можно повторить прошлый заказ — это быстрее всего',
+              S.cartEmptyHint,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall,
             ),

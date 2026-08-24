@@ -525,7 +525,7 @@ class _MenuScreenState extends State<MenuScreen> {
   }
 
   String _addressLabel(_CatalogData data) {
-    if (_mode == 'PICKUP') return 'Ауэзова 47б, MaxiMall';
+    if (_mode == 'PICKUP') return S.pickupPointShort;
     if (data.addresses.isEmpty) return S.specifyAddress;
     final chosen = data.addresses.firstWhere(
       (a) => a.id == _selectedAddressId,

@@ -10,6 +10,7 @@ import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../utils/haptics.dart';
 import '../widgets/motion.dart';
+import '../i18n/strings.dart';
 
 /// Статус заказа. Экран целиком тёмный — по прототипу «Сигнал».
 ///
@@ -40,19 +41,19 @@ class _OrderScreenState extends State<OrderScreen> {
   /// проставляет: заставлять кассира отмечать их вручную — добавить ей
   /// работы ради шкалы. Обещать клиенту этапы, до которых заказ никогда не
   /// дойдёт, хуже, чем честно сказать «принят, ждите».
-  static const _stages = [
-    ('NEW', 'Ждём подтверждения'),
-    ('ACCEPTED', 'Готовим ваш заказ'),
+  static List<(String, String)> get _stages => [
+    ('NEW', S.statusNew),
+    ('ACCEPTED', S.statusCooking),
   ];
 
-  static const _headlines = {
-    'NEW': 'Ждём подтверждения',
-    'ACCEPTED': 'Готовим ваш заказ',
-    'COOKING': 'Готовим ваш заказ',
-    'READY': 'Готов к выдаче',
-    'ON_WAY': 'Курьер в пути',
-    'DELIVERED': 'Заказ доставлен',
-    'CANCELLED': 'Заказ отменён',
+  static Map<String, String> get _headlines => {
+    'NEW': S.statusNew,
+    'ACCEPTED': S.statusCooking,
+    'COOKING': S.statusCooking,
+    'READY': S.statusReadyPickup,
+    'ON_WAY': S.statusOnWay,
+    'DELIVERED': S.statusDelivered,
+    'CANCELLED': S.statusCancelledOrder,
   };
 
   @override
@@ -278,7 +279,7 @@ class _OrderScreenState extends State<OrderScreen> {
       setState(() => _messageState = state);
       Haptics.success();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Передали кассиру — скоро ответим')),
+        SnackBar(content: Text(S.passedToCashier)),
       );
     } catch (e) {
       if (!mounted) return;
@@ -371,7 +372,7 @@ class _OrderScreenState extends State<OrderScreen> {
               const SizedBox(height: Gap.blockWide),
 
               Text(
-                'Заказ № ${widget.order.number}',
+                S.orderNo(widget.order.number),
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w500,
@@ -382,13 +383,13 @@ class _OrderScreenState extends State<OrderScreen> {
               Text(
                 loaded
                     ? (_awaitingShortage
-                          ? 'Одной позиции не оказалось'
+                          ? S.onePositionMissing
                           : _cancelLeft != null
-                          ? 'Ещё можно отменить'
+                          ? S.canStillCancel
                           : (_headlines[status] ?? status))
                     : _loadError != null
-                    ? 'Не удалось загрузить'
-                    : 'Загружаем…',
+                    ? S.loadFailed
+                    : S.loading,
                 style: Theme.of(context).textTheme.displayMedium?.copyWith(
                   color: loaded
                       ? c.surface
@@ -422,7 +423,7 @@ class _OrderScreenState extends State<OrderScreen> {
                       ),
                     ),
                     child: Text(
-                      'Попробовать снова',
+                      S.retry,
                       style: TextStyle(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w600,
@@ -442,9 +443,7 @@ class _OrderScreenState extends State<OrderScreen> {
                 Padding(
                   padding: const EdgeInsets.only(top: Gap.md),
                   child: Text(
-                    'Отменить без последствий можно ещё '
-                    '${_cancelLeft!.inSeconds} с — заведение о заказе пока '
-                    'не знает.',
+                    S.cancelWindowLeft(_cancelLeft!.inSeconds),
                     style: TextStyle(
                       fontSize: 13.5,
                       height: 1.45,
@@ -469,7 +468,7 @@ class _OrderScreenState extends State<OrderScreen> {
                         ),
                       ),
                       child: Text(
-                        _cancelling ? 'Отменяем…' : 'Отменить заказ',
+                        _cancelling ? S.cancelling : S.cancelOrder,
                         style: TextStyle(
                           fontSize: 13.5,
                           fontWeight: FontWeight.w600,
@@ -495,7 +494,7 @@ class _OrderScreenState extends State<OrderScreen> {
                       borderRadius: R.pill,
                     ),
                     child: Text(
-                      status == 'DELIVERED' ? 'доставлен' : 'в работе',
+                      status == 'DELIVERED' ? S.deliveredLower : S.inProgressLower,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontSize: 15.5,
                         color: c.onBenefit,
@@ -528,8 +527,8 @@ class _OrderScreenState extends State<OrderScreen> {
                   const SizedBox(height: 18),
                   Text(
                     _data?['type'] == 'PICKUP'
-                        ? 'Заказ приняли и готовят. Мы позвоним, когда его можно будет забрать.'
-                        : 'Заказ приняли и готовят. Как только он будет готов, курьер привезёт его и занесёт до двери.',
+                        ? S.acceptedPickupHint
+                        : S.acceptedDeliveryHint,
                     style: TextStyle(
                       fontSize: 13.5,
                       height: 1.45,
@@ -596,9 +595,9 @@ class _OrderScreenState extends State<OrderScreen> {
                                 const SizedBox(width: Gap.sm),
                                 Text(
                                   gone
-                                      ? 'нет в наличии'
+                                      ? S.outOfStockLower
                                       : gift
-                                      ? 'подарок'
+                                      ? S.giftLower
                                       : formatTenge(
                                           ((item['price'] as num?) ?? 0)
                                                   .toInt() *
@@ -667,7 +666,7 @@ class _OrderScreenState extends State<OrderScreen> {
                       ),
                     ),
                     child: Text(
-                      _cancelling ? 'Отменяем…' : 'Отменить заказ',
+                      _cancelling ? S.cancelling : S.cancelOrder,
                       style: TextStyle(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w600,
@@ -679,7 +678,7 @@ class _OrderScreenState extends State<OrderScreen> {
               ] else if (!cancelled && current >= 3) ...[
                 const SizedBox(height: Gap.lg),
                 Text(
-                  'Отмена недоступна — заказ уже у курьера',
+                  S.cancelUnavailableCourier,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 13,
@@ -722,7 +721,7 @@ class _OrderScreenState extends State<OrderScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              names.isEmpty ? 'Позиции нет в наличии' : 'Нет: $names',
+              names.isEmpty ? S.positionsMissing : S.missingList(names),
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
@@ -732,8 +731,7 @@ class _OrderScreenState extends State<OrderScreen> {
             ),
             const SizedBox(height: Gap.sm),
             Text(
-              'Остальное уже готовится. Везём без этой позиции — или отменяем '
-              'заказ целиком?',
+              S.shortageQuestion,
               style: TextStyle(
                 fontSize: 13.5,
                 height: 1.45,
@@ -744,10 +742,11 @@ class _OrderScreenState extends State<OrderScreen> {
               const SizedBox(height: Gap.sm),
               Text(
                 left == Duration.zero
-                    ? 'Время вышло — сейчас оформим доставку остального'
-                    : 'Если не ответите за ${left.inMinutes}:'
-                          '${(left.inSeconds % 60).toString().padLeft(2, '0')}, '
-                          'привезём остальное',
+                    ? S.shortageTimeUp
+                    : S.shortageCountdown(
+                        left.inMinutes,
+                        (left.inSeconds % 60).toString().padLeft(2, '0'),
+                      ),
                 style: TextStyle(
                   fontSize: 12.5,
                   height: 1.4,
@@ -764,7 +763,7 @@ class _OrderScreenState extends State<OrderScreen> {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(color: c.benefit, borderRadius: R.pill),
                 child: Text(
-                  _answering ? 'Секунду…' : 'Везите без неё',
+                  _answering ? S.oneSecond : S.bringWithoutIt,
                   style: TextStyle(
                     fontSize: 14.5,
                     fontWeight: FontWeight.w700,
@@ -785,7 +784,7 @@ class _OrderScreenState extends State<OrderScreen> {
                   border: Border.all(color: c.surface.withValues(alpha: 0.3)),
                 ),
                 child: Text(
-                  'Отменить заказ целиком',
+                  S.cancelWholeOrder,
                   style: TextStyle(
                     fontSize: 14.5,
                     fontWeight: FontWeight.w600,
@@ -809,8 +808,8 @@ class _OrderScreenState extends State<OrderScreen> {
       0,
       (sum, i) => sum + ((i['qty'] as num?) ?? 0).toInt(),
     );
-    final type = _data?['type'] == 'PICKUP' ? 'Самовывоз' : 'Доставка';
-    return count == 0 ? type : '$count поз. · $type';
+    final type = _data?['type'] == 'PICKUP' ? S.pickup : S.delivery;
+    return count == 0 ? type : S.positionsShort(count, type);
   }
 }
 
@@ -904,14 +903,14 @@ class _WriteUsButton extends StatelessWidget {
     final blocked = exhausted || wait != null;
 
     final label = sending
-        ? 'Отправляем…'
+        ? S.sending
         : exhausted
-        ? 'Мы получили ваши сообщения'
+        ? S.weGotYourMessages
         : wait != null
-        ? 'Написать снова можно через ${_left(wait!)}'
+        ? S.writeAgainIn(_left(wait!))
         : sent > 0
-        ? 'Написать ещё'
-        : 'Написать нам';
+        ? S.writeMore
+        : S.writeToUs;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -960,8 +959,8 @@ class _WriteUsButton extends StatelessWidget {
           const SizedBox(height: Gap.sm),
           Text(
             exhausted
-                ? 'Кассир их видит и разбирается'
-                : 'Отправлено $sent из $limit',
+                ? S.cashierSeesThem
+                : S.sentOf(sent, limit),
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 12,
@@ -977,7 +976,7 @@ class _WriteUsButton extends StatelessWidget {
     final total = d.inSeconds;
     final minutes = total ~/ 60;
     final seconds = total % 60;
-    if (minutes == 0) return '$seconds с';
+    if (minutes == 0) return S.secondsShort(seconds);
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 }
@@ -1002,12 +1001,12 @@ class _MessageSheet extends StatefulWidget {
 }
 
 class _MessageSheetState extends State<_MessageSheet> {
-  static const _topics = [
-    ('WHERE', 'Где мой заказ?'),
-    ('ADDRESS', 'Поменять адрес'),
-    ('CANCEL', 'Отменить заказ'),
-    ('MISSING', 'Забыли позицию'),
-    ('OTHER', 'Другое'),
+  static List<(String, String)> get _topics => [
+    ('WHERE', S.topicWhere),
+    ('ADDRESS', S.topicAddress),
+    ('CANCEL', S.cancelOrder),
+    ('MISSING', S.topicMissing),
+    ('OTHER', S.topicOther),
   ];
 
   String? _topic;
@@ -1038,14 +1037,14 @@ class _MessageSheetState extends State<_MessageSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Что случилось?',
+            S.whatHappened,
             style: Theme.of(
               context,
             ).textTheme.titleLarge?.copyWith(fontSize: 21),
           ),
           const SizedBox(height: Gap.xs),
           Text(
-            'Передадим кассиру вместе с номером заказа',
+            S.willPassWithOrderNumber,
             style: Theme.of(context).textTheme.labelMedium,
           ),
           const SizedBox(height: Gap.lg),
@@ -1084,8 +1083,8 @@ class _MessageSheetState extends State<_MessageSheet> {
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
               hintText: _topic == 'OTHER'
-                  ? 'Расскажите, что не так'
-                  : 'Пара слов, если нужно',
+                  ? S.tellWhatIsWrong
+                  : S.fewWordsIfNeeded,
               counterText: '',
               filled: true,
               fillColor: c.fillSoft,
@@ -1112,7 +1111,7 @@ class _MessageSheetState extends State<_MessageSheet> {
                 borderRadius: R.pill,
               ),
               child: Text(
-                'Отправить',
+                S.send,
                 style: TextStyle(
                   fontSize: 14.5,
                   fontWeight: FontWeight.w700,
@@ -1178,7 +1177,7 @@ class _CancelSheetState extends State<_CancelSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Почему отменяете?',
+            S.whyCancelling,
             style: Theme.of(
               context,
             ).textTheme.titleLarge?.copyWith(fontSize: 21),
@@ -1236,7 +1235,7 @@ class _CancelSheetState extends State<_CancelSheet> {
                 borderRadius: R.pill,
               ),
               child: Text(
-                'Отменить заказ',
+                S.cancelOrder,
                 style: TextStyle(
                   fontSize: 14.5,
                   fontWeight: FontWeight.w600,
@@ -1257,7 +1256,7 @@ class _CancelSheetState extends State<_CancelSheet> {
                 borderRadius: R.pill,
               ),
               child: Text(
-                'Оставить заказ',
+                S.keepOrder,
                 style: TextStyle(
                   fontSize: 14.5,
                   fontWeight: FontWeight.w600,
