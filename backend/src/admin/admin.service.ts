@@ -934,6 +934,62 @@ export class AdminService {
     });
   }
 
+  // ─── Перенос истории покупок (DECISIONS §12.28) ──────────────
+
+  /**
+   * Проставляет клиентам сумму покупок из старой системы.
+   *
+   * Только вверх: если человек уже успел заказать у нас, его собственный
+   * оборот выше перенесённого, и затирать его импортом нельзя — уровень
+   * бы упал. Поэтому берём максимум, а не присваиваем.
+   *
+   * Идемпотентно: повторный прогон с теми же числами ничего не изменит.
+   */
+  async importLifetimeSpent(
+    rows: { phone: string; spent: number }[],
+    apply: boolean,
+  ) {
+    const tenant = await this.tenant();
+    let matched = 0;
+    let raised = 0;
+    let unchanged = 0;
+    const missing: string[] = [];
+
+    for (const row of rows) {
+      const customer = await this.prisma.customer.findFirst({
+        where: { tenantId: tenant.id, phone: row.phone },
+        select: { id: true, lifetimeSpent: true },
+      });
+      if (!customer) {
+        if (missing.length < 50) missing.push(row.phone);
+        continue;
+      }
+      matched += 1;
+      const next = Math.max(customer.lifetimeSpent, Math.round(row.spent));
+      if (next === customer.lifetimeSpent) {
+        unchanged += 1;
+        continue;
+      }
+      raised += 1;
+      if (apply) {
+        await this.prisma.customer.update({
+          where: { id: customer.id },
+          data: { lifetimeSpent: next },
+        });
+      }
+    }
+
+    return {
+      applied: apply,
+      received: rows.length,
+      matched,
+      raised,
+      unchanged,
+      notFound: rows.length - matched,
+      missingSample: missing,
+    };
+  }
+
   // ─── Отзывы и обращения (DECISIONS §12.23, §12.21) ───────────
 
   /**

@@ -32,6 +32,7 @@ import {
   UpdateCancellationDto,
   UpdateRushDto,
   AddUpsellDto,
+  LifetimeImportDto,
   UpdateLoyaltyLevelsDto,
   UpdateOrderingDto,
   UpdatePaymentsDto,
@@ -327,6 +328,20 @@ export class AdminController {
   @Get('poster/product/:id')
   posterProduct(@Param('id') id: string) {
     return this.admin.posterProductRaw(id);
+  }
+
+  /**
+   * Перенос сумм покупок из старой системы (DECISIONS §12.28).
+   *
+   * Без `apply` только считает, что изменится, и ничего не пишет: массовая
+   * правка пятнадцати тысяч профилей должна сначала показать себя.
+   */
+  @Post('loyalty/lifetime-import')
+  importLifetimeSpent(
+    @Body() dto: LifetimeImportDto,
+    @Query('apply') apply?: string,
+  ) {
+    return this.admin.importLifetimeSpent(dto.rows, apply === '1');
   }
 
   // ─── Отзывы и обращения ──────────────────────────────────────

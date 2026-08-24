@@ -283,6 +283,20 @@ export class AddUpsellDto {
   @IsOptional() @IsString() appCategoryId?: string | null;
 }
 
+/** Строка переноса истории покупок (DECISIONS §12.28) */
+export class LifetimeRowDto {
+  @IsString() @Length(5, 20) phone: string;
+  @IsInt() @Min(0) @Max(1_000_000_000) spent: number;
+}
+
+export class LifetimeImportDto {
+  @IsArray()
+  @ArrayMaxSize(2_000)
+  @ValidateNested({ each: true })
+  @Type(() => LifetimeRowDto)
+  rows: LifetimeRowDto[];
+}
+
 export class TelegramSettingsDto {
   @IsOptional() @IsBoolean() enabled?: boolean;
   /// Пустая строка означает «не меняли»: форма не получает токен обратно
