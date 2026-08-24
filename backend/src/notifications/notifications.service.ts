@@ -145,6 +145,61 @@ export class NotificationsService implements OnModuleInit {
   }
 
   /**
+   * Уведомление клиенту, не привязанное к заказу.
+   *
+   * Нужно для ручного начисления баллов (DECISIONS §12.29): когда кассир
+   * начисляет компенсацию вместо возврата денег, человек об этом узнаёт
+   * только если сам зайдёт в приложение — а смысл компенсации в том,
+   * чтобы он о ней узнал. Отдельный `type`, чтобы приложение открыло
+   * баллы, а не экран заказа.
+   */
+  async sendToCustomer(
+    customerId: string,
+    notification: OrderStatusNotification,
+    data: Record<string, string> = {},
+  ) {
+    const messaging = this.messaging;
+    if (!messaging) return { sent: 0 };
+
+    try {
+      const devices = await this.prisma.pushDevice.findMany({
+        where: { customerId, isEnabled: true },
+        select: { token: true },
+      });
+      const tokens = [...new Set(devices.map((d) => d.token))];
+      if (tokens.length === 0) return { sent: 0 };
+
+      const response = await messaging.sendEachForMulticast({
+        tokens,
+        notification,
+        data,
+        android: {
+          priority: 'high',
+          notification: { channelId: 'news', sound: 'default' },
+        },
+        apns: { payload: { aps: { sound: 'default' } } },
+      });
+
+      const invalid = response.responses.flatMap((result, index) => {
+        const code = result.error?.code;
+        return code && INVALID_TOKEN_CODES.has(code) ? [tokens[index]] : [];
+      });
+      if (invalid.length > 0) {
+        await this.prisma.pushDevice.updateMany({
+          where: { token: { in: invalid } },
+          data: { isEnabled: false },
+        });
+      }
+      return { sent: response.successCount };
+    } catch (error) {
+      this.logger.warn(
+        `Уведомление клиенту ${customerId} не отправлено: ${this.errorMessage(error)}`,
+      );
+      return { sent: 0 };
+    }
+  }
+
+  /**
    * Рассылка сообщения ленты всем устройствам.
    *
    * Возвращает, скольким устройствам ушло: владелец должен видеть охват,

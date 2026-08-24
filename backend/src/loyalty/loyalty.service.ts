@@ -1,8 +1,19 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { OrderStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 type Tx = Prisma.TransactionClient;
+
+/** «1 балл / 2 балла / 5 баллов» — иначе пуш выглядит машинным. */
+function pointsWord(amount: number) {
+  const n = Math.abs(amount) % 100;
+  if (n >= 11 && n <= 14) return 'баллов';
+  const last = n % 10;
+  if (last === 1) return 'балл';
+  if (last >= 2 && last <= 4) return 'балла';
+  return 'баллов';
+}
 
 export interface LoyaltyPolicy {
   cashbackPct: number;
@@ -22,7 +33,10 @@ export interface LoyaltyPolicy {
 
 @Injectable()
 export class LoyaltyService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   /**
    * Сколько баллов можно списать в этом заказе.
@@ -205,7 +219,7 @@ export class LoyaltyService {
     const note = comment.trim();
     if (note.length < 3) throw new BadRequestException('Укажите причину корректировки');
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const customer = await tx.customer.findFirst({
         where: { id: customerId, ...(tenantId ? { tenantId } : {}) },
       });
@@ -229,6 +243,22 @@ export class LoyaltyService {
       });
       return { pointsBalance: updated.pointsBalance, transaction };
     });
+
+    // Компенсацию начисляют вместо возврата денег — значит человек должен
+    // о ней узнать сразу, а не когда в следующий раз откроет корзину.
+    // О списании не пишем: это разбор ошибки, о нём говорят голосом.
+    if (amount > 0) {
+      await this.notifications.sendToCustomer(
+        customerId,
+        {
+          title: `Вам начислено ${amount} ${pointsWord(amount)}`,
+          body: note,
+        },
+        { type: 'loyalty_adjust', amount: String(amount) },
+      );
+    }
+
+    return result;
   }
 
   async onStatusChanged(orderId: string, status: OrderStatus) {
