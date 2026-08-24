@@ -1,5 +1,7 @@
 // Модели данных приложения. Зеркалят ответы нашего API.
 
+import '../i18n/lang.dart';
+
 class MenuResponse {
   final String tenantName;
   final List<MenuCategory> categories;
@@ -16,14 +18,25 @@ class MenuResponse {
 
 class MenuCategory {
   final String id;
-  final String name;
+  final String nameRu;
+  final String? nameKk;
   final List<Product> products;
 
-  MenuCategory({required this.id, required this.name, required this.products});
+  /// Имя на языке приложения. Меню приходит сразу на двух языках, чтобы
+  /// переключение было мгновенным и работало по кэшу, без сети.
+  String get name => L.pick(nameRu, nameKk);
+
+  MenuCategory({
+    required this.id,
+    required this.nameRu,
+    this.nameKk,
+    required this.products,
+  });
 
   factory MenuCategory.fromJson(Map<String, dynamic> json) => MenuCategory(
     id: json['id'],
-    name: json['name'],
+    nameRu: json['name'],
+    nameKk: json['nameKk'],
     products: (json['products'] as List)
         .map((p) => Product.fromJson(p))
         .toList(),
@@ -32,10 +45,17 @@ class MenuCategory {
 
 class Product {
   final String id;
-  final String name;
-  final String description;
+  final String nameRu;
+  final String? nameKk;
+  final String descriptionRu;
+  final String? descriptionKk;
   final String? photoUrl;
-  final String weightLabel;
+  final String weightLabelRu;
+  final String? weightLabelKk;
+
+  String get name => L.pick(nameRu, nameKk);
+  String get description => L.pick(descriptionRu, descriptionKk);
+  String get weightLabel => L.pick(weightLabelRu, weightLabelKk);
   final bool isHit;
   final bool isSpicy;
   final bool isNew;
@@ -51,10 +71,13 @@ class Product {
 
   Product({
     required this.id,
-    required this.name,
-    required this.description,
+    required this.nameRu,
+    this.nameKk,
+    required this.descriptionRu,
+    this.descriptionKk,
     this.photoUrl,
-    this.weightLabel = '',
+    this.weightLabelRu = '',
+    this.weightLabelKk,
     this.isHit = false,
     this.isSpicy = false,
     this.isNew = false,
@@ -65,10 +88,13 @@ class Product {
 
   factory Product.fromJson(Map<String, dynamic> json) => Product(
     id: json['id'],
-    name: json['name'],
-    description: json['description'] ?? '',
+    nameRu: json['name'],
+    nameKk: json['nameKk'],
+    descriptionRu: json['description'] ?? '',
+    descriptionKk: json['descriptionKk'],
     photoUrl: json['photoUrl'],
-    weightLabel: json['weightLabel'] ?? '',
+    weightLabelRu: json['weightLabel'] ?? '',
+    weightLabelKk: json['weightLabelKk'],
     isHit: json['isHit'] ?? false,
     isSpicy: json['isSpicy'] ?? false,
     isNew: json['isNew'] ?? false,
@@ -221,25 +247,35 @@ class CartPreview {
 /// Предложение добавить к заказу (DECISIONS §12.20)
 class UpsellOffer {
   final String productId;
-  final String name;
+  final String nameRu;
+  final String? nameKk;
   final int price;
   final String? photoUrl;
-  final String? weightLabel;
+  final String? weightLabelRu;
+  final String? weightLabelKk;
+
+  String get name => L.pick(nameRu, nameKk);
+  String? get weightLabel =>
+      weightLabelRu == null ? null : L.pick(weightLabelRu!, weightLabelKk);
 
   const UpsellOffer({
     required this.productId,
-    required this.name,
+    required this.nameRu,
+    this.nameKk,
     required this.price,
     this.photoUrl,
-    this.weightLabel,
+    this.weightLabelRu,
+    this.weightLabelKk,
   });
 
   factory UpsellOffer.fromJson(Map<String, dynamic> json) => UpsellOffer(
     productId: json['productId']?.toString() ?? '',
-    name: json['name']?.toString() ?? '',
+    nameRu: json['name']?.toString() ?? '',
+    nameKk: json['nameKk']?.toString(),
     price: (json['price'] as num?)?.toInt() ?? 0,
     photoUrl: json['photoUrl'],
-    weightLabel: json['weightLabel'],
+    weightLabelRu: json['weightLabel'],
+    weightLabelKk: json['weightLabelKk']?.toString(),
   );
 
   /// Строка корзины из предложения.
@@ -250,10 +286,12 @@ class UpsellOffer {
   /// групп здесь достаточно.
   Product toProduct() => Product(
     id: productId,
-    name: name,
-    description: '',
+    nameRu: nameRu,
+    nameKk: nameKk,
+    descriptionRu: '',
     photoUrl: photoUrl,
-    weightLabel: weightLabel ?? '',
+    weightLabelRu: weightLabelRu ?? '',
+    weightLabelKk: weightLabelKk,
     price: price,
     modifierGroups: const [],
   );
@@ -332,11 +370,14 @@ class Availability {
       cardOnDeliveryEnabled: payments['cardOnDelivery'] ?? true,
       kaspiOnlineEnabled: payments['kaspiOnline'] ?? false,
       askChangeFrom: payments['askChangeFrom'] ?? true,
-      // Сервер отдаёт окно вложенным, как и способы оплаты. Читали с
-      // верхнего уровня — поле всегда было нулём, и кнопка отмены не
-      // появлялась ни разу, сколько бы минут ни стояло в настройках.
-      cancelWindowMinutes:
-          (j['cancellation'] ?? const {})['customerWindowMinutes'] ?? 0,
+      // Окно приходит в двух формах: /menu/:slug/availability отдаёт
+      // состояние целиком, вложенным блоком `cancellation`, а корзина —
+      // уже разложенным полем. Модель одна на оба ответа, поэтому читаем
+      // обе: раньше понимали только вложенную, и в ответе корзины окно
+      // всегда было нулём — кнопка отмены не появлялась.
+      cancelWindowMinutes: j['cancelWindowMinutes'] ??
+          (j['cancellation'] ?? const {})['customerWindowMinutes'] ??
+          0,
       rushNotice: j['rushNotice'],
     );
   }
@@ -483,19 +524,29 @@ class RepeatMissing {
 /// добавления: иначе человек увидит цену прошлого месяца.
 class FavoriteProduct {
   final String id;
-  final String name;
-  final String description;
+  final String nameRu;
+  final String? nameKk;
+  final String descriptionRu;
+  final String? descriptionKk;
   final String? photoUrl;
-  final String weightLabel;
+  final String weightLabelRu;
+  final String? weightLabelKk;
   final int price;
   final bool inStopList;
 
+  String get name => L.pick(nameRu, nameKk);
+  String get description => L.pick(descriptionRu, descriptionKk);
+  String get weightLabel => L.pick(weightLabelRu, weightLabelKk);
+
   const FavoriteProduct({
     required this.id,
-    required this.name,
-    required this.description,
+    required this.nameRu,
+    this.nameKk,
+    required this.descriptionRu,
+    this.descriptionKk,
     this.photoUrl,
-    this.weightLabel = '',
+    this.weightLabelRu = '',
+    this.weightLabelKk,
     required this.price,
     this.inStopList = false,
   });
@@ -503,10 +554,13 @@ class FavoriteProduct {
   factory FavoriteProduct.fromJson(Map<String, dynamic> json) =>
       FavoriteProduct(
         id: json['id']?.toString() ?? '',
-        name: json['name']?.toString() ?? '',
-        description: json['description']?.toString() ?? '',
+        nameRu: json['name']?.toString() ?? '',
+        nameKk: json['nameKk']?.toString(),
+        descriptionRu: json['description']?.toString() ?? '',
+        descriptionKk: json['descriptionKk']?.toString(),
         photoUrl: json['photoUrl']?.toString(),
-        weightLabel: json['weightLabel']?.toString() ?? '',
+        weightLabelRu: json['weightLabel']?.toString() ?? '',
+        weightLabelKk: json['weightLabelKk']?.toString(),
         price: (json['price'] as num?)?.toInt() ?? 0,
         inStopList: json['inStopList'] == true,
       );
@@ -514,10 +568,13 @@ class FavoriteProduct {
   /// Для повторного использования строки каталога
   Product toProduct() => Product(
     id: id,
-    name: name,
-    description: description,
+    nameRu: nameRu,
+    nameKk: nameKk,
+    descriptionRu: descriptionRu,
+    descriptionKk: descriptionKk,
     photoUrl: photoUrl,
-    weightLabel: weightLabel,
+    weightLabelRu: weightLabelRu,
+    weightLabelKk: weightLabelKk,
     price: price,
     modifierGroups: const [],
   );

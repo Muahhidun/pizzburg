@@ -141,11 +141,13 @@ export class UpsellService {
             id: true,
             name: true,
             displayName: true,
+            displayNameKk: true,
             price: true,
             priceOverride: true,
             photoUrl: true,
             displayPhotoUrl: true,
             weightLabel: true,
+            weightLabelKk: true,
             stoppedUntil: true,
             appCategory: { select: { stoppedUntil: true } },
             // Позиции с выбором добавляются не одним нажатием, а через
@@ -161,9 +163,11 @@ export class UpsellService {
     const result: {
       productId: string;
       name: string;
+      nameKk: string | null;
       price: number;
       photoUrl: string | null;
       weightLabel: string | null;
+      weightLabelKk: string | null;
     }[] = [];
 
     for (const { product } of items) {
@@ -188,9 +192,11 @@ export class UpsellService {
       result.push({
         productId: product.id,
         name: product.displayName ?? product.name,
+        nameKk: product.displayNameKk,
         price: product.priceOverride ?? product.price,
         photoUrl: product.displayPhotoUrl ?? product.photoUrl,
         weightLabel: product.weightLabel,
+        weightLabelKk: product.weightLabelKk,
       });
       if (result.length >= MAX_SUGGESTIONS) break;
     }

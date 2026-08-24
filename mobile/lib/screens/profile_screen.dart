@@ -14,6 +14,8 @@ import '../theme/themes.dart';
 import 'app_settings_screen.dart';
 import 'messages_screen.dart';
 import 'legal_screen.dart';
+import '../i18n/lang.dart';
+import '../i18n/strings.dart';
 
 /// Профиль по прототипу «Сигнал».
 ///
@@ -189,6 +191,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               // Оформление остаётся на виду, а не уезжает в настройки:
               // это единственная настройка, которую хочется потрогать, и
               // спрятанную её просто не найдут.
+              const SizedBox(height: Gap.block),
+              const _LanguageCard(),
+
               const SizedBox(height: Gap.block),
               const _ThemeCard(),
 
@@ -550,6 +555,71 @@ class _SettingsRow extends StatelessWidget {
             Icon(Icons.chevron_right, size: 18, color: c.muted),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Выбор языка.
+///
+/// Рядом с оформлением, а не в «Настройках»: человек, которому нужен
+/// казахский, ищет переключатель в приложении, которое сейчас говорит
+/// с ним по-русски. Прятать его на второй экран — значит рассчитывать,
+/// что он догадается заглянуть в настройки на чужом языке.
+class _LanguageCard extends StatelessWidget {
+  const _LanguageCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final store = context.watch<LangStore>();
+
+    return Container(
+      padding: const EdgeInsets.all(Gap.lg),
+      decoration: BoxDecoration(color: c.fillSoft, borderRadius: R.field),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            S.language,
+            style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: Gap.lg),
+          Row(
+            children: [
+              for (final lang in AppLang.values) ...[
+                Expanded(
+                  child: PressScale(
+                    onTap: () {
+                      Haptics.selection();
+                      store.select(lang);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: store.current == lang ? c.accent : c.surface,
+                        borderRadius: R.pill,
+                      ),
+                      child: Text(
+                        lang.title,
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                          color: store.current == lang
+                              ? Colors.white
+                              : c.onSurface,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                if (lang != AppLang.values.last)
+                  const SizedBox(width: Gap.sm),
+              ],
+            ],
+          ),
+        ],
       ),
     );
   }

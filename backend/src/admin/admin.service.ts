@@ -176,6 +176,7 @@ export class AdminService {
       categories: categories.map((c) => ({
         id: c.id,
         name: c.name,
+        nameKk: c.nameKk,
         sortOrder: c.sortOrder,
         isVisible: c.isVisible,
         productsTotal: c.products.length,
@@ -191,6 +192,9 @@ export class AdminService {
           photoUrl: p.photoUrl,
           displayPhotoUrl: p.displayPhotoUrl,
           weightLabel: p.weightLabel,
+          displayNameKk: p.displayNameKk,
+          displayDescriptionKk: p.displayDescriptionKk,
+          weightLabelKk: p.weightLabelKk,
           isHit: p.isHit,
           isSpicy: p.isSpicy,
           isNew: p.isNew,
@@ -210,7 +214,11 @@ export class AdminService {
   async updateCategory(id: string, dto: UpdateCategoryDto) {
     return this.prisma.appCategory.update({
       where: { id },
-      data: { ...dto, name: dto.name?.trim() },
+      data: {
+        ...dto,
+        name: dto.name?.trim(),
+        nameKk: dto.nameKk === '' ? null : dto.nameKk?.trim(),
+      },
     });
   }
 
@@ -246,6 +254,14 @@ export class AdminService {
       displayPhotoUrl:
         dto.displayPhotoUrl === '' ? null : dto.displayPhotoUrl?.trim(),
       weightLabel: dto.weightLabel === '' ? null : dto.weightLabel?.trim(),
+      displayNameKk:
+        dto.displayNameKk === '' ? null : dto.displayNameKk?.trim(),
+      displayDescriptionKk:
+        dto.displayDescriptionKk === ''
+          ? null
+          : dto.displayDescriptionKk?.trim(),
+      weightLabelKk:
+        dto.weightLabelKk === '' ? null : dto.weightLabelKk?.trim(),
     };
     const updated = await this.prisma.product.update({ where: { id }, data });
     if (

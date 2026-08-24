@@ -38,10 +38,13 @@ export class FavoritesService {
       .map((row) => ({
         id: row.product.id,
         name: row.product.displayName ?? row.product.name,
+        nameKk: row.product.displayNameKk,
         description:
           row.product.displayDescription ?? row.product.description,
+        descriptionKk: row.product.displayDescriptionKk,
         photoUrl: row.product.displayPhotoUrl ?? row.product.photoUrl,
         weightLabel: row.product.weightLabel ?? '',
+        weightLabelKk: row.product.weightLabelKk,
         price: row.product.priceOverride ?? row.product.price,
         inStopList: !row.product.isActive || !row.product.category.isActive,
         addedAt: row.createdAt,

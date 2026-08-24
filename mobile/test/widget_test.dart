@@ -42,8 +42,8 @@ void main() {
   test('корзина схлопывает одинаковые позиции и считает сумму', () {
     final pizza = Product(
       id: 'p1',
-      name: 'Маргарита',
-      description: '',
+      nameRu: 'Маргарита',
+      descriptionRu: '',
       price: 2550,
       modifierGroups: const [],
     );
@@ -59,8 +59,8 @@ void main() {
   test('одинаковый товар с разными модификаторами — разные строки', () {
     final set = Product(
       id: 'p2',
-      name: 'Маки сет',
-      description: '',
+      nameRu: 'Маки сет',
+      descriptionRu: '',
       price: 5000,
       modifierGroups: const [],
     );
@@ -78,8 +78,8 @@ void main() {
   test('модификатор с доплатой попадает в цену позиции', () {
     final set = Product(
       id: 'p3',
-      name: 'Сет',
-      description: '',
+      nameRu: 'Сет',
+      descriptionRu: '',
       price: 5000,
       modifierGroups: const [],
     );
@@ -176,6 +176,8 @@ void main() {
     expect(preview.availability.deliveryAvailable, isFalse);
     expect(preview.availability.cardOnDeliveryEnabled, isFalse);
     expect(preview.availability.askChangeFrom, isTrue);
+    // Корзина отдаёт окно отмены разложенным полем, а не блоком
+    // `cancellation`: модель обязана понимать обе формы.
     expect(preview.availability.cancelWindowMinutes, 15);
     expect(preview.availability.todayHours.first, ['10:00', '22:00']);
   });

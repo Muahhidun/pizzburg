@@ -20,6 +20,15 @@ export function ProductEditor({
   );
   const [displayPhotoUrl, setDisplayPhotoUrl] = useState(product.displayPhotoUrl ?? '');
   const [weightLabel, setWeightLabel] = useState(product.weightLabel ?? '');
+  const [displayNameKk, setDisplayNameKk] = useState(
+    product.displayNameKk ?? '',
+  );
+  const [displayDescriptionKk, setDisplayDescriptionKk] = useState(
+    product.displayDescriptionKk ?? '',
+  );
+  const [weightLabelKk, setWeightLabelKk] = useState(
+    product.weightLabelKk ?? '',
+  );
   const [isHit, setIsHit] = useState(product.isHit);
   const [isSpicy, setIsSpicy] = useState(product.isSpicy);
   const [isNew, setIsNew] = useState(product.isNew);
@@ -65,6 +74,10 @@ export function ProductEditor({
     }
   }
 
+  const kazakhFilled = [displayNameKk, displayDescriptionKk, weightLabelKk].filter(
+    (v) => v.trim().length > 0,
+  ).length;
+
   async function save() {
     if (!formValid) return;
     setBusy(true);
@@ -74,6 +87,9 @@ export function ProductEditor({
         displayDescription,
         displayPhotoUrl: displayPhotoUrl.trim() || null,
         weightLabel,
+        displayNameKk,
+        displayDescriptionKk,
+        weightLabelKk,
         isHit,
         isSpicy,
         isNew,
@@ -181,6 +197,51 @@ export function ProductEditor({
             className="input"
           />
         </Field>
+
+        <details className="mb-4 rounded-xl border border-black/10 dark:border-white/15">
+          <summary className="cursor-pointer select-none px-3 py-2.5 text-sm font-medium">
+            Қазақша
+            {kazakhFilled > 0 && (
+              <span className="ml-2 text-xs font-normal text-emerald-600">
+                заполнено {kazakhFilled} из 3
+              </span>
+            )}
+          </summary>
+          <div className="border-t border-black/10 p-3 dark:border-white/15">
+            {/* Русский текст стоит подсказкой, а не пустым полем: переводят,
+                глядя на оригинал, и лишний раз закрывать карточку не надо */}
+            <Field label="Атауы" hint="Пусто — покажем русское название">
+              <input
+                value={displayNameKk}
+                onChange={(e) => setDisplayNameKk(e.target.value)}
+                maxLength={120}
+                placeholder={displayName || product.name}
+                className="input"
+              />
+            </Field>
+
+            <Field label="Сипаттамасы" hint="Пусто — покажем русское описание">
+              <textarea
+                value={displayDescriptionKk}
+                onChange={(e) => setDisplayDescriptionKk(e.target.value)}
+                maxLength={1000}
+                placeholder={displayDescription || product.description}
+                rows={3}
+                className="input resize-y"
+              />
+            </Field>
+
+            <Field label="Салмағы / өлшемі" hint="Например: 8 дана вместо 8 шт.">
+              <input
+                value={weightLabelKk}
+                onChange={(e) => setWeightLabelKk(e.target.value)}
+                maxLength={40}
+                placeholder={weightLabel || '450 г'}
+                className="input"
+              />
+            </Field>
+          </div>
+        </details>
 
         <Field label="Метки товара">
           <div className="grid grid-cols-3 gap-2">

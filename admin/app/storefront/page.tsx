@@ -91,6 +91,19 @@ export default function StorefrontPage() {
     load();
   }
 
+  /// Отдельной кнопкой, а не вторым prompt после переименования:
+  /// имя правят часто, перевод — один раз, и лишний диалог каждый
+  /// раз пришлось бы отщёлкивать вслепую.
+  async function renameCategoryKk(c: AdminCategory) {
+    const nameKk = prompt(
+      `Название категории по-казахски (пусто — покажем «${c.name}»):`,
+      c.nameKk ?? '',
+    );
+    if (nameKk === null || nameKk === (c.nameKk ?? '')) return;
+    await api.patch(`/admin/categories/${c.id}`, { nameKk });
+    load();
+  }
+
   async function toggleProduct(p: AdminProduct) {
     await api.patch(`/admin/products/${p.id}`, { isVisible: !p.isVisible });
     load();
@@ -173,6 +186,21 @@ export default function StorefrontPage() {
                       className="rounded px-1 text-xs text-neutral-400 hover:text-neutral-900 dark:hover:text-white"
                     >
                       ✎
+                    </button>
+                    <button
+                      title={
+                        c.nameKk
+                          ? `Қазақша: ${c.nameKk}`
+                          : 'Добавить казахское название'
+                      }
+                      onClick={() => renameCategoryKk(c)}
+                      className={`rounded px-1 text-[10px] font-semibold ${
+                        c.nameKk
+                          ? 'text-emerald-600'
+                          : 'text-neutral-300 hover:text-neutral-500 dark:text-neutral-600'
+                      }`}
+                    >
+                      KZ
                     </button>
                     <button
                       title={c.isVisible ? 'Скрыть' : 'Показать'}

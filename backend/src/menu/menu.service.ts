@@ -73,6 +73,9 @@ export class MenuService {
             photoUrl: true,
             displayPhotoUrl: true,
             weightLabel: true,
+            displayNameKk: true,
+            displayDescriptionKk: true,
+            weightLabelKk: true,
             isHit: true,
             isSpicy: true,
             isNew: true,
@@ -112,12 +115,15 @@ export class MenuService {
         .map((c) => ({
           id: c.id,
           name: c.name,
+          nameKk: c.nameKk,
           products: c.products.map(
             ({
               displayName,
               name,
               description,
               displayDescription,
+              displayNameKk,
+              displayDescriptionKk,
               photoUrl,
               displayPhotoUrl,
               price,
@@ -138,6 +144,11 @@ export class MenuService {
               return {
                 name: displayName ?? name,
                 description: displayDescription ?? description,
+                // Обе версии сразу, а не выбранная по заголовку: меню
+                // кэшируется, и переключение языка должно быть мгновенным
+                // и работать без сети (DECISIONS §12.30).
+                nameKk: displayNameKk,
+                descriptionKk: displayDescriptionKk,
                 photoUrl: displayPhotoUrl ?? photoUrl,
                 price: priceOverride ?? price,
                 // наборы модификаторов Poster («Донер Комбо», «Напиток к сету»)

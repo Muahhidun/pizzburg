@@ -17,6 +17,7 @@ import 'screens/legal_screen.dart';
 import 'screens/splash_screen.dart';
 import 'api/models.dart';
 import 'state/theme.dart';
+import 'i18n/lang.dart';
 import 'theme/themes.dart';
 import 'theme/app_theme.dart';
 import 'utils/haptics.dart';
@@ -45,6 +46,10 @@ Future<void> main() async {
   final analytics = Analytics(api);
   await analytics.restore();
   analytics.log(Ev.appOpen);
+  final lang = LangStore();
+  // До первого кадра, как и тема: иначе казахоязычный человек видит
+  // вспышку русского интерфейса на старте.
+  await lang.restore();
   final theme = ThemeStore();
   // До первого кадра: иначе приложение стартует в чужой теме и
   // перекрашивается на глазах.
@@ -106,6 +111,7 @@ Future<void> main() async {
       push: push,
       favorites: favorites,
       themes: theme,
+      lang: lang,
       analytics: analytics,
     ),
   );
@@ -118,6 +124,7 @@ class PizzBurgApp extends StatelessWidget {
   final PushNotificationsService push;
   final Favorites favorites;
   final ThemeStore themes;
+  final LangStore lang;
   final Analytics analytics;
   const PizzBurgApp({
     super.key,
@@ -126,6 +133,7 @@ class PizzBurgApp extends StatelessWidget {
     required this.push,
     required this.favorites,
     required this.themes,
+    required this.lang,
     required this.analytics,
   });
 
@@ -139,10 +147,13 @@ class PizzBurgApp extends StatelessWidget {
         ChangeNotifierProvider.value(value: favorites),
         ChangeNotifierProvider(create: (_) => Cart()),
         ChangeNotifierProvider.value(value: themes),
+        ChangeNotifierProvider.value(value: lang),
         Provider.value(value: analytics),
       ],
-      child: Consumer<ThemeStore>(
-        builder: (context, themes, _) => _app(context, themes.current),
+      // Язык тоже слушаем здесь: переключение перерисовывает всё дерево,
+      // и человек видит смену сразу, без перезапуска приложения.
+      child: Consumer2<ThemeStore, LangStore>(
+        builder: (context, themes, _lang, _) => _app(context, themes.current),
       ),
     );
   }

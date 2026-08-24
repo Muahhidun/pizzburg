@@ -94,6 +94,10 @@ model AppCategory {
   id        String  @id @default(cuid())
   tenantId  String
   name      String
+  /// Казахское имя витринной категории. Пусто — показываем русское:
+  /// перевод добавляют по одной категории, и незаполненное поле не
+  /// должно оставлять в меню дырку (DECISIONS §12.30).
+  nameKk    String?
   sortOrder Int     @default(0)
   isVisible Boolean @default(true)
 
@@ -181,6 +185,11 @@ model Product {
   displayDescription String? // описание для приложения (в кассе описаний обычно нет)
   displayPhotoUrl    String? // собственное фото витрины; приоритетнее фото Poster
   weightLabel        String? // готовая подпись: «30 см», «450 г», «8 шт.»
+
+  // ─ Казахская витрина: пусто → показываем русское (DECISIONS §12.30) ─
+  displayNameKk        String?
+  displayDescriptionKk String?
+  weightLabelKk        String? // «8 дана» вместо «8 шт.»
   isHit              Boolean      @default(false)
   isSpicy            Boolean      @default(false)
   isNew              Boolean      @default(false)

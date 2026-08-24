@@ -22,6 +22,7 @@ import { OrderStatus, PromotionKind } from '@prisma/client';
 
 export class UpdateCategoryDto {
   @IsOptional() @IsString() @Length(1, 80) name?: string;
+  @IsOptional() @IsString() @MaxLength(80) nameKk?: string | null;
   @IsOptional() @IsInt() @Min(0) @Max(10_000) sortOrder?: number;
   @IsOptional() @IsBoolean() isVisible?: boolean;
 }
@@ -41,6 +42,12 @@ export class UpdateProductDto {
   @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
   displayPhotoUrl?: string | null;
   @IsOptional() @IsString() @MaxLength(40) weightLabel?: string | null;
+  @IsOptional() @IsString() @MaxLength(120) displayNameKk?: string | null;
+  @IsOptional()
+  @IsString()
+  @MaxLength(1_000)
+  displayDescriptionKk?: string | null;
+  @IsOptional() @IsString() @MaxLength(40) weightLabelKk?: string | null;
   @IsOptional() @IsBoolean() isHit?: boolean;
   @IsOptional() @IsBoolean() isSpicy?: boolean;
   @IsOptional() @IsBoolean() isNew?: boolean;

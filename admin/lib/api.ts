@@ -69,6 +69,9 @@ export interface AdminProduct {
   photoUrl: string | null;
   displayPhotoUrl: string | null;
   weightLabel: string | null;
+  displayNameKk: string | null;
+  displayDescriptionKk: string | null;
+  weightLabelKk: string | null;
   isHit: boolean;
   isSpicy: boolean;
   isNew: boolean;
@@ -84,6 +87,7 @@ export interface AdminProduct {
 export interface AdminCategory {
   id: string;
   name: string;
+  nameKk: string | null;
   sortOrder: number;
   isVisible: boolean;
   productsTotal: number;
