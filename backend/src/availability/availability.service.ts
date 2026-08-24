@@ -105,6 +105,7 @@ export interface AvailabilityState {
    * точностью до минуты, которого мы дать не можем.
    */
   rushNotice: string | null;
+  rushNoticeKk: string | null;
 }
 
 const DEFAULT_TIMEZONE = 'Asia/Almaty';
@@ -116,6 +117,15 @@ const RUSH_NOTICES: Record<number, string> = {
   20: 'Сейчас много заказов — привезём на 15–20 минут позже обычного',
   40: 'Большая нагрузка на кухню — задержка примерно 35–40 минут',
   60: 'Очень много заказов — задержка может доходить до часа',
+};
+
+/// Обе версии уезжают в приложение, как и в меню: язык выбирает клиент
+/// на телефоне, а состояние доступности читают ещё и админка с кассой,
+/// которым язык клиента ни к чему (DECISIONS §12.30).
+const RUSH_NOTICES_KK: Record<number, string> = {
+  20: 'Қазір тапсырыс көп — әдеттегіден 15–20 минут кешігеміз',
+  40: 'Асханаға жүктеме үлкен — шамамен 35–40 минут кешігу',
+  60: 'Тапсырыс өте көп — кешігу бір сағатқа жетуі мүмкін',
 };
 
 const DEFAULT_PREORDER: PreorderSettings = {
@@ -307,6 +317,10 @@ export class AvailabilityService {
       rushNotice: rushExtraMinutes
         ? (RUSH_NOTICES[rushExtraMinutes] ??
           `Сейчас много заказов — задержка примерно ${rushExtraMinutes} минут`)
+        : null,
+      rushNoticeKk: rushExtraMinutes
+        ? (RUSH_NOTICES_KK[rushExtraMinutes] ??
+          `Қазір тапсырыс көп — шамамен ${rushExtraMinutes} минут кешігу`)
         : null,
     };
   }

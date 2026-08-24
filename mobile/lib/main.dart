@@ -47,6 +47,11 @@ Future<void> main() async {
   await analytics.restore();
   analytics.log(Ev.appOpen);
   final lang = LangStore();
+  // Сервер узнаёт язык устройства при регистрации токена — значит после
+  // переключения токен надо зарегистрировать заново.
+  lang.onChanged = () async {
+    if (auth.isAuthenticated) await push.syncAfterLogin();
+  };
   // До первого кадра, как и тема: иначе казахоязычный человек видит
   // вспышку русского интерфейса на старте.
   await lang.restore();

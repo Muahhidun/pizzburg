@@ -313,6 +313,7 @@ export interface TelegramSettings {
 export interface AdminCancelReason {
   id: string;
   label: string;
+  labelKk: string | null;
   isActive: boolean;
   availableToCustomer: boolean;
   sortOrder: number;

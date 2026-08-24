@@ -230,6 +230,35 @@ export default function CancellationsPage() {
                 >
                   {r.label}
                 </span>
+                {/* KZ только у клиентских: кассирские причины читает
+                    кассир, и переводить их некому и незачем */}
+                {r.availableToCustomer && (
+                  <button
+                    title={
+                      r.labelKk
+                        ? `Қазақша: ${r.labelKk}`
+                        : 'Добавить казахскую формулировку'
+                    }
+                    disabled={busy}
+                    onClick={() => {
+                      const labelKk = prompt(
+                        `Причина по-казахски (пусто — покажем «${r.label}»):`,
+                        r.labelKk ?? '',
+                      );
+                      if (labelKk === null || labelKk === (r.labelKk ?? '')) {
+                        return;
+                      }
+                      patch(r.id, { labelKk });
+                    }}
+                    className={`rounded px-1 text-[10px] font-semibold ${
+                      r.labelKk
+                        ? 'text-emerald-600'
+                        : 'text-neutral-300 hover:text-neutral-500 dark:text-neutral-600'
+                    }`}
+                  >
+                    KZ
+                  </button>
+                )}
                 <label className="flex items-center gap-1.5 text-xs text-neutral-500">
                   <input
                     type="checkbox"

@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   NotFoundException,
   Param,
   Post,
@@ -21,6 +22,7 @@ import { OrderOwnerGuard } from '../auth/order-owner.guard';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './orders.dto';
 import { CancelReasonsService } from './cancel-reasons.service';
+import { langFrom, pick } from '../i18n/lang';
 import { ShortageService } from './shortage.service';
 import {
   MESSAGE_TOPICS,
@@ -145,8 +147,11 @@ export class OrdersController {
 
   @Get('by-id/:orderId/review')
   @UseGuards(CustomerAuthGuard, OrderOwnerGuard)
-  reviewForm(@Param('orderId') orderId: string) {
-    return this.reviews.form(orderId);
+  reviewForm(
+    @Param('orderId') orderId: string,
+    @Headers('accept-language') acceptLanguage?: string,
+  ) {
+    return this.reviews.form(orderId, langFrom(acceptLanguage));
   }
 
   @Post('by-id/:orderId/review')
@@ -215,13 +220,20 @@ export class OrdersController {
 
   /** Причины отмены, доступные клиенту */
   @Get(':tenantSlug/cancel-reasons')
-  async cancelReasons(@Param('tenantSlug') tenantSlug: string) {
+  async cancelReasons(
+    @Param('tenantSlug') tenantSlug: string,
+    @Headers('accept-language') acceptLanguage?: string,
+  ) {
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: tenantSlug },
       select: { id: true },
     });
     if (!tenant) throw new NotFoundException('Unknown tenant');
+    const lang = langFrom(acceptLanguage);
     const reasons = await this.reasons.list(tenant.id, true);
-    return reasons.map((r) => ({ id: r.id, label: r.label }));
+    return reasons.map((r) => ({
+      id: r.id,
+      label: pick(lang, r.label, r.labelKk),
+    }));
   }
 }

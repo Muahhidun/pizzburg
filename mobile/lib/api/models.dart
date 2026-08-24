@@ -331,7 +331,12 @@ class Availability {
   /// Что сказать про наплыв: сервер отдаёт готовую фразу, а не число.
   /// «Плюс сорок минут» звучит как обещание с точностью до минуты,
   /// которого кухня в завале дать не может.
-  final String? rushNotice;
+  final String? rushNoticeRu;
+  final String? rushNoticeKk;
+
+  /// Предупреждение о задержке на языке приложения.
+  String? get rushNotice =>
+      rushNoticeRu == null ? null : L.pick(rushNoticeRu!, rushNoticeKk);
 
   const Availability({
     required this.mode,
@@ -347,7 +352,8 @@ class Availability {
     required this.kaspiOnlineEnabled,
     required this.askChangeFrom,
     required this.cancelWindowMinutes,
-    this.rushNotice,
+    this.rushNoticeRu,
+    this.rushNoticeKk,
   });
 
   /// Отсутствие блока в ответе не должно ломать приложение:
@@ -379,7 +385,8 @@ class Availability {
       cancelWindowMinutes: j['cancelWindowMinutes'] ??
           (j['cancellation'] ?? const {})['customerWindowMinutes'] ??
           0,
-      rushNotice: j['rushNotice'],
+      rushNoticeRu: j['rushNotice'],
+      rushNoticeKk: j['rushNoticeKk'],
     );
   }
 }

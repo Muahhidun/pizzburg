@@ -51,6 +51,14 @@ class LangStore extends ChangeNotifier {
 
   AppLang get current => L.current;
 
+  /// Кому сказать, что язык сменился.
+  ///
+  /// Нужен пушам: их текст выбирает сервер по языку устройства, и он
+  /// узнаёт о смене только когда токен перерегистрируют. Без этого
+  /// человек переключился на казахский, а «Заказ готов» приходит
+  /// по-русски — и так до следующего входа.
+  Future<void> Function()? onChanged;
+
   Future<void> restore() async {
     final prefs = await SharedPreferences.getInstance();
     L.current = AppLang.byCode(prefs.getString(_key));
@@ -63,5 +71,6 @@ class LangStore extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_key, lang.code);
+    await onChanged?.call();
   }
 }

@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramService } from '../telegram/telegram.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { Lang, pick } from '../i18n/lang';
 import { questionsFor, scoreReview } from './review-form';
 
 /**
@@ -29,7 +30,7 @@ export class ReviewsService {
   ) {}
 
   /** Анкета под конкретный заказ: у самовывоза курьера нет */
-  async form(orderId: string) {
+  async form(orderId: string, lang: Lang = 'ru') {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       select: { type: true, status: true, review: { select: { id: true } } },
@@ -37,7 +38,16 @@ export class ReviewsService {
     if (!order) throw new NotFoundException('Заказ не найден');
     return {
       alreadyAnswered: Boolean(order.review),
-      questions: questionsFor(order.type),
+      // Ярлыки уже на нужном языке: приложение получает готовую анкету
+      // и не должно знать, что переводов два (DECISIONS §12.30).
+      questions: questionsFor(order.type).map((q) => ({
+        ...q,
+        label: pick(lang, q.label, q.labelKk),
+        options: q.options.map((o) => ({
+          ...o,
+          label: pick(lang, o.label, o.labelKk),
+        })),
+      })),
     };
   }
 
@@ -158,10 +168,16 @@ export class ReviewsService {
       });
       await this.notifications.sendOrderEvent(
         order.id,
-        {
-          title: 'Как всё прошло?',
-          body: `Оцените заказ №${order.number} — это пара нажатий`,
-        },
+        (lang) =>
+          lang === 'kk'
+            ? {
+                title: 'Бәрі қалай өтті?',
+                body: `№${order.number} тапсырысты бағалаңыз — бірер басу ғана`,
+              }
+            : {
+                title: 'Как всё прошло?',
+                body: `Оцените заказ №${order.number} — это пара нажатий`,
+              },
         // Свой тип, а не `order_status`: приложение должно открыть
         // анкету, а не шкалу статусов
         { type: 'review' },

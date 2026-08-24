@@ -277,10 +277,16 @@ export class ShortageService {
     );
     await this.notifications.sendOrderEvent(
       order.id,
-      {
-        title: `Заказ №${order.number}`,
-        body: `Не оказалось: ${names}. Везём остальное или отменяем?`,
-      },
+      (lang) =>
+        lang === 'kk'
+          ? {
+              title: `№${order.number} тапсырыс`,
+              body: `Табылмады: ${names}. Қалғанын әкелейік пе, әлде тоқтатайық па?`,
+            }
+          : {
+              title: `Заказ №${order.number}`,
+              body: `Не оказалось: ${names}. Везём остальное или отменяем?`,
+            },
       { type: 'order_shortage' },
     );
     // Руководству — не ход разбирательства, а факт, о котором есть смысл
@@ -682,10 +688,16 @@ export class ShortageService {
     }
     await this.notifications.sendOrderEvent(
       order.id,
-      {
-        title: `Заказ №${order.number}`,
-        body: `Везём без «${names}». К оплате ${totals.total} ₸`,
-      },
+      (lang) =>
+        lang === 'kk'
+          ? {
+              title: `№${order.number} тапсырыс`,
+              body: `«${names}» жоқ, қалғанын әкелеміз. Төлемге ${totals.total} ₸`,
+            }
+          : {
+              title: `Заказ №${order.number}`,
+              body: `Везём без «${names}». К оплате ${totals.total} ₸`,
+            },
       { type: 'order_shortage_resolved', decision: 'KEEP', resolvedBy: by },
     );
 

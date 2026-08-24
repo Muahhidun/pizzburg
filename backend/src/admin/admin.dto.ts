@@ -241,6 +241,7 @@ export class CancelReasonDto {
 
 export class UpdateCancelReasonDto {
   @IsOptional() @IsString() @Length(2, 100) label?: string;
+  @IsOptional() @IsString() @MaxLength(100) labelKk?: string | null;
   @IsOptional() @IsBoolean() isActive?: boolean;
   @IsOptional() @IsBoolean() availableToCustomer?: boolean;
   @IsOptional() @IsInt() @Min(0) sortOrder?: number;

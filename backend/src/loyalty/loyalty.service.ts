@@ -250,10 +250,15 @@ export class LoyaltyService {
     if (amount > 0) {
       await this.notifications.sendToCustomer(
         customerId,
-        {
-          title: `Вам начислено ${amount} ${pointsWord(amount)}`,
+        (lang) => ({
+          title:
+            lang === 'kk'
+              ? `Сізге ${amount} ұпай есептелді`
+              : `Вам начислено ${amount} ${pointsWord(amount)}`,
+          // Причину не переводим: её пишет кассир своими словами, и
+          // машинный перевод исказил бы то, за что извинились.
           body: note,
-        },
+        }),
         { type: 'loyalty_adjust', amount: String(amount) },
       );
     }

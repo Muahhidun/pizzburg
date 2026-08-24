@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'models.dart';
 import '../i18n/strings.dart';
+import '../i18n/lang.dart';
 
 /// Клиент нашего API.
 ///
@@ -23,11 +24,17 @@ class ApiClient {
 
   Map<String, String> get _headers => {
     'Content-Type': 'application/json',
+    // Язык — в каждом запросе: сервер возвращает на нём причины отмены,
+    // анкету и запоминает его у устройства для пушей (DECISIONS §12.30).
+    'Accept-Language': L.current.code,
     if (token != null) 'Authorization': 'Bearer $token',
   };
 
   Future<MenuResponse> fetchMenu() async {
-    final res = await http.get(Uri.parse('$baseUrl/menu/$tenant'));
+    final res = await http.get(
+      Uri.parse('$baseUrl/menu/$tenant'),
+      headers: _headers,
+    );
     _ensureOk(res);
     return MenuResponse.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
   }
@@ -63,6 +70,7 @@ class ApiClient {
   Future<Availability> fetchAvailability() async {
     final res = await http.get(
       Uri.parse('$baseUrl/menu/$tenant/availability'),
+      headers: _headers,
     );
     _ensureOk(res);
     return Availability.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
@@ -303,7 +311,10 @@ class ApiClient {
 
   /// Лента сообщений заведения — публичная, гости тоже видят
   Future<List<FeedMessage>> fetchMessages() async {
-    final res = await http.get(Uri.parse('$baseUrl/messages/$tenant'));
+    final res = await http.get(
+      Uri.parse('$baseUrl/messages/$tenant'),
+      headers: _headers,
+    );
     _ensureOk(res);
     return (jsonDecode(utf8.decode(res.bodyBytes)) as List)
         .map((m) => FeedMessage.fromJson(m))
@@ -372,7 +383,10 @@ class ApiClient {
   /// Действующие редакции документов. Нужны и экрану согласия, и профилю:
   /// Apple с Google требуют работающую ссылку на политику из приложения.
   Future<List<LegalDocument>> fetchLegalDocuments() async {
-    final res = await http.get(Uri.parse('$baseUrl/legal/$tenant'));
+    final res = await http.get(
+      Uri.parse('$baseUrl/legal/$tenant'),
+      headers: _headers,
+    );
     _ensureOk(res);
     final data = jsonDecode(utf8.decode(res.bodyBytes));
     return ((data['documents'] ?? []) as List)
@@ -381,7 +395,10 @@ class ApiClient {
   }
 
   Future<LegalDocument> fetchLegalDocument(String type) async {
-    final res = await http.get(Uri.parse('$baseUrl/legal/$tenant/$type'));
+    final res = await http.get(
+      Uri.parse('$baseUrl/legal/$tenant/$type'),
+      headers: _headers,
+    );
     _ensureOk(res);
     return LegalDocument.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
   }

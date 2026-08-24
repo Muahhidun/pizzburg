@@ -10,6 +10,7 @@ import {
 } from 'firebase-admin/app';
 import { getMessaging, Messaging } from 'firebase-admin/messaging';
 import { PrismaService } from '../prisma/prisma.service';
+import { Lang, pick } from '../i18n/lang';
 
 const FIREBASE_APP_NAME = 'pizzburg-notifications';
 const INVALID_TOKEN_CODES = new Set([
@@ -26,9 +27,9 @@ export function orderStatusNotification(
   orderNumber: number,
   status: OrderStatus,
   type: OrderType,
+  lang: Lang = 'ru',
 ): OrderStatusNotification {
-  const title = `Заказ №${orderNumber}`;
-  const body: Record<OrderStatus, string> = {
+  const ru: Record<OrderStatus, string> = {
     NEW: 'Отправлен на кухню',
     ACCEPTED: 'Принят рестораном',
     COOKING: 'Уже готовится',
@@ -37,7 +38,20 @@ export function orderStatusNotification(
     DELIVERED: type === 'PICKUP' ? 'Выдан. Спасибо за заказ!' : 'Доставлен. Приятного аппетита!',
     CANCELLED: 'Отменён',
   };
-  return { title, body: body[status] };
+  const kk: Record<OrderStatus, string> = {
+    NEW: 'Асханаға жіберілді',
+    ACCEPTED: 'Мейрамхана қабылдады',
+    COOKING: 'Дайындалып жатыр',
+    READY: type === 'PICKUP' ? 'Беруге дайын' : 'Дайын, жақында жолға шығады',
+    ON_WAY: 'Курьер жолда',
+    DELIVERED:
+      type === 'PICKUP' ? 'Берілді. Тапсырысыңызға рақмет!' : 'Жеткізілді. Ас болсын!',
+    CANCELLED: 'Тоқтатылды',
+  };
+  return {
+    title: pick(lang, `Заказ №${orderNumber}`, `№${orderNumber} тапсырыс`),
+    body: pick(lang, ru[status], kk[status]),
+  };
 }
 
 @Injectable()
@@ -72,7 +86,12 @@ export class NotificationsService implements OnModuleInit {
 
   async registerDevice(
     customerId: string,
-    input: { token: string; platform: PushPlatform; appVersion?: string },
+    input: {
+      token: string;
+      platform: PushPlatform;
+      appVersion?: string;
+      lang?: Lang;
+    },
   ) {
     await this.prisma.pushDevice.upsert({
       where: { token: input.token },
@@ -81,11 +100,13 @@ export class NotificationsService implements OnModuleInit {
         token: input.token,
         platform: input.platform,
         appVersion: input.appVersion,
+        lang: input.lang ?? 'ru',
       },
       update: {
         customerId,
         platform: input.platform,
         appVersion: input.appVersion,
+        lang: input.lang ?? 'ru',
         isEnabled: true,
         lastSeenAt: new Date(),
       },
@@ -129,14 +150,23 @@ export class NotificationsService implements OnModuleInit {
    */
   async sendOrderEvent(
     orderId: string,
-    notification: OrderStatusNotification,
+    /// Строим текст по языку устройства, а не один на всех: у клиента
+    /// может быть два телефона на разных языках (DECISIONS §12.30).
+    notification:
+      | OrderStatusNotification
+      | ((lang: Lang) => OrderStatusNotification),
     data: Record<string, string> = {},
   ) {
     const messaging = this.messaging;
     if (!messaging) return;
 
     try {
-      await this.deliverToCustomer(messaging, orderId, notification, data);
+      await this.deliverToCustomer(
+        messaging,
+        orderId,
+        typeof notification === 'function' ? notification : () => notification,
+        data,
+      );
     } catch (error) {
       this.logger.warn(
         `FCM для заказа ${orderId} не отправлен: ${this.errorMessage(error)}`,
@@ -155,7 +185,7 @@ export class NotificationsService implements OnModuleInit {
    */
   async sendToCustomer(
     customerId: string,
-    notification: OrderStatusNotification,
+    build: (lang: Lang) => OrderStatusNotification,
     data: Record<string, string> = {},
   ) {
     const messaging = this.messaging;
@@ -164,21 +194,29 @@ export class NotificationsService implements OnModuleInit {
     try {
       const devices = await this.prisma.pushDevice.findMany({
         where: { customerId, isEnabled: true },
-        select: { token: true },
+        select: { token: true, lang: true },
       });
-      const tokens = [...new Set(devices.map((d) => d.token))];
+      const byToken = new Map<string, Lang>();
+      for (const d of devices) {
+        byToken.set(d.token, d.lang === 'kk' ? 'kk' : 'ru');
+      }
+      const tokens = [...byToken.keys()];
       if (tokens.length === 0) return { sent: 0 };
 
-      const response = await messaging.sendEachForMulticast({
-        tokens,
-        notification,
-        data,
-        android: {
-          priority: 'high',
-          notification: { channelId: 'news', sound: 'default' },
-        },
-        apns: { payload: { aps: { sound: 'default' } } },
-      });
+      // Устройств у человека единицы, поэтому шлём по одному: разбивать
+      // на языковые пачки ради двух телефонов незачем.
+      const response = await messaging.sendEach(
+        tokens.map((token) => ({
+          token,
+          notification: build(byToken.get(token)!),
+          data,
+          android: {
+            priority: 'high' as const,
+            notification: { channelId: 'news', sound: 'default' },
+          },
+          apns: { payload: { aps: { sound: 'default' } } },
+        })),
+      );
 
       const invalid = response.responses.flatMap((result, index) => {
         const code = result.error?.code;
@@ -264,7 +302,7 @@ export class NotificationsService implements OnModuleInit {
     await this.deliverToCustomer(
       messaging,
       orderId,
-      orderStatusNotification(order.number, status, order.type),
+      (lang) => orderStatusNotification(order.number, status, order.type, lang),
       { type: 'order_status', status },
     );
   }
@@ -272,7 +310,7 @@ export class NotificationsService implements OnModuleInit {
   private async deliverToCustomer(
     messaging: Messaging,
     orderId: string,
-    notification: OrderStatusNotification,
+    build: (lang: Lang) => OrderStatusNotification,
     extra: Record<string, string>,
   ) {
     const order = await this.prisma.order.findUnique({
@@ -286,13 +324,19 @@ export class NotificationsService implements OnModuleInit {
           select: {
             pushDevices: {
               where: { isEnabled: true },
-              select: { token: true },
+              select: { token: true, lang: true },
             },
           },
         },
       },
     });
-    const tokens = [...new Set(order?.customer?.pushDevices.map((d) => d.token) ?? [])];
+    // Один и тот же токен не может быть на двух языках, поэтому берём
+    // последний известный язык устройства.
+    const byToken = new Map<string, Lang>();
+    for (const d of order?.customer?.pushDevices ?? []) {
+      byToken.set(d.token, d.lang === 'kk' ? 'kk' : 'ru');
+    }
+    const tokens = [...byToken.keys()];
     if (!order || tokens.length === 0) {
       // Молчать здесь нельзя: «некому отправлять» и «отправлено успешно»
       // выглядели в логе одинаково, и разобраться, почему уведомление не
@@ -309,12 +353,18 @@ export class NotificationsService implements OnModuleInit {
       `Заказ №${order.number}: отправляем уведомление на ${tokens.length} устройств`,
     );
 
-    for (let offset = 0; offset < tokens.length; offset += 500) {
-      const batch = tokens.slice(offset, offset + 500);
+    const groups = new Map<Lang, string[]>();
+    for (const [token, lang] of byToken) {
+      (groups.get(lang) ?? groups.set(lang, []).get(lang)!).push(token);
+    }
+
+    for (const [lang, groupTokens] of groups)
+    for (let offset = 0; offset < groupTokens.length; offset += 500) {
+      const batch = groupTokens.slice(offset, offset + 500);
       try {
         const response = await messaging.sendEachForMulticast({
           tokens: batch,
-          notification,
+          notification: build(lang),
           data: {
             orderId: order.id,
             orderNumber: String(order.number),

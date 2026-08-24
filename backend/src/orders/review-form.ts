@@ -13,12 +13,15 @@
 export interface ReviewOption {
   id: string;
   label: string;
+  /// Казахская формулировка. Пусто — покажем русскую (DECISIONS §12.30).
+  labelKk?: string;
   weight: number;
 }
 
 export interface ReviewQuestion {
   id: string;
   label: string;
+  labelKk?: string;
   /** Только для доставки: у самовывоза курьера нет */
   deliveryOnly?: boolean;
   options: ReviewOption[];
@@ -27,49 +30,49 @@ export interface ReviewQuestion {
 export const REVIEW_QUESTIONS: ReviewQuestion[] = [
   {
     id: 'timing',
-    label: 'Успели вовремя?',
+    label: 'Успели вовремя?', labelKk: 'Уақытында үлгердік пе?',
     options: [
-      { id: 'VERY_LATE', label: 'Сильно опоздали', weight: 1 },
-      { id: 'LATE', label: 'Чуть дольше', weight: 3 },
-      { id: 'ON_TIME', label: 'Вовремя', weight: 5 },
-      { id: 'EARLY', label: 'Даже раньше', weight: 5 },
+      { id: 'VERY_LATE', label: 'Сильно опоздали', labelKk: 'Қатты кешіктік', weight: 1 },
+      { id: 'LATE', label: 'Чуть дольше', labelKk: 'Сәл ұзағырақ', weight: 3 },
+      { id: 'ON_TIME', label: 'Вовремя', labelKk: 'Уақытында', weight: 5 },
+      { id: 'EARLY', label: 'Даже раньше', labelKk: 'Тіпті ертерек', weight: 5 },
     ],
   },
   {
     id: 'complete',
-    label: 'Всё привезли?',
+    label: 'Всё привезли?', labelKk: 'Бәрін әкелдік пе?',
     options: [
-      { id: 'MISSING', label: 'Кое-чего не было', weight: 1 },
-      { id: 'FULL', label: 'Да, всё на месте', weight: 5 },
+      { id: 'MISSING', label: 'Кое-чего не было', labelKk: 'Бірдеңе жетіспеді', weight: 1 },
+      { id: 'FULL', label: 'Да, всё на месте', labelKk: 'Иә, бәрі орнында', weight: 5 },
     ],
   },
   {
     id: 'temperature',
-    label: 'Еда была горячей?',
+    label: 'Еда была горячей?', labelKk: 'Тамақ ыстық болды ма?',
     options: [
-      { id: 'COLD', label: 'Холодная', weight: 1 },
-      { id: 'WARM', label: 'Тёплая', weight: 3 },
-      { id: 'HOT', label: 'Горячая', weight: 5 },
+      { id: 'COLD', label: 'Холодная', labelKk: 'Суық', weight: 1 },
+      { id: 'WARM', label: 'Тёплая', labelKk: 'Жылы', weight: 3 },
+      { id: 'HOT', label: 'Горячая', labelKk: 'Ыстық', weight: 5 },
     ],
   },
   {
     id: 'taste',
-    label: 'Вкус',
+    label: 'Вкус', labelKk: 'Дәмі',
     options: [
-      { id: 'BAD', label: 'Не понравилось', weight: 1 },
-      { id: 'OK', label: 'Обычно', weight: 3 },
-      { id: 'GOOD', label: 'Понравилось', weight: 4 },
-      { id: 'GREAT', label: 'Очень', weight: 5 },
+      { id: 'BAD', label: 'Не понравилось', labelKk: 'Ұнамады', weight: 1 },
+      { id: 'OK', label: 'Обычно', labelKk: 'Әдеттегідей', weight: 3 },
+      { id: 'GOOD', label: 'Понравилось', labelKk: 'Ұнады', weight: 4 },
+      { id: 'GREAT', label: 'Очень', labelKk: 'Өте', weight: 5 },
     ],
   },
   {
     id: 'courier',
-    label: 'Курьер',
+    label: 'Курьер', labelKk: 'Курьер',
     deliveryOnly: true,
     options: [
-      { id: 'RUDE', label: 'Было неприятно', weight: 1 },
-      { id: 'NORMAL', label: 'Обычно', weight: 4 },
-      { id: 'POLITE', label: 'Вежливый', weight: 5 },
+      { id: 'RUDE', label: 'Было неприятно', labelKk: 'Жағымсыз болды', weight: 1 },
+      { id: 'NORMAL', label: 'Обычно', labelKk: 'Әдеттегідей', weight: 4 },
+      { id: 'POLITE', label: 'Вежливый', labelKk: 'Сыпайы', weight: 5 },
     ],
   },
 ];

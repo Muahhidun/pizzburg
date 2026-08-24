@@ -39,12 +39,38 @@ export class CancelReasonsService {
     { label: 'Дубль заказа', availableToCustomer: false },
     { label: 'Технический сбой', availableToCustomer: false },
 
-    { label: 'Не тот адрес', availableToCustomer: true },
-    { label: 'Перепутал доставку и самовывоз', availableToCustomer: true },
-    { label: 'Не тот способ оплаты', availableToCustomer: true },
-    { label: 'Не то время', availableToCustomer: true },
-    { label: 'Забыл добавить блюдо', availableToCustomer: true },
-    { label: 'Просто передумал', availableToCustomer: true },
+    // Казахский только у клиентских: кассирские причины читает кассир,
+    // и они живут в админке на одном языке.
+    {
+      label: 'Не тот адрес',
+      labelKk: 'Мекенжай дұрыс емес',
+      availableToCustomer: true,
+    },
+    {
+      label: 'Перепутал доставку и самовывоз',
+      labelKk: 'Жеткізу мен өзі алып кетуді шатастырдым',
+      availableToCustomer: true,
+    },
+    {
+      label: 'Не тот способ оплаты',
+      labelKk: 'Төлем тәсілі дұрыс емес',
+      availableToCustomer: true,
+    },
+    {
+      label: 'Не то время',
+      labelKk: 'Уақыты дұрыс емес',
+      availableToCustomer: true,
+    },
+    {
+      label: 'Забыл добавить блюдо',
+      labelKk: 'Тағам қосуды ұмытып кетіппін',
+      availableToCustomer: true,
+    },
+    {
+      label: 'Просто передумал',
+      labelKk: 'Жай ғана ойымды өзгерттім',
+      availableToCustomer: true,
+    },
   ];
 
   async list(tenantId: string, onlyForCustomer = false) {
@@ -118,9 +144,21 @@ export class CancelReasonsService {
 
   async update(
     id: string,
-    data: { label?: string; isActive?: boolean; availableToCustomer?: boolean; sortOrder?: number },
+    data: {
+      label?: string;
+      labelKk?: string | null;
+      isActive?: boolean;
+      availableToCustomer?: boolean;
+      sortOrder?: number;
+    },
   ) {
-    return this.prisma.cancelReason.update({ where: { id }, data });
+    return this.prisma.cancelReason.update({
+      where: { id },
+      data: {
+        ...data,
+        labelKk: data.labelKk === '' ? null : data.labelKk?.trim(),
+      },
+    });
   }
 
   /** Проверяет, что причина принадлежит арендатору и доступна вызывающему */

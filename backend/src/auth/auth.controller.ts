@@ -3,12 +3,14 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   Param,
   Patch,
   Post,
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { langFrom } from '../i18n/lang';
 import { Throttle } from '@nestjs/throttler';
 import { IsIn, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import { Prisma, PushPlatform } from '@prisma/client';
@@ -119,8 +121,18 @@ export class AuthController {
 
   @Post('push-token')
   @UseGuards(CustomerAuthGuard)
-  registerPushToken(@Req() req: any, @Body() dto: PushTokenDto) {
-    return this.notifications.registerDevice(req.customer.sub, dto);
+  registerPushToken(
+    @Req() req: any,
+    @Body() dto: PushTokenDto,
+    @Headers('accept-language') acceptLanguage?: string,
+  ) {
+    // Язык берём из заголовка, а не из тела: он и так есть в каждом
+    // запросе, и приложению не надо помнить, что его нужно послать
+    // ещё и сюда после переключения языка (DECISIONS §12.30).
+    return this.notifications.registerDevice(req.customer.sub, {
+      ...dto,
+      lang: langFrom(acceptLanguage),
+    });
   }
 
   @Delete('push-token')

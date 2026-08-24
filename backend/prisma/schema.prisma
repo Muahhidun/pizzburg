@@ -480,6 +480,8 @@ model CancelReason {
   id                  String  @id @default(cuid())
   tenantId            String
   label               String
+  /// Казахская формулировка. Пусто — показываем русскую.
+  labelKk             String?
   sortOrder           Int     @default(0)
   isActive            Boolean @default(true)
   /// Показывать ли причину клиенту в приложении
@@ -507,6 +509,8 @@ model PushDevice {
   token      String       @unique
   platform   PushPlatform @default(UNKNOWN)
   appVersion String?
+  /// Язык, на котором говорит это устройство: пуш приходит на нём.
+  lang       String       @default("ru")
   isEnabled  Boolean      @default(true)
   lastSeenAt DateTime     @default(now())
   createdAt  DateTime     @default(now())
