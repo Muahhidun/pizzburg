@@ -6,6 +6,7 @@
 
 import 'package:flutter/material.dart';
 import '../api/models.dart';
+import '../i18n/strings.dart';
 
 class ProductBadges extends StatelessWidget {
   final Product product;
@@ -16,9 +17,9 @@ class ProductBadges extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final badges = <({String text, Color color})>[
-      if (product.isHit) (text: 'Хит', color: const Color(0xFFFFA000)),
-      if (product.isSpicy) (text: 'Острое', color: const Color(0xFFE53935)),
-      if (product.isNew) (text: 'Новинка', color: const Color(0xFF2E7D32)),
+      if (product.isHit) (text: S.badgeHit, color: const Color(0xFFFFA000)),
+      if (product.isSpicy) (text: S.badgeSpicy, color: const Color(0xFFE53935)),
+      if (product.isNew) (text: S.badgeNew, color: const Color(0xFF2E7D32)),
     ];
 
     return Wrap(

@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../utils/haptics.dart';
 import 'motion.dart';
+import '../i18n/strings.dart';
 
 /// Блок повтора прошлого заказа — «Тот же заказ?».
 ///
@@ -51,7 +52,7 @@ class RepeatOrderCard extends StatelessWidget {
       if (added == 0) {
         await Haptics.warning();
         messenger.showSnackBar(
-          const SnackBar(content: Text('Из того заказа сегодня ничего нет')),
+          SnackBar(content: Text(S.nothingFromThatOrder)),
         );
         return;
       }
@@ -65,7 +66,7 @@ class RepeatOrderCard extends StatelessWidget {
             content: Text(
               result.unavailable.length == 1
                   ? '${result.unavailable.first.name} — ${result.unavailable.first.reason}'
-                  : 'Не перенеслось: ${result.unavailable.map((u) => u.name).join(', ')}',
+                  : S.notMoved(result.unavailable.map((u) => u.name).join(', ')),
             ),
           ),
         );
@@ -133,7 +134,7 @@ class RepeatOrderCard extends StatelessWidget {
                 borderRadius: R.pill,
               ),
               child: Text(
-                'Повторить',
+                S.repeatAction,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,

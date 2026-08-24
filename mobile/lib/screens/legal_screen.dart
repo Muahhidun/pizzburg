@@ -6,6 +6,7 @@ import '../state/auth.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../widgets/motion.dart';
+import '../i18n/strings.dart';
 
 /// Чтение одного документа.
 ///
@@ -78,13 +79,13 @@ class _LegalDocumentScreenState extends State<LegalDocumentScreen> {
                   ),
                   const SizedBox(height: Gap.lg),
                   Text(
-                    doc?.displayTitle ?? widget.title ?? 'Документ',
+                    doc?.displayTitle ?? widget.title ?? S.document,
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                   if (doc != null) ...[
                     const SizedBox(height: Gap.sm),
                     Text(
-                      'Редакция ${doc.version}',
+                      S.edition(doc.version),
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     const SizedBox(height: Gap.block),
@@ -164,7 +165,7 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
       canPop: false,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Условия использования'),
+          title: Text(S.termsTitle),
           automaticallyImplyLeading: false,
         ),
         body: SafeArea(
@@ -173,10 +174,7 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Чтобы пользоваться приложением и оформлять заказы, '
-                  'примите документы:',
-                ),
+                Text(S.acceptDocsHint),
                 const SizedBox(height: 12),
                 Expanded(
                   child: _docs.isEmpty
@@ -187,7 +185,7 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
                               Card(
                                 child: ListTile(
                                   title: Text(doc.displayTitle),
-                                  subtitle: Text('Редакция ${doc.version}'),
+                                  subtitle: Text(S.edition(doc.version)),
                                   trailing: const Icon(Icons.chevron_right),
                                   onTap: () => Navigator.push(
                                     context,
@@ -210,9 +208,7 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
                       : (v) => setState(() => _agreed = v ?? false),
                   controlAffinity: ListTileControlAffinity.leading,
                   contentPadding: EdgeInsets.zero,
-                  title: const Text(
-                    'Я прочитал и принимаю условия',
-                  ),
+                  title: Text(S.iAcceptTerms),
                 ),
                 if (_error != null)
                   Padding(
@@ -236,7 +232,7 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
                             width: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Принять и продолжить'),
+                        : Text(S.acceptAndContinue),
                   ),
                 ),
               ],
@@ -264,7 +260,7 @@ class _LegalMessage extends StatelessWidget {
           children: [
             Text(text, textAlign: TextAlign.center),
             const SizedBox(height: 12),
-            OutlinedButton(onPressed: onRetry, child: const Text('Повторить')),
+            OutlinedButton(onPressed: onRetry, child: Text(S.repeatAction)),
           ],
         ),
       ),

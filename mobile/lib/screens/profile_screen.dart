@@ -62,15 +62,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: Gap.block),
                   Text(
-                    'Войдите по телефону',
+                    S.signInByPhone,
                     style: Theme.of(
                       context,
                     ).textTheme.titleLarge?.copyWith(fontSize: 20),
                   ),
                   const SizedBox(height: Gap.sm),
                   Text(
-                    'Баллы, история заказов и сохранённые адреса — '
-                    'после входа',
+                    S.afterSignInHint,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
@@ -92,7 +91,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         borderRadius: R.pill,
                       ),
                       child: Text(
-                        'Войти по телефону',
+                        S.signInByPhoneAction,
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -120,7 +119,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         borderRadius: R.pill,
                       ),
                       child: Text(
-                        'Акции и новости',
+                        S.promosAndNews,
                         style: TextStyle(
                           fontSize: 13.5,
                           fontWeight: FontWeight.w600,
@@ -152,7 +151,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             children: [
               Text(
-                auth.name.isEmpty ? 'Профиль' : auth.name,
+                auth.name.isEmpty ? S.profile : auth.name,
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
               Text(auth.phone, style: Theme.of(context).textTheme.bodySmall),
@@ -176,8 +175,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     borderRadius: R.thumb,
                   ),
                   child: Text(
-                    'Ещё ${formatTenge(auth.toNextLevel)} заказов — '
-                    'и кэшбэк станет ${auth.nextCashbackPct}%',
+                    S.toNextLevel(
+                      formatTenge(auth.toNextLevel),
+                      auth.nextCashbackPct ?? 0,
+                    ),
                     style: TextStyle(
                       fontSize: 13,
                       height: 1.4,
@@ -206,14 +207,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
               // и прошлые. В профиле остаётся то, чего больше нигде нет:
               // баллы, уровень и адреса.
               const SizedBox(height: Gap.blockWide),
-              const Text(
-                'История баллов',
-                style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
+              Text(
+                S.pointsHistory,
+                style: const TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const SizedBox(height: Gap.sm),
               if (auth.transactions.isEmpty)
                 Text(
-                  'Операций ещё не было',
+                  S.noOperationsYet,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               for (final raw in auth.transactions.take(20))
@@ -233,7 +237,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     borderRadius: R.pill,
                   ),
                   child: Text(
-                    'Выйти',
+                    S.signOut,
                     style: TextStyle(
                       fontSize: 13.5,
                       fontWeight: FontWeight.w600,
@@ -279,7 +283,7 @@ class _PointsCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Баллы',
+            S.points,
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -296,7 +300,7 @@ class _PointsCard extends StatelessWidget {
           ),
           const SizedBox(height: Gap.xs),
           Text(
-            '1 балл = 1 ₸, списывайте любой суммой',
+            S.pointEqualsTenge,
             style: TextStyle(
               fontSize: 12.5,
               height: 1.4,
@@ -310,7 +314,7 @@ class _PointsCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Кэшбэк $cashbackPct%',
+                S.cashbackPercent(cashbackPct),
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -319,8 +323,8 @@ class _PointsCard extends StatelessWidget {
               ),
               Text(
                 levelName.isEmpty
-                    ? 'Уровень $level из $levelsTotal'
-                    : '$levelName · $level из $levelsTotal',
+                    ? S.levelOf(level, levelsTotal)
+                    : S.levelNamed(levelName, level, levelsTotal),
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -354,7 +358,7 @@ class _PointsRow extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              '${earned ? 'Начислено' : 'Списано'} · ${_date(txn['createdAt'])}',
+              '${earned ? S.earned : S.spent} · ${_date(txn['createdAt'])}',
               style: const TextStyle(fontSize: 13.5),
             ),
           ),
@@ -375,11 +379,7 @@ class _PointsRow extends StatelessWidget {
   static String _date(dynamic value) {
     final date = DateTime.tryParse(value?.toString() ?? '')?.toLocal();
     if (date == null) return '';
-    const months = [
-      'янв', 'фев', 'мар', 'апр', 'мая', 'июн',
-      'июл', 'авг', 'сен', 'окт', 'ноя', 'дек',
-    ];
-    return '${date.day} ${months[date.month - 1]}';
+    return '${date.day} ${S.months[date.month - 1]}';
   }
 }
 
@@ -438,8 +438,11 @@ class _MessagesRowState extends State<_MessagesRow> {
         ),
         child: Row(
           children: [
-            const Expanded(
-              child: Text('Акции и новости', style: TextStyle(fontSize: 13.5)),
+            Expanded(
+              child: Text(
+                S.promosAndNews,
+                style: const TextStyle(fontSize: 13.5),
+              ),
             ),
             if (_unread)
               Container(
@@ -462,10 +465,10 @@ class _MessagesRowState extends State<_MessagesRow> {
 class _LegalLinks extends StatelessWidget {
   const _LegalLinks();
 
-  static const _types = [
-    ('OFFER', 'Публичная оферта'),
-    ('PRIVACY', 'Политика конфиденциальности'),
-    ('REQUISITES', 'Реквизиты'),
+  static List<(String, String)> get _types => [
+    ('OFFER', S.publicOffer),
+    ('PRIVACY', S.privacyPolicy),
+    ('REQUISITES', S.requisites),
   ];
 
   @override
@@ -504,7 +507,7 @@ class _LegalLinks extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.only(top: Gap.md),
           child: Text(
-            'Адреса города — данные © участников OpenStreetMap, ODbL',
+            S.osmCredit,
             style: TextStyle(fontSize: 11, color: c.muted),
           ),
         ),
@@ -546,10 +549,10 @@ class _SettingsRow extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Expanded(
+            Expanded(
               child: Text(
-                'Настройки приложения',
-                style: TextStyle(fontSize: 13.5),
+                S.appSettings,
+                style: const TextStyle(fontSize: 13.5),
               ),
             ),
             Icon(Icons.chevron_right, size: 18, color: c.muted),
@@ -639,9 +642,12 @@ class _ThemeCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Оформление',
-            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+          Text(
+            S.appearance,
+            style: const TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           Text(
             store.current.hint,

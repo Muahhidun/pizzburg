@@ -5,6 +5,7 @@ import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../utils/haptics.dart';
 import '../widgets/motion.dart';
+import '../i18n/strings.dart';
 
 /// Настройки приложения.
 ///
@@ -51,7 +52,7 @@ class AppSettingsScreen extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'Настройки',
+                  S.settings,
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
               ],
@@ -84,15 +85,15 @@ class _NotificationsCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Вибрация',
-                  style: TextStyle(
+                Text(
+                  S.vibration,
+                  style: const TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 Text(
-                  'Отклик при выборе и подтверждении',
+                  S.vibrationHint,
                   style: Theme.of(context).textTheme.labelMedium,
                 ),
               ],
@@ -125,19 +126,19 @@ class _PushRow extends StatelessWidget {
 
     final (title, hint) = switch (status) {
       PushNotificationsStatus.enabled when push.isProvisional => (
-        'Уведомления приходят тихо',
-        'Без баннера и звука. Включить их: Настройки телефона → PizzBurg',
+        S.pushQuietTitle,
+        S.pushQuietHint,
       ),
       PushNotificationsStatus.enabled => (
-        'Уведомления включены',
-        'Сообщим, когда заказ будет готов',
+        S.pushOnTitle,
+        S.pushOrderHint,
       ),
       PushNotificationsStatus.denied => (
-        'Уведомления выключены',
-        'Включить можно в Настройках телефона → PizzBurg → Уведомления',
+        S.pushOffTitle,
+        S.pushOffHint,
       ),
-      PushNotificationsStatus.requesting => ('Спрашиваем…', 'Секунду'),
-      _ => ('Уведомления о заказе', 'Сообщим, когда заказ будет готов'),
+      PushNotificationsStatus.requesting => (S.asking, S.justASecond),
+      _ => (S.orderNotifications, S.pushOrderHint),
     };
 
     final canAsk =
@@ -181,7 +182,7 @@ class _PushRow extends StatelessWidget {
                   borderRadius: R.pill,
                 ),
                 child: Text(
-                  'Включить',
+                  S.turnOn,
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,

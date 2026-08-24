@@ -6,6 +6,7 @@ import '../theme/tokens.dart';
 import '../utils/haptics.dart';
 import '../widgets/address_picker.dart';
 import '../widgets/motion.dart';
+import '../i18n/strings.dart';
 
 /// Добавление адреса с главного экрана.
 ///
@@ -41,7 +42,7 @@ class _AddAddressScreenState extends State<AddAddressScreen> {
 
   Future<void> _save() async {
     if (_street.text.trim().isEmpty || _house.text.trim().isEmpty) {
-      setState(() => _error = 'Выберите улицу и дом из подсказок');
+      setState(() => _error = S.pickStreetFromHints);
       return;
     }
     setState(() {
@@ -100,7 +101,7 @@ class _AddAddressScreenState extends State<AddAddressScreen> {
                 ),
                 const SizedBox(width: Gap.md),
                 Text(
-                  'Новый адрес',
+                  S.newAddressTitle,
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
               ],
@@ -111,13 +112,13 @@ class _AddAddressScreenState extends State<AddAddressScreen> {
             const SizedBox(height: Gap.md),
             Row(
               children: [
-                Expanded(child: FieldCard(label: 'Квартира', controller: _flat)),
+                Expanded(child: FieldCard(label: S.flatLabel, controller: _flat)),
                 const SizedBox(width: Gap.sm),
                 Expanded(
-                  child: FieldCard(label: 'Подъезд', controller: _entrance),
+                  child: FieldCard(label: S.entranceLabel, controller: _entrance),
                 ),
                 const SizedBox(width: Gap.sm),
-                Expanded(child: FieldCard(label: 'Этаж', controller: _floor)),
+                Expanded(child: FieldCard(label: S.floorLabel, controller: _floor)),
               ],
             ),
 
@@ -135,7 +136,7 @@ class _AddAddressScreenState extends State<AddAddressScreen> {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(color: c.accent, borderRadius: R.pill),
                 child: Text(
-                  _saving ? 'Сохраняем…' : 'Сохранить адрес',
+                  _saving ? S.saving : S.saveAddress,
                   style: TextStyle(
                     fontSize: 14.5,
                     fontWeight: FontWeight.w700,

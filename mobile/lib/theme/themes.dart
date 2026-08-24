@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../i18n/strings.dart';
 
 /// Оформление на выбор человека.
 ///
@@ -27,10 +28,13 @@ import 'package:flutter/material.dart';
 @immutable
 class AppThemeVariant {
   final String id;
-  final String name;
+
+  /// Имя и подпись — не поля, а перевод по id: список тем остаётся
+  /// `const`, а тексты живут там же, где остальной интерфейс.
+  String get name => S.themeName(id);
 
   /// Одной строкой в списке выбора — чтобы не гадать по кружку
-  final String hint;
+  String get hint => S.themeHint(id);
 
   final Color ink;
   final Color accent;
@@ -46,8 +50,6 @@ class AppThemeVariant {
 
   const AppThemeVariant({
     required this.id,
-    required this.name,
-    required this.hint,
     required this.ink,
     required this.accent,
     required this.benefit,
@@ -65,8 +67,6 @@ const kDefaultThemeId = 'signal';
 const appThemes = <AppThemeVariant>[
   AppThemeVariant(
     id: kDefaultThemeId,
-    name: 'Базовая',
-    hint: 'Чернила, кобальт, лайм',
     ink: Color(0xFF0B0B14),
     accent: Color(0xFF2B3BEE),
     benefit: Color(0xFFD6F84C),
@@ -74,8 +74,6 @@ const appThemes = <AppThemeVariant>[
   ),
   AppThemeVariant(
     id: 'ember',
-    name: 'Оранжевая',
-    hint: 'Оранжевый, как на вывеске',
     ink: Color(0xFF22140C),
     accent: Color(0xFFDD5B0C),
     benefit: Color(0xFFD6F84C),
@@ -83,8 +81,6 @@ const appThemes = <AppThemeVariant>[
   ),
   AppThemeVariant(
     id: 'olive',
-    name: 'Оливковая',
-    hint: 'Приглушённая, без ярких пятен',
     ink: Color(0xFF1E2116),
     accent: Color(0xFF5C6B3C),
     benefit: Color(0xFFDCE3A8),
@@ -92,8 +88,6 @@ const appThemes = <AppThemeVariant>[
   ),
   AppThemeVariant(
     id: 'night',
-    name: 'Тёмная',
-    hint: 'Для вечера и тёмного экрана',
     // `ink` и `surface` здесь оба светлые, и это не опечатка: первый —
     // текст на странице, второй — текст на тёмных блоках. В тёмной теме
     // они совпадают, потому что светлое и там, и там.

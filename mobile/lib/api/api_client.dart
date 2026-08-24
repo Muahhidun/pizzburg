@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'models.dart';
+import '../i18n/strings.dart';
 
 /// Клиент нашего API.
 ///
@@ -484,7 +485,7 @@ class ApiClient {
 
   void _ensureOk(http.Response res) {
     if (res.statusCode >= 200 && res.statusCode < 300) return;
-    String message = 'Ошибка ${res.statusCode}';
+    String message = S.httpError(res.statusCode);
     try {
       final body = jsonDecode(utf8.decode(res.bodyBytes));
       if (body is Map && body['message'] != null) {

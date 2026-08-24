@@ -1,6 +1,7 @@
 // Модели данных приложения. Зеркалят ответы нашего API.
 
 import '../i18n/lang.dart';
+import '../i18n/strings.dart';
 
 class MenuResponse {
   final String tenantName;
@@ -664,9 +665,9 @@ class SavedAddress {
   String get oneLine {
     final parts = <String>[
       '$street, $house',
-      if (flat.isNotEmpty) 'кв. $flat',
-      if (entrance.isNotEmpty) 'подъезд $entrance',
-      if (floor.isNotEmpty) 'этаж $floor',
+      if (flat.isNotEmpty) S.flat(flat),
+      if (entrance.isNotEmpty) S.entrance(entrance),
+      if (floor.isNotEmpty) S.floor(floor),
     ];
     return parts.join(', ');
   }
@@ -701,11 +702,11 @@ class LegalDocument {
     if (title.isNotEmpty) return title;
     switch (type) {
       case 'OFFER':
-        return 'Публичная оферта';
+        return S.publicOffer;
       case 'PRIVACY':
-        return 'Политика конфиденциальности';
+        return S.privacyPolicy;
       case 'REQUISITES':
-        return 'Реквизиты';
+        return S.requisites;
       default:
         return type;
     }

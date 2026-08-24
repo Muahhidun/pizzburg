@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import '../i18n/strings.dart';
 
 const _letters = r"A-Za-zА-Яа-яЁёӘәҒғҚқҢңӨөҰұҮүҺһІі";
 
@@ -109,32 +110,32 @@ String? validateKzPhone(String? value) {
   final digits = (value ?? '').replaceAll(RegExp(r'\D'), '');
   return RegExp(r'^7\d{10}$').hasMatch(digits)
       ? null
-      : 'Введите номер полностью';
+      : S.enterFullPhone;
 }
 
 String? validateName(String? value) {
   final text = (value ?? '').trim();
   if (text.isEmpty) return null;
-  if (text.length < 2) return 'Имя слишком короткое';
+  if (text.length < 2) return S.nameTooShort;
   return RegExp("^[$_letters]+(?:[ '’-][$_letters]+)*\$").hasMatch(text)
       ? null
-      : 'Только буквы, пробел, дефис или апостроф';
+      : S.lettersOnly;
 }
 
 String? validateStreet(String? value) {
   final text = (value ?? '').trim();
-  if (text.length < 2) return 'Укажите улицу';
+  if (text.length < 2) return S.specifyStreet;
   return RegExp("^[${_letters}0-9 .,'’№/()\\-]+\$").hasMatch(text)
       ? null
-      : 'Проверьте название улицы';
+      : S.checkStreetName;
 }
 
 String? validateHouse(String? value) {
   final text = (value ?? '').trim();
-  if (text.isEmpty) return 'Укажите дом';
+  if (text.isEmpty) return S.specifyHouse;
   return RegExp("^(?=.*[0-9])[${_letters}0-9 ./\\-]{1,20}\$").hasMatch(text)
       ? null
-      : 'Например: 47Б или 12/1';
+      : S.houseExample;
 }
 
 String? validateFlat(String? value) {
@@ -144,21 +145,21 @@ String? validateFlat(String? value) {
         "^[0-9]{1,5}[$_letters]?(?:[/\\-][0-9]{1,5}[$_letters]?)?\$",
       ).hasMatch(text)
       ? null
-      : 'Например: 69 или 6А';
+      : S.flatExample;
 }
 
 String? validateEntrance(String? value) {
   final text = (value ?? '').trim();
   if (text.isEmpty) return null;
-  return RegExp(r'^\d{1,3}$').hasMatch(text) ? null : 'Только номер';
+  return RegExp(r'^\d{1,3}$').hasMatch(text) ? null : S.numberOnly;
 }
 
 String? validateFloor(String? value) {
   final text = (value ?? '').trim();
   if (text.isEmpty) return null;
-  return RegExp(r'^-?\d{1,2}$').hasMatch(text) ? null : 'Например: 9 или -1';
+  return RegExp(r'^-?\d{1,2}$').hasMatch(text) ? null : S.floorExample;
 }
 
 String? validateComment(String? value) {
-  return (value ?? '').length <= 300 ? null : 'Не больше 300 символов';
+  return (value ?? '').length <= 300 ? null : S.max300Chars;
 }

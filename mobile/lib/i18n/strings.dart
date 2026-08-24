@@ -385,4 +385,146 @@ class S {
       t('Пара слов, если нужно', 'Қажет болса, бірер сөз');
   static String get whyCancelling => t('Почему отменяете?', 'Неге тоқтатып жатырсыз?');
   static String get keepOrder => t('Оставить заказ', 'Тапсырысты қалдыру');
+
+  // ── Профиль ──
+  static String get signInByPhone => t('Войдите по телефону', 'Телефон арқылы кіріңіз');
+  static String get signInByPhoneAction =>
+      t('Войти по телефону', 'Телефон арқылы кіру');
+  static String get afterSignInHint => t(
+        'Баллы, история заказов и сохранённые адреса — после входа',
+        'Ұпайлар, тапсырыс тарихы және сақталған мекенжайлар — кіргеннен кейін',
+      );
+  static String get promosAndNews => t('Акции и новости', 'Акциялар мен жаңалықтар');
+  static String get profile => t('Профиль', 'Профиль');
+  static String toNextLevel(String sum, int pct) => t(
+        'Ещё $sum заказов — и кэшбэк станет $pct%',
+        'Тағы $sum тапсырыс — кэшбэк $pct% болады',
+      );
+  static String get pointsHistory => t('История баллов', 'Ұпай тарихы');
+  static String get noOperationsYet => t('Операций ещё не было', 'Әзірге операция болған жоқ');
+  static String get signOut => t('Выйти', 'Шығу');
+  static String get pointEqualsTenge => t(
+        '1 балл = 1 ₸, списывайте любой суммой',
+        '1 ұпай = 1 ₸, кез келген сомамен жұмсаңыз болады',
+      );
+  static String cashbackPercent(int pct) => t('Кэшбэк $pct%', 'Кэшбэк $pct%');
+  static String levelOf(int level, int total) =>
+      t('Уровень $level из $total', '$total деңгейдің $level-сі');
+  static String levelNamed(String name, int level, int total) =>
+      t('$name · $level из $total', '$name · $total-тен $level');
+  static String get earned => t('Начислено', 'Есептелді');
+  static String get spent => t('Списано', 'Жұмсалды');
+  static String get requisites => t('Реквизиты', 'Деректемелер');
+  static String get osmCredit => t(
+        'Адреса города — данные © участников OpenStreetMap, ODbL',
+        'Қала мекенжайлары — © OpenStreetMap қатысушыларының деректері, ODbL',
+      );
+  static String get appSettings => t('Настройки приложения', 'Қосымша баптаулары');
+  static String get appearance => t('Оформление', 'Безендіру');
+
+  // ── Настройки ──
+  static String get settings => t('Настройки', 'Баптаулар');
+  static String get vibration => t('Вибрация', 'Дірілдеу');
+  static String get vibrationHint => t(
+        'Отклик при выборе и подтверждении',
+        'Таңдау мен растау кезіндегі жауап',
+      );
+  static String get pushQuietTitle =>
+      t('Уведомления приходят тихо', 'Хабарламалар үнсіз келеді');
+  static String get pushQuietHint => t(
+        'Без баннера и звука. Включить их: Настройки телефона → PizzBurg',
+        'Баннерсіз және дыбыссыз. Қосу: телефон баптаулары → PizzBurg',
+      );
+  static String get pushOnTitle => t('Уведомления включены', 'Хабарламалар қосулы');
+  static String get pushOrderHint => t(
+        'Сообщим, когда заказ будет готов',
+        'Тапсырыс дайын болғанда хабарлаймыз',
+      );
+  static String get pushOffTitle => t('Уведомления выключены', 'Хабарламалар өшірулі');
+  static String get pushOffHint => t(
+        'Включить можно в Настройках телефона → PizzBurg → Уведомления',
+        'Қосу: телефон баптаулары → PizzBurg → Хабарламалар',
+      );
+  static String get asking => t('Спрашиваем…', 'Сұрап жатырмыз…');
+  static String get justASecond => t('Секунду', 'Бір секунд');
+  static String get orderNotifications =>
+      t('Уведомления о заказе', 'Тапсырыс туралы хабарламалар');
+  static String get turnOn => t('Включить', 'Қосу');
+
+  // ── Адрес ──
+  static String get pickStreetFromHints => t(
+        'Выберите улицу и дом из подсказок',
+        'Көше мен үйді ұсыныстардан таңдаңыз',
+      );
+  static String get newAddressTitle => t('Новый адрес', 'Жаңа мекенжай');
+  static String get saving => t('Сохраняем…', 'Сақталуда…');
+  static String get saveAddress => t('Сохранить адрес', 'Мекенжайды сақтау');
+  static String get street => t('Улица', 'Көше');
+  static String get house => t('Дом', 'Үй');
+  static String get savedOperatorWillCheck => t(
+        'Записали. Оператор проверит адрес перед доставкой',
+        'Жазып алдық. Оператор жеткізу алдында мекенжайды тексереді',
+      );
+  static String get operatorWillCheck => t(
+        'Оператор проверит адрес перед доставкой',
+        'Оператор жеткізу алдында мекенжайды тексереді',
+      );
+  static String get streetInDirectory =>
+      t('Улица есть в справочнике города', 'Көше қала анықтамалығында бар');
+  static String get addressInDirectory =>
+      t('Адрес есть в справочнике города', 'Мекенжай қала анықтамалығында бар');
+  static String get myAddressNotListed =>
+      t('Моего адреса нет в списке', 'Менің мекенжайым тізімде жоқ');
+
+  // ── Документы ──
+  static String get document => t('Документ', 'Құжат');
+  static String edition(int version) =>
+      t('Редакция $version', '$version редакциясы');
+  static String get termsTitle => t('Условия использования', 'Пайдалану шарттары');
+  static String get acceptDocsHint => t(
+        'Чтобы пользоваться приложением и оформлять заказы, примите документы:',
+        'Қосымшаны пайдалану және тапсырыс беру үшін құжаттарды қабылдаңыз:',
+      );
+  static String get iAcceptTerms =>
+      t('Я прочитал и принимаю условия', 'Оқыдым және шарттарды қабылдаймын');
+  static String get acceptAndContinue =>
+      t('Принять и продолжить', 'Қабылдап, жалғастыру');
+
+  static String httpError(int code) => t('Ошибка $code', '$code қатесі');
+
+  // ── Названия тем ──
+  static String themeName(String id) => switch (id) {
+        'ember' => t('Оранжевая', 'Қызғылт сары'),
+        'olive' => t('Оливковая', 'Зәйтүн'),
+        'night' => t('Тёмная', 'Қараңғы'),
+        _ => t('Базовая', 'Негізгі'),
+      };
+  static String themeHint(String id) => switch (id) {
+        'ember' => t('Оранжевый, как на вывеске', 'Маңдайшадағыдай қызғылт сары'),
+        'olive' => t('Приглушённая, без ярких пятен', 'Басыңқы, ашық дақсыз'),
+        'night' => t('Для вечера и тёмного экрана', 'Кешке және қараңғы экранға'),
+        _ => t('Чернила, кобальт, лайм', 'Сия, кобальт, лайм'),
+      };
+
+  // ── Метки товара ──
+  static String get badgeHit => t('Хит', 'Хит');
+  static String get badgeSpicy => t('Острое', 'Ащы');
+  static String get badgeNew => t('Новинка', 'Жаңалық');
+
+  // ── Проверка полей ──
+  static String get nameTooShort => t('Имя слишком короткое', 'Аты тым қысқа');
+  static String get lettersOnly => t(
+        'Только буквы, пробел, дефис или апостроф',
+        'Тек әріптер, бос орын, дефис немесе апостроф',
+      );
+  static String get specifyStreet => t('Укажите улицу', 'Көшені көрсетіңіз');
+  static String get checkStreetName =>
+      t('Проверьте название улицы', 'Көше атауын тексеріңіз');
+  static String get specifyHouse => t('Укажите дом', 'Үйді көрсетіңіз');
+  static String get houseExample => t('Например: 47Б или 12/1', 'Мысалы: 47Б немесе 12/1');
+  static String get flatExample => t('Например: 69 или 6А', 'Мысалы: 69 немесе 6А');
+  static String get numberOnly => t('Только номер', 'Тек нөмір');
+  static String get floorExample => t('Например: 9 или -1', 'Мысалы: 9 немесе -1');
+  static String get max300Chars =>
+      t('Не больше 300 символов', '300 таңбадан аспауы керек');
 }

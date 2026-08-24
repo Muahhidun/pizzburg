@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import '../utils/haptics.dart';
 import '../utils/input_validation.dart';
 import '../widgets/motion.dart';
+import '../i18n/strings.dart';
 
 /// Выбор адреса из справочника города.
 ///
@@ -132,7 +133,7 @@ class AddressPickerState extends State<AddressPicker> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         FieldCard(
-          label: 'Улица',
+          label: S.street,
           controller: widget.street,
           formatters: streetInputFormatters,
           validator: validateStreet,
@@ -148,7 +149,7 @@ class AddressPickerState extends State<AddressPicker> {
 
         const SizedBox(height: Gap.sm),
         FieldCard(
-          label: 'Дом',
+          label: S.house,
           controller: widget.house,
           formatters: houseInputFormatters,
           validator: validateHouse,
@@ -167,8 +168,8 @@ class AddressPickerState extends State<AddressPicker> {
             padding: const EdgeInsets.only(top: Gap.sm, left: Gap.xs),
             child: Text(
               _requestSent
-                  ? 'Записали. Оператор проверит адрес перед доставкой'
-                  : 'Оператор проверит адрес перед доставкой',
+                  ? S.savedOperatorWillCheck
+                  : S.operatorWillCheck,
               style: TextStyle(fontSize: 11.5, color: c.warnText),
             ),
           )
@@ -179,8 +180,8 @@ class AddressPickerState extends State<AddressPicker> {
               // Пока дом не выбран, проверена только улица — обещать
               // «адрес есть» рано, это разные утверждения.
               widget.house.text.trim().isEmpty
-                  ? 'Улица есть в справочнике города'
-                  : 'Адрес есть в справочнике города',
+                  ? S.streetInDirectory
+                  : S.addressInDirectory,
               style: TextStyle(fontSize: 11.5, color: c.accent),
             ),
           )
@@ -195,7 +196,7 @@ class AddressPickerState extends State<AddressPicker> {
                   vertical: Gap.xs,
                 ),
                 child: Text(
-                  'Моего адреса нет в списке',
+                  S.myAddressNotListed,
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
