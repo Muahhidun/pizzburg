@@ -11,6 +11,8 @@ import 'package:pizzburg/state/cart.dart';
 import 'package:pizzburg/state/favorites.dart';
 import 'package:pizzburg/utils/input_validation.dart';
 import 'package:pizzburg/widgets/glass_nav_bar.dart';
+import 'package:pizzburg/i18n/lang.dart';
+import 'package:pizzburg/i18n/strings.dart';
 
 void main() {
   test('formatTenge разделяет разряды', () {
@@ -568,6 +570,60 @@ void main() {
       await gesture.up();
       await tester.pumpAndSettle();
       expect(picked, isNull, reason: 'крайняя левая вкладка и так выбрана');
+    });
+  });
+
+  group('язык', () {
+    tearDown(() => L.current = AppLang.ru);
+
+    test('казахский показывается там, где он заполнен', () {
+      final p = Product.fromJson({
+        'id': '1',
+        'name': 'Крылышки - 6шт',
+        'nameKk': 'Қанаттар - 6 дана',
+        'description': 'Куриные крылья, фирменный маринад',
+        'descriptionKk': 'Тауық қанаттары, фирмалық маринад',
+        'price': 2990,
+        'modifierGroups': const [],
+      });
+      expect(p.name, 'Крылышки - 6шт');
+      L.current = AppLang.kk;
+      expect(p.name, 'Қанаттар - 6 дана');
+      expect(p.description, 'Тауық қанаттары, фирмалық маринад');
+    });
+
+    test('пустой перевод не оставляет дырку в каталоге', () {
+      // Перевод меню наполняется по одной позиции: непереведённое блюдо
+      // должно остаться блюдом, а не пустой строкой (DECISIONS §12.30).
+      final p = Product.fromJson({
+        'id': '2',
+        'name': 'Маргарита',
+        'nameKk': null,
+        'description': 'Томатный соус, моцарелла',
+        'descriptionKk': '   ',
+        'price': 2550,
+        'modifierGroups': const [],
+      });
+      L.current = AppLang.kk;
+      expect(p.name, 'Маргарита');
+      expect(p.description, 'Томатный соус, моцарелла');
+    });
+
+    test('интерфейс переключается вместе с меню', () {
+      expect(S.tabCart, 'Корзина');
+      L.current = AppLang.kk;
+      expect(S.tabCart, 'Себет');
+      expect(S.positions(2), 'позиция'); // в казахском форма одна
+    });
+
+    test('предупреждение о задержке приходит на языке приложения', () {
+      final a = Availability.fromJson({
+        'rushNotice': 'Сейчас много заказов',
+        'rushNoticeKk': 'Қазір тапсырыс көп',
+      });
+      expect(a.rushNotice, 'Сейчас много заказов');
+      L.current = AppLang.kk;
+      expect(a.rushNotice, 'Қазір тапсырыс көп');
     });
   });
 }
