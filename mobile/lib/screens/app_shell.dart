@@ -11,6 +11,7 @@ import 'favorites_screen.dart';
 import 'menu_screen.dart';
 import 'orders_screen.dart';
 import 'profile_screen.dart';
+import '../i18n/strings.dart';
 
 /// Оболочка с таб-баром: Меню / Избранное / Корзина / Заказы / Профиль.
 ///
@@ -77,20 +78,22 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     controller.animateTo(0, duration: Motion.page, curve: Motion.enter);
   }
 
-  static const _tabs = [
-    NavItem(icon: Icons.grid_view_rounded, label: 'Меню'),
+  /// Не const: подписи вкладок зависят от выбранного языка, и при
+  /// переключении список должен собраться заново.
+  static List<NavItem> get _tabs => [
+    NavItem(icon: Icons.grid_view_rounded, label: S.tabMenu),
     NavItem(
       icon: Icons.favorite_border,
       activeIcon: Icons.favorite,
-      label: 'Избранное',
+      label: S.tabFavorites,
     ),
     NavItem(
       icon: Icons.shopping_bag_outlined,
       activeIcon: Icons.shopping_bag,
-      label: 'Корзина',
+      label: S.tabCart,
     ),
-    NavItem(icon: Icons.receipt_long_outlined, label: 'Заказы'),
-    NavItem(icon: Icons.person_outline, label: 'Профиль'),
+    NavItem(icon: Icons.receipt_long_outlined, label: S.tabOrders),
+    NavItem(icon: Icons.person_outline, label: S.tabProfile),
   ];
 
   /// Повторный тап по своей вкладке не переключает экран, а возвращает его
@@ -193,14 +196,14 @@ class EmptyCart extends StatelessWidget {
             ),
             const SizedBox(height: Gap.block),
             Text(
-              'Пока пусто',
+              S.cartEmpty,
               style: Theme.of(
                 context,
               ).textTheme.titleLarge?.copyWith(fontSize: 20),
             ),
             const SizedBox(height: Gap.sm),
             Text(
-              'Можно повторить прошлый заказ — это быстрее всего',
+              S.cartEmptyHint,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall,
             ),
@@ -221,7 +224,7 @@ class EmptyCart extends StatelessWidget {
                   borderRadius: R.pill,
                 ),
                 child: Text(
-                  'Открыть меню',
+                  S.openMenu,
                   style: TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w600,

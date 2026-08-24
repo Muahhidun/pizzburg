@@ -10,6 +10,7 @@ import '../theme/tokens.dart';
 import '../utils/haptics.dart';
 import '../widgets/favorite_heart.dart';
 import '../widgets/motion.dart';
+import '../i18n/strings.dart';
 
 /// Карточка товара по прототипу «Сигнал».
 ///
@@ -79,9 +80,7 @@ class _ProductScreenState extends State<ProductScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Не удалось сохранить — попробуйте ещё раз'),
-        ),
+        SnackBar(content: Text(S.saveFailed)),
       );
     }
   }
@@ -242,7 +241,7 @@ class _ProductScreenState extends State<ProductScreen> {
                             borderRadius: R.pill,
                           ),
                           child: Text(
-                            'В корзину',
+                            S.addToCart,
                             style: TextStyle(
                               fontSize: 14.5,
                               fontWeight: FontWeight.w600,
@@ -321,15 +320,14 @@ class _StopListBlock extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Сегодня закончилась',
+                S.outToday,
                 style: Theme.of(
                   context,
                 ).textTheme.titleLarge?.copyWith(fontSize: 17),
               ),
               const SizedBox(height: Gap.sm),
               Text(
-                'Вернём в меню, когда привезут продукты. '
-                'Можем написать, как только появится.',
+                S.outTodayHint,
                 style: TextStyle(fontSize: 13.5, height: 1.5, color: c.muted),
               ),
               const SizedBox(height: Gap.lg),
@@ -337,9 +335,7 @@ class _StopListBlock extends StatelessWidget {
                 onTap: () {
                   Haptics.tap();
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Напишем, когда блюдо вернётся в меню'),
-                    ),
+                    SnackBar(content: Text(S.willNotifyWhenBack)),
                   );
                 },
                 child: Container(
@@ -348,7 +344,7 @@ class _StopListBlock extends StatelessWidget {
                   alignment: Alignment.center,
                   decoration: BoxDecoration(color: c.panel, borderRadius: R.pill),
                   child: Text(
-                    'Сообщить о поступлении',
+                    S.notifyMe,
                     style: TextStyle(
                       fontSize: 14.5,
                       fontWeight: FontWeight.w600,
@@ -362,9 +358,9 @@ class _StopListBlock extends StatelessWidget {
         ),
         if (alternatives.isNotEmpty) ...[
           const SizedBox(height: Gap.blockWide),
-          const Text(
-            'Похожее в наличии',
-            style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
+          Text(
+            S.similarAvailable,
+            style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: Gap.md),
           Row(

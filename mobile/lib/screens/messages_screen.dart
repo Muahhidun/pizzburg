@@ -6,6 +6,7 @@ import '../api/models.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../widgets/motion.dart';
+import '../i18n/strings.dart';
 
 /// Лента сообщений: акции, новости, объявления заведения.
 ///
@@ -89,7 +90,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
                   ),
                   const SizedBox(width: Gap.md),
                   Text(
-                    'Сообщения',
+                    S.messages,
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                 ],
@@ -99,18 +100,18 @@ class _MessagesScreenState extends State<MessagesScreen> {
               child: _error != null
                   ? _Message(
                       icon: Icons.wifi_off,
-                      title: 'Не удалось загрузить',
+                      title: S.loadFailed,
                       text: _error!,
-                      action: 'Повторить',
+                      action: S.repeatAction,
                       onAction: _load,
                     )
                   : items == null
                   ? const Center(child: CircularProgressIndicator())
                   : items.isEmpty
-                  ? const _Message(
+                  ? _Message(
                       icon: Icons.notifications_none,
-                      title: 'Пока тихо',
-                      text: 'Акции и новости заведения появятся здесь',
+                      title: S.quietHere,
+                      text: S.quietHereHint,
                     )
                   : RefreshIndicator(
                       onRefresh: _load,
@@ -143,11 +144,6 @@ class _MessageCard extends StatelessWidget {
 
   const _MessageCard({required this.message});
 
-  static const _months = [
-    'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-    'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
-  ];
-
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
@@ -175,7 +171,7 @@ class _MessageCard extends StatelessWidget {
             const SizedBox(height: Gap.md),
           ],
           Text(
-            '${d.day} ${_months[d.month - 1]}',
+            '${d.day} ${S.monthsFull[d.month - 1]}',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: Gap.xs),

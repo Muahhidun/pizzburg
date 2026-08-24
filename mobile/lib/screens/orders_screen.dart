@@ -9,6 +9,7 @@ import '../theme/tokens.dart';
 import '../utils/haptics.dart';
 import '../widgets/motion.dart';
 import 'order_screen.dart';
+import '../i18n/strings.dart';
 
 /// Экран «Заказы»: активный заказ крупно, ниже история с повтором.
 ///
@@ -22,14 +23,14 @@ class OrdersScreen extends StatefulWidget {
 }
 
 class _OrdersScreenState extends State<OrdersScreen> {
-  static const _stageLabels = {
-    'NEW': 'Ждём подтверждения',
-    'ACCEPTED': 'Готовим ваш заказ',
-    'COOKING': 'Готовим ваш заказ',
-    'READY': 'Готов',
-    'ON_WAY': 'Курьер в пути',
-    'DELIVERED': 'Заказ доставлен',
-    'CANCELLED': 'Отменён',
+  static Map<String, String> get _stageLabels => {
+    'NEW': S.statusNew,
+    'ACCEPTED': S.statusCooking,
+    'COOKING': S.statusCooking,
+    'READY': S.statusReady,
+    'ON_WAY': S.statusOnWay,
+    'DELIVERED': S.statusDelivered,
+    'CANCELLED': S.statusCancelled,
   };
 
   static const _active = {'NEW', 'ACCEPTED', 'COOKING', 'READY', 'ON_WAY'};
@@ -58,7 +59,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
       if (added == 0) {
         await Haptics.warning();
         messenger.showSnackBar(
-          const SnackBar(content: Text('Из того заказа сегодня ничего нет')),
+          SnackBar(content: Text(S.nothingFromThatOrder)),
         );
         return;
       }
@@ -67,8 +68,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
         SnackBar(
           content: Text(
             result.unavailable.isEmpty
-                ? 'Заказ перенесён в корзину'
-                : 'Не перенеслось: ${result.unavailable.map((u) => u.name).join(', ')}',
+                ? S.orderMovedToCart
+                : S.notMoved(
+                    result.unavailable.map((u) => u.name).join(', '),
+                  ),
           ),
         ),
       );
@@ -120,17 +123,17 @@ class _OrdersScreenState extends State<OrdersScreen> {
               Gap.navBarSpace(context),
             ),
             children: [
-              Text('Заказы', style: Theme.of(context).textTheme.headlineMedium),
+              Text(S.orders, style: Theme.of(context).textTheme.headlineMedium),
               const SizedBox(height: Gap.block),
 
               if (!auth.isAuthenticated)
                 Text(
-                  'Войдите, чтобы видеть свои заказы',
+                  S.signInToSeeOrders,
                   style: Theme.of(context).textTheme.bodySmall,
                 )
               else if (orders.isEmpty)
                 Text(
-                  'Заказов ещё не было',
+                  S.noOrdersYet,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
 
@@ -195,7 +198,7 @@ class _ActiveCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Активный · № ${order['number']}',
+              S.activeOrder('${order['number']}'),
               style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w500,
@@ -213,7 +216,7 @@ class _ActiveCard extends StatelessWidget {
             ),
             const SizedBox(height: Gap.sm),
             Text(
-              '$positions ${_positions(positions)} · ${formatTenge((order['total'] as num?)?.toInt() ?? 0)}',
+              '$positions ${S.positions(positions)} · ${formatTenge((order['total'] as num?)?.toInt() ?? 0)}',
               style: TextStyle(
                 fontSize: 13,
                 color: c.surface.withValues(alpha: 0.7),
@@ -225,13 +228,6 @@ class _ActiveCard extends StatelessWidget {
     );
   }
 
-  static String _positions(int n) {
-    if (n % 10 == 1 && n % 100 != 11) return 'позиция';
-    if ([2, 3, 4].contains(n % 10) && !(n % 100 >= 12 && n % 100 <= 14)) {
-      return 'позиции';
-    }
-    return 'позиций';
-  }
 }
 
 class _HistoryRow extends StatelessWidget {
@@ -290,7 +286,7 @@ class _HistoryRow extends StatelessWidget {
                     builder: (_) {
                       final cancelled = order['status'] == 'CANCELLED';
                       return Text(
-                        cancelled ? 'Отменён' : 'Завершён',
+                        cancelled ? S.statusCancelled : S.finished,
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -325,7 +321,7 @@ class _HistoryRow extends StatelessWidget {
                       borderRadius: R.pill,
                     ),
                     child: Text(
-                      'Повтор',
+                      S.repeat,
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -345,10 +341,6 @@ class _HistoryRow extends StatelessWidget {
   static String _date(dynamic value) {
     final date = DateTime.tryParse(value?.toString() ?? '')?.toLocal();
     if (date == null) return '';
-    const months = [
-      'янв', 'фев', 'мар', 'апр', 'мая', 'июн',
-      'июл', 'авг', 'сен', 'окт', 'ноя', 'дек',
-    ];
-    return '${date.day} ${months[date.month - 1]}';
+    return '${date.day} ${S.months[date.month - 1]}';
   }
 }

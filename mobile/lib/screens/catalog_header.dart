@@ -4,6 +4,7 @@ import '../api/models.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../widgets/motion.dart';
+import '../i18n/strings.dart';
 
 /// Акцентный хедер каталога: куда везём, за сколько, и блок повтора.
 ///
@@ -88,7 +89,7 @@ class CatalogHeader extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          mode == 'PICKUP' ? 'Заберёте из' : 'Доставим на',
+                          mode == 'PICKUP' ? S.pickupFrom : S.deliveryTo,
                           style: TextStyle(
                             fontSize: 13,
                             height: 1.35,
@@ -149,7 +150,7 @@ class CatalogHeader extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          mode == 'PICKUP' ? 'самовывоз' : 'доставка',
+                          mode == 'PICKUP' ? S.pickupLower : S.deliveryLower,
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
@@ -191,8 +192,8 @@ class CatalogHeader extends StatelessWidget {
                   children: [
                     Text(
                       availability.isOpenNow
-                          ? 'Доставка закрыта'
-                          : 'Сейчас закрыто',
+                          ? S.deliveryClosed
+                          : S.closedNow,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontSize: 16.5,
                         color: c.surface,
@@ -218,7 +219,7 @@ class CatalogHeader extends StatelessWidget {
             if (activeOrderBlock != null) ...[
               const SizedBox(height: 20),
               Text(
-                'Ваш заказ',
+                S.yourOrder,
                 style: Theme.of(
                   context,
                 ).textTheme.displaySmall?.copyWith(color: c.surface),
@@ -228,7 +229,7 @@ class CatalogHeader extends StatelessWidget {
             ] else if (reviewBlock != null) ...[
               const SizedBox(height: 20),
               Text(
-                'Как всё прошло?',
+                S.howWasIt,
                 style: Theme.of(
                   context,
                 ).textTheme.displaySmall?.copyWith(color: c.surface),
@@ -238,7 +239,7 @@ class CatalogHeader extends StatelessWidget {
             ] else if (repeatBlock != null) ...[
               const SizedBox(height: 20),
               Text(
-                'Тот же заказ?',
+                S.sameOrderAgain,
                 style: Theme.of(
                   context,
                 ).textTheme.displaySmall?.copyWith(color: c.surface),
@@ -423,14 +424,14 @@ class CatalogError extends StatelessWidget {
             ),
             const SizedBox(height: Gap.block),
             Text(
-              'Меню не загрузилось',
+              S.menuFailed,
               style: Theme.of(
                 context,
               ).textTheme.titleLarge?.copyWith(fontSize: 21),
             ),
             const SizedBox(height: Gap.sm),
             Text(
-              'Не получается связаться с сервером. Проверьте интернет — корзина сохранена.',
+              S.noServerHint,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall,
             ),
@@ -447,7 +448,7 @@ class CatalogError extends StatelessWidget {
                   borderRadius: R.pill,
                 ),
                 child: Text(
-                  'Повторить',
+                  S.repeatAction,
                   style: TextStyle(
                     fontSize: 14.5,
                     fontWeight: FontWeight.w600,
@@ -458,7 +459,7 @@ class CatalogError extends StatelessWidget {
             ),
             const SizedBox(height: Gap.md),
             Text(
-              'Попытка $attempt · $message',
+              S.attemptLine(attempt, message),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,

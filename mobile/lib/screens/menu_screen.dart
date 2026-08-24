@@ -21,6 +21,7 @@ import 'order_screen.dart';
 import 'review_screen.dart';
 import 'add_address_screen.dart';
 import 'product_screen.dart';
+import '../i18n/strings.dart';
 
 /// Каталог — главный экран.
 ///
@@ -59,12 +60,12 @@ class _CatalogData {
 
 const _activeStatuses = {'NEW', 'ACCEPTED', 'COOKING', 'READY', 'ON_WAY'};
 
-const _stageLabels = {
-  'NEW': 'Отправлен на кухню',
-  'ACCEPTED': 'Принят кухней',
-  'COOKING': 'Готовим ваш заказ',
-  'READY': 'Готов',
-  'ON_WAY': 'Курьер в пути',
+Map<String, String> get _stageLabels => {
+  'NEW': S.stageSentToKitchen,
+  'ACCEPTED': S.stageAccepted,
+  'COOKING': S.statusCooking,
+  'READY': S.statusReady,
+  'ON_WAY': S.statusOnWay,
 };
 
 sealed class _Row {
@@ -514,18 +515,18 @@ class _MenuScreenState extends State<MenuScreen> {
   /// «сказать нечего» — тогда значок не рисуем вовсе, а не занимаем место
   /// повтором того, что уже видно.
   String _eta(Availability a) {
-    if (!a.isOpenNow) return 'закрыто';
-    if (_mode == 'DELIVERY' && !a.deliveryAvailable) return 'только самовывоз';
+    if (!a.isOpenNow) return S.closedShort;
+    if (_mode == 'DELIVERY' && !a.deliveryAvailable) return S.pickupOnlyShort;
     final hours = a.todayHours;
     if (hours.isNotEmpty && hours.first.length == 2) {
-      return 'до ${hours.first[1]}';
+      return S.until(hours.first[1]);
     }
     return '';
   }
 
   String _addressLabel(_CatalogData data) {
     if (_mode == 'PICKUP') return 'Ауэзова 47б, MaxiMall';
-    if (data.addresses.isEmpty) return 'Укажите адрес';
+    if (data.addresses.isEmpty) return S.specifyAddress;
     final chosen = data.addresses.firstWhere(
       (a) => a.id == _selectedAddressId,
       orElse: () => data.addresses.first,
@@ -951,9 +952,7 @@ class _MenuScreenState extends State<MenuScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Не удалось сохранить — попробуйте ещё раз'),
-        ),
+        SnackBar(content: Text(S.saveFailed)),
       );
     }
   }
@@ -1009,7 +1008,7 @@ class _ActiveOrderCard extends StatelessWidget {
                 children: [
                   Text(
                     needsAnswer
-                        ? 'Нужен ваш ответ'
+                        ? S.needYourAnswer
                         : (_stageLabels[status] ?? status),
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: needsAnswer ? c.accent : null,
@@ -1061,7 +1060,7 @@ class _AddressSheet extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Куда доставить',
+            S.whereToDeliver,
             style: Theme.of(
               context,
             ).textTheme.titleLarge?.copyWith(fontSize: 21),
@@ -1086,7 +1085,7 @@ class _AddressSheet extends StatelessWidget {
                   child: Text(
                     [
                       '${a.street}, ${a.house}',
-                      if (a.flat.isNotEmpty) 'кв. ${a.flat}',
+                      if (a.flat.isNotEmpty) S.flat(a.flat),
                     ].join(' · '),
                     style: TextStyle(
                       fontSize: 13.5,
@@ -1109,7 +1108,7 @@ class _AddressSheet extends StatelessWidget {
                 border: Border.all(color: c.line),
               ),
               child: Text(
-                '+ Добавить новый адрес',
+                S.addNewAddress,
                 style: TextStyle(
                   fontSize: 13.5,
                   fontWeight: FontWeight.w600,
@@ -1151,12 +1150,12 @@ class _ReviewPrompt extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'Оцените прошлый заказ',
+                    S.rateLastOrder,
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Пара нажатий — и мы будем знать, что чинить',
+                    S.rateLastOrderHint,
                     style: Theme.of(context).textTheme.labelMedium,
                   ),
                 ],

@@ -5,6 +5,7 @@ import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../utils/haptics.dart';
 import '../widgets/motion.dart';
+import '../i18n/strings.dart';
 
 /// Анкета о заказе (DECISIONS §12.23).
 ///
@@ -126,7 +127,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
                 ),
                 Expanded(
                   child: Text(
-                    _done ? 'Спасибо' : 'Как всё прошло?',
+                    _done ? S.thanks : S.howWasIt,
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                 ),
@@ -135,8 +136,8 @@ class _ReviewScreenState extends State<ReviewScreen> {
             const SizedBox(height: Gap.sm),
             Text(
               _done
-                  ? 'Мы прочитаем и разберёмся, если что-то пошло не так.'
-                  : 'Заказ № ${widget.orderNumber}. Отвечать на всё не обязательно.',
+                  ? S.willReadAndFix
+                  : S.reviewIntro(widget.orderNumber),
               style: Theme.of(context).textTheme.labelMedium,
             ),
 
@@ -190,7 +191,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
                 maxLines: 3,
                 maxLength: 1000,
                 decoration: InputDecoration(
-                  hintText: 'Хотите добавить словами?',
+                  hintText: S.addWords,
                   counterText: '',
                   filled: true,
                   fillColor: c.fillSoft,
@@ -213,7 +214,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
                     borderRadius: R.pill,
                   ),
                   child: Text(
-                    _sending ? 'Отправляем…' : 'Отправить',
+                    _sending ? S.sending : S.send,
                     style: TextStyle(
                       fontSize: 14.5,
                       fontWeight: FontWeight.w700,

@@ -8,6 +8,7 @@ import '../theme/tokens.dart';
 import '../utils/haptics.dart';
 import '../utils/input_validation.dart';
 import '../widgets/motion.dart';
+import '../i18n/strings.dart';
 
 /// Вход по телефону.
 ///
@@ -46,7 +47,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _send() async {
     if (_digits.length < 11) {
-      setState(() => _error = 'Введите номер полностью');
+      setState(() => _error = S.enterFullPhone);
       return;
     }
     setState(() {
@@ -75,7 +76,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _verify() async {
     if (_code.text.trim().length < 4) {
-      setState(() => _error = 'Введите код из смс');
+      setState(() => _error = S.enterSmsCode);
       return;
     }
     setState(() {
@@ -102,7 +103,7 @@ class _LoginScreenState extends State<LoginScreen> {
   String _message(Object e) {
     final text = e.toString().replaceFirst('Exception: ', '');
     return text.isEmpty || text.length > 120
-        ? 'Не получилось. Попробуйте ещё раз'
+        ? S.tryAgainShort
         : text;
   }
 
@@ -114,7 +115,7 @@ class _LoginScreenState extends State<LoginScreen> {
       appBar: AppBar(
         backgroundColor: c.page,
         elevation: 0,
-        title: const Text('Вход'),
+        title: Text(S.signIn),
       ),
       body: SafeArea(
         child: Padding(
@@ -123,14 +124,14 @@ class _LoginScreenState extends State<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                _codeSent ? 'Код из смс' : 'Ваш номер',
+                _codeSent ? S.smsCodeTitle : S.yourPhone,
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
               const SizedBox(height: Gap.sm),
               Text(
                 _codeSent
-                    ? 'Отправили на ${_phone.text}'
-                    : 'Пришлём код в смс — он заменяет пароль',
+                    ? S.sentTo(_phone.text)
+                    : S.smsInsteadOfPassword,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: Gap.block),
@@ -147,7 +148,7 @@ class _LoginScreenState extends State<LoginScreen> {
               else
                 _Field(
                   controller: _code,
-                  hint: 'Код',
+                  hint: S.codeHint,
                   keyboard: TextInputType.number,
                   formatters: [
                     FilteringTextInputFormatter.digitsOnly,
@@ -166,8 +167,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     borderRadius: R.field,
                   ),
                   child: Text(
-                    'Тестовый режим: код $_devCode. '
-                    'Когда подключим смс, он придёт сообщением.',
+                    S.testModeCode(_devCode!),
                     style: TextStyle(fontSize: 12.5, height: 1.4, color: c.accent),
                   ),
                 ),
@@ -194,8 +194,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   child: Text(
                     _busy
-                        ? 'Подождите…'
-                        : (_codeSent ? 'Войти' : 'Получить код'),
+                        ? S.pleaseWait
+                        : (_codeSent ? S.signInAction : S.getCode),
                     style: TextStyle(
                       fontSize: 14.5,
                       fontWeight: FontWeight.w600,
@@ -218,7 +218,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: Gap.sm),
                     child: Text(
-                      'Изменить номер',
+                      S.changePhone,
                       style: TextStyle(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w600,

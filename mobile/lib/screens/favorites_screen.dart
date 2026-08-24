@@ -11,6 +11,7 @@ import '../utils/haptics.dart';
 import '../widgets/motion.dart';
 import 'catalog_parts.dart';
 import 'product_screen.dart';
+import '../i18n/strings.dart';
 
 /// Избранное.
 ///
@@ -108,34 +109,32 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                 Gap.sm,
               ),
               child: Text(
-                'Избранное',
+                S.favorites,
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
             ),
             Expanded(
               child: !authed
                   ? _FavoritesEmpty(
-                      title: 'Войдите, чтобы сохранять',
-                      text: 'Избранное привязано к номеру телефона — '
-                          'оно останется с вами на любом устройстве',
-                      action: 'Открыть меню',
+                      title: S.signInToSave,
+                      text: S.favoritesTiedToPhone,
+                      action: S.openMenu,
                       onAction: widget.onOpenMenu,
                     )
                   : _error != null
                       ? _FavoritesEmpty(
-                          title: 'Не удалось загрузить',
+                          title: S.loadFailed,
                           text: _error!,
-                          action: 'Повторить',
+                          action: S.repeatAction,
                           onAction: _load,
                         )
                       : items == null
                           ? const Center(child: CircularProgressIndicator())
                           : items.isEmpty
                               ? _FavoritesEmpty(
-                                  title: 'Пока пусто',
-                                  text: 'Нажмите на сердечко у блюда в меню — '
-                                      'оно окажется здесь',
-                                  action: 'Открыть меню',
+                                  title: S.nothingYet,
+                                  text: S.tapHeartHint,
+                                  action: S.openMenu,
                                   onAction: widget.onOpenMenu,
                                 )
                               : _list(items),

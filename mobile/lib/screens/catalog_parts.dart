@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../widgets/favorite_heart.dart';
 import '../widgets/motion.dart';
+import '../i18n/strings.dart';
 
 /// Части экрана каталога, вынесенные из `menu_screen.dart`, чтобы сам
 /// экран остался читаемым: там логика якорей и загрузки, здесь — верстка.
@@ -40,7 +41,7 @@ class ModeSwitch extends StatelessWidget {
       children: [
         Expanded(
           child: _Half(
-            label: 'Доставка',
+            label: S.delivery,
             active: mode == 'DELIVERY',
             disabled: !deliveryAvailable,
             onDark: onDark,
@@ -50,7 +51,7 @@ class ModeSwitch extends StatelessWidget {
         const SizedBox(width: 7),
         Expanded(
           child: _Half(
-            label: 'Самовывоз',
+            label: S.pickup,
             active: mode == 'PICKUP',
             onDark: onDark,
             onTap: () => onChanged('PICKUP'),
@@ -370,7 +371,7 @@ class ProductCard extends StatelessWidget {
                       const SizedBox(height: 3),
                       Expanded(
                         child: Text(
-                          inStopList ? 'Временно недоступно' : subtitle,
+                          inStopList ? S.temporarilyUnavailable : subtitle,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.labelMedium,
@@ -480,7 +481,7 @@ class ProductHero extends StatelessWidget {
                           borderRadius: R.pill,
                         ),
                         child: Text(
-                          'хит',
+                          S.hit,
                           style: TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w600,
@@ -520,7 +521,7 @@ class ProductHero extends StatelessWidget {
                             ),
                             const SizedBox(height: 3),
                             Text(
-                              inStopList ? 'Временно недоступно' : subtitle,
+                              inStopList ? S.temporarilyUnavailable : subtitle,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.labelMedium,
@@ -588,7 +589,7 @@ class _AddControl extends StatelessWidget {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(color: c.fillSoft, borderRadius: R.pill),
-        child: Text('нет', style: TextStyle(fontSize: 13, color: c.muted)),
+        child: Text(S.none, style: TextStyle(fontSize: 13, color: c.muted)),
       );
     }
     if (inCart > 0) {
@@ -701,7 +702,7 @@ class ProductRow extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      inStopList ? 'Временно недоступно' : subtitle,
+                      inStopList ? S.temporarilyUnavailable : subtitle,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.labelMedium,
@@ -730,7 +731,7 @@ class ProductRow extends StatelessWidget {
                         borderRadius: R.pill,
                       ),
                       child: Text(
-                        'нет',
+                        S.none,
                         style: TextStyle(fontSize: 13, color: c.muted),
                       ),
                     )
@@ -914,7 +915,7 @@ class FloatingCart extends StatelessWidget {
                     borderRadius: R.pill,
                   ),
                   child: Text(
-                    'Корзина · $count',
+                    S.cartWithCount(count),
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -964,7 +965,7 @@ class MenuSearch extends StatelessWidget {
               onChanged: onChanged,
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
-                hintText: 'Найти блюдо',
+                hintText: S.findDish,
                 hintStyle: TextStyle(fontSize: 14.5, color: c.muted),
                 border: InputBorder.none,
                 isDense: true,
@@ -1012,14 +1013,14 @@ class SearchEmpty extends StatelessWidget {
           ),
           const SizedBox(height: Gap.block),
           Text(
-            'Ничего не нашли',
+            S.nothingFound,
             style: Theme.of(
               context,
             ).textTheme.titleLarge?.copyWith(fontSize: 20),
           ),
           const SizedBox(height: Gap.sm),
           Text(
-            'По запросу «$query» блюд нет. Проверьте написание или посмотрите меню целиком.',
+            S.noDishesFor(query),
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodySmall,
           ),
@@ -1030,7 +1031,7 @@ class SearchEmpty extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
               decoration: BoxDecoration(color: c.accent, borderRadius: R.pill),
               child: Text(
-                'Показать всё меню',
+                S.showWholeMenu,
                 style: TextStyle(
                   fontSize: 13.5,
                   fontWeight: FontWeight.w600,
