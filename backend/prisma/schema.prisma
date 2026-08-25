@@ -470,7 +470,8 @@ model LegalDocument {
   type        LegalDocumentType
   version     Int
   title       String
-  /// Markdown; приложение и сайт рендерят как есть
+  /// Обычный текст: приложение показывает его как есть, без разметки.
+  /// Markdown сюда класть нельзя — решётки и звёздочки видит клиент.
   content     String
   isCurrent   Boolean           @default(false)
   publishedAt DateTime          @default(now())
