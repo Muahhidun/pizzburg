@@ -6,6 +6,10 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<!-- Своей криптографии нет, только HTTPS: без этого ключа каждая
+	     загрузка сборки останавливается вопросом об экспорте. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>CFBundleDisplayName</key>
 	<string>PizzBurg</string>
 	<key>CFBundleExecutable</key>

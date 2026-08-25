@@ -4,6 +4,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { randomInt } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
@@ -176,5 +177,75 @@ export class AuthService {
         pointsBalance: customer.pointsBalance,
       },
     };
+  }
+
+  /**
+   * Удаление аккаунта по требованию клиента (DECISIONS §12.33).
+   *
+   * Строку клиента не удаляем, а обезличиваем: на неё ссылаются заказы,
+   * а они нужны кассе, отчётности и налоговой. Удалить их значило бы
+   * стереть выручку заведения вместе с профилем человека.
+   *
+   * Из заказов вычищаем то, что относится к человеку, — адрес и
+   * комментарий курьеру. Суммы, состав и время остаются: это операции
+   * заведения, а не персональные данные.
+   */
+  async deleteAccount(customerId: string) {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { id: true, phone: true, tenantId: true, deletedAt: true },
+    });
+    if (!customer) throw new NotFoundException('Клиент не найден');
+    if (customer.deletedAt) return { deleted: true };
+
+    // Пока заказ в работе, удалять нельзя: курьер везёт по адресу,
+    // который мы собираемся стереть, а кассир не сможет позвонить.
+    const active = await this.prisma.order.count({
+      where: {
+        customerId,
+        status: { in: ['NEW', 'ACCEPTED', 'COOKING', 'READY', 'ON_WAY'] },
+      },
+    });
+    if (active > 0) {
+      throw new BadRequestException(
+        'Сначала дождитесь доставки текущего заказа или отмените его',
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.pushDevice.deleteMany({ where: { customerId } });
+      await tx.favorite.deleteMany({ where: { customerId } });
+      await tx.customerAddress.deleteMany({ where: { customerId } });
+      await tx.addressRequest.deleteMany({ where: { customerId } });
+      await tx.appEvent.deleteMany({ where: { customerId } });
+      await tx.otpCode.deleteMany({ where: { phone: customer.phone } });
+
+      await tx.order.updateMany({
+        where: { customerId },
+        data: { address: Prisma.DbNull, comment: '' },
+      });
+
+      // Телефон входит в уникальный ключ, поэтому не обнуляем, а заменяем
+      // на метку: иначе второй удалённый аккаунт не сохранится, а сам
+      // номер должен освободиться для новой регистрации.
+      await tx.customer.update({
+        where: { id: customerId },
+        data: {
+          phone: `deleted:${customerId}`,
+          name: null,
+          birthday: null,
+          pointsBalance: 0,
+          lifetimeSpent: 0,
+          loyaltyLevel: 1,
+          pushToken: null,
+          legalVersions: {},
+          legalAcceptedAt: null,
+          deletedAt: new Date(),
+        },
+      });
+    });
+
+    this.logger.warn(`Клиент ${customerId} удалил аккаунт`);
+    return { deleted: true };
   }
 }

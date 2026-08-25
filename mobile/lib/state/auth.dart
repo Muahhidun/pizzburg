@@ -77,6 +77,17 @@ class AuthState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Удалить аккаунт и выйти.
+  ///
+  /// Сервер может отказать, пока есть заказ в работе, — тогда исключение
+  /// уходит наверх и экран покажет причину. Локальное состояние чистим
+  /// только после успеха, иначе человек окажется разлогинен с живым
+  /// аккаунтом и решит, что удаление прошло.
+  Future<void> deleteAccount() async {
+    await api.deleteAccount();
+    await logout();
+  }
+
   Future<void> logout() async {
     await beforeLogout?.call();
     api.token = null;

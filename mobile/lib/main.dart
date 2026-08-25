@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -27,6 +28,15 @@ final _messengerKey = GlobalKey<ScaffoldMessengerState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Сборка для магазина без адреса сервера — это мёртвое приложение с
+  // пустыми экранами. Лучше не запуститься здесь, чем пройти ревью и
+  // получить отзывы «ничего не работает».
+  if (kReleaseMode && ApiClient.looksLocal) {
+    runApp(const _MisconfiguredApp());
+    return;
+  }
+
   final api = ApiClient();
   final auth = AuthState(api);
   final push = PushNotificationsService(api);
@@ -309,5 +319,31 @@ class _LegalGateState extends State<_LegalGate> {
       });
     }
     return widget.child;
+  }
+}
+
+/// Заглушка на случай релизной сборки без `--dart-define=API_URL`.
+class _MisconfiguredApp extends StatelessWidget {
+  const _MisconfiguredApp();
+
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: Color(0xFF7F1D1D),
+        body: Center(
+          child: Padding(
+            padding: EdgeInsets.all(28),
+            child: Text(
+              'Сборка собрана без API_URL.\n'
+              'Пересоберите с --dart-define=API_URL=<адрес сервера>.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white, fontSize: 16, height: 1.5),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

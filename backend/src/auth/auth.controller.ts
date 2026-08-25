@@ -135,6 +135,18 @@ export class AuthController {
     });
   }
 
+  /**
+   * Удаление аккаунта клиентом.
+   *
+   * App Store требует, чтобы аккаунт можно было удалить из самого
+   * приложения, а не письмом в поддержку (Guideline 5.1.1(v)).
+   */
+  @Delete('account')
+  @UseGuards(CustomerAuthGuard)
+  deleteAccount(@Req() req: any) {
+    return this.auth.deleteAccount(req.customer.sub);
+  }
+
   @Delete('push-token')
   @UseGuards(CustomerAuthGuard)
   unregisterPushToken(@Req() req: any, @Body() dto: PushTokenDto) {

@@ -20,6 +20,12 @@ class ApiClient {
     defaultValue: 'pizzburg',
   );
 
+  /// Релизная сборка без `--dart-define=API_URL` смотрит в localhost и
+  /// в сторе выглядит как приложение, которое ничего не грузит. Ошибку
+  /// такого рода нельзя оставлять тихой: ловим её на старте.
+  static bool get looksLocal =>
+      baseUrl.contains('localhost') || baseUrl.contains('127.0.0.1');
+
   String? token;
 
   Map<String, String> get _headers => {
@@ -407,6 +413,16 @@ class ApiClient {
   Future<void> acceptLegal() async {
     final res = await http.post(
       Uri.parse('$baseUrl/legal/$tenant/accept'),
+      headers: _headers,
+    );
+    _ensureOk(res);
+  }
+
+  /// Удаление аккаунта. Сервер обезличивает профиль и чистит адреса,
+  /// избранное и устройства; заказы остаются у заведения без адреса.
+  Future<void> deleteAccount() async {
+    final res = await http.delete(
+      Uri.parse('$baseUrl/auth/account'),
       headers: _headers,
     );
     _ensureOk(res);

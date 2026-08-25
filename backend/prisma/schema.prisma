@@ -300,6 +300,11 @@ model Customer {
   legalVersions   Json      @default("{}")
   legalAcceptedAt DateTime?
 
+  /// Когда клиент удалил аккаунт. Строка остаётся: на неё ссылаются
+  /// заказы, которые нужны кассе и отчётности, — но персональные данные
+  /// из неё вычищены (DECISIONS §12.33).
+  deletedAt       DateTime?
+
   orders          Order[]
   loyaltyTxns     LoyaltyTransaction[]
   pushDevices     PushDevice[]

@@ -527,4 +527,20 @@ class S {
   static String get floorExample => t('Например: 9 или -1', 'Мысалы: 9 немесе -1');
   static String get max300Chars =>
       t('Не больше 300 символов', '300 таңбадан аспауы керек');
+
+  // ── Удаление аккаунта ──
+  static String get deleteAccount => t('Удалить аккаунт', 'Аккаунтты жою');
+  static String get deleteAccountTitle =>
+      t('Удалить аккаунт?', 'Аккаунтты жоямыз ба?');
+  static String get deleteAccountWhatGoes => t(
+        'Пропадут баллы, сохранённые адреса, избранное и вход по этому номеру. Восстановить нельзя.',
+        'Ұпайлар, сақталған мекенжайлар, таңдаулылар және осы нөмірмен кіру жойылады. Қалпына келтіру мүмкін емес.',
+      );
+  static String get deleteAccountWhatStays => t(
+        'Заказы останутся у заведения без вашего адреса — они нужны для отчётности.',
+        'Тапсырыстар мекенжайсыз мекемеде қалады — олар есеп үшін қажет.',
+      );
+  static String get deleteAccountConfirm => t('Да, удалить', 'Иә, жою');
+  static String get deleting => t('Удаляем…', 'Жойылуда…');
+  static String get accountDeleted => t('Аккаунт удалён', 'Аккаунт жойылды');
 }
