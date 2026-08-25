@@ -33,7 +33,6 @@ class _LoginScreenState extends State<LoginScreen> {
   /// Код, который сервер вернул прямо в ответе. Так он поступает только с
   /// заранее названными тестовыми номерами и только пока не подключён
   /// SMS-шлюз: в обычном режиме поле пустое, и код приходит в смс.
-  String? _devCode;
 
   @override
   void dispose() {
@@ -55,14 +54,9 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
     try {
-      final res = await context.read<AuthState>().requestOtp(_digits);
-      final dev = res['devCode']?.toString();
+      await context.read<AuthState>().requestOtp(_digits);
       Haptics.success();
       setState(() {
-        _devCode = dev;
-        // Подставляем сразу: перебивать вручную код, который и так на
-        // экране, — бессмысленная работа на каждом тестовом заказе.
-        if (dev != null) _code.text = dev;
         _codeSent = true;
         _busy = false;
       });
@@ -157,21 +151,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   autofocus: true,
                   onSubmit: _verify,
                 ),
-
-              if (_devCode != null) ...[
-                const SizedBox(height: Gap.md),
-                Container(
-                  padding: const EdgeInsets.all(Gap.md),
-                  decoration: BoxDecoration(
-                    color: c.accentSoft,
-                    borderRadius: R.field,
-                  ),
-                  child: Text(
-                    S.testModeCode(_devCode!),
-                    style: TextStyle(fontSize: 12.5, height: 1.4, color: c.accent),
-                  ),
-                ),
-              ],
 
               if (_error != null) ...[
                 const SizedBox(height: Gap.md),

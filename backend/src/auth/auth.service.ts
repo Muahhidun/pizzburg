@@ -42,6 +42,19 @@ function testPhones(logger: Logger): Set<string> {
 }
 
 /**
+ * Постоянный код для тестовых номеров: `OTP_TEST_CODE`.
+ *
+ * Нужен ревью App Store и Google Play — проверяющий сидит не в
+ * Казахстане и SMS не получит, поэтому ему отдают пару «номер + код».
+ * Без заданного значения тестовые номера не работают вовсе: пустой
+ * код молча пускал бы кого угодно.
+ */
+function testCode(): string {
+  const raw = (process.env.OTP_TEST_CODE ?? '').trim();
+  return raw.length >= 4 ? raw : randomInt(0, 10 ** CODE_DIGITS).toString();
+}
+
+/**
  * Вход по телефону + SMS-код. Телефон — идентификатор клиента (профили
  * переживут миграцию с FoodPicasso).
  *
@@ -85,12 +98,21 @@ export class AuthService {
       );
     }
 
+    const isTestPhone = testPhones(this.logger).has(normalized);
+
+    // Тестовым номерам — постоянный код из настроек, остальным случайный.
+    //
+    // Раньше код тестового номера возвращался прямо в ответе, и защитой
+    // служил сам номер: кто его знает, тот и войдёт. Это плохая защита —
+    // номер короткий и его подбирают. Теперь для входа нужно знать и
+    // номер, и код, а код в ответ не уходит (DECISIONS §12.34).
+    //
     // randomInt, а не Math.random: код — это одноразовый пароль, и
     // предсказуемый генератор здесь равносилен отсутствию кода.
-    const code = String(randomInt(0, 10 ** CODE_DIGITS)).padStart(
-      CODE_DIGITS,
-      '0',
-    );
+    const code = isTestPhone
+      ? testCode()
+      : String(randomInt(0, 10 ** CODE_DIGITS)).padStart(CODE_DIGITS, '0');
+
     await this.prisma.otpCode.create({
       data: {
         phone: normalized,
@@ -100,11 +122,10 @@ export class AuthService {
     });
 
     // Тестовые номера обслуживаем без SMS даже при живом провайдере:
-    // проверять вход десять раз подряд за деньги незачем, а список
-    // задаётся вручную и в бою пуст.
-    if (testPhones(this.logger).has(normalized)) {
-      this.logger.warn(`OTP для тестового номера ${normalized}: ${code}`);
-      return { sent: true, devCode: code };
+    // проверять вход десять раз подряд за деньги незачем.
+    if (isTestPhone) {
+      this.logger.warn(`Вход по тестовому номеру ${normalized}`);
+      return { sent: true };
     }
 
     if (this.sms.configured) {

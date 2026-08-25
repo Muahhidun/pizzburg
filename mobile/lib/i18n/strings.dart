@@ -53,10 +53,6 @@ class S {
         'СМС-пен код жібереміз — ол құпиясөзді алмастырады',
       );
   static String get codeHint => t('Код', 'Код');
-  static String testModeCode(String code) => t(
-        'Тестовый режим: код $code. Когда подключим смс, он придёт сообщением.',
-        'Сынақ режимі: код $code. СМС қосылған соң ол хабарламамен келеді.',
-      );
   static String get pleaseWait => t('Подождите…', 'Күте тұрыңыз…');
   static String get getCode => t('Получить код', 'Код алу');
   static String get changePhone => t('Изменить номер', 'Нөмірді өзгерту');
