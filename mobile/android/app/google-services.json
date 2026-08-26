@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "174858068171",
+    "project_id": "pizzburg-delivery",
+    "storage_bucket": "pizzburg-delivery.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:174858068171:android:8fa6518d4b16bd4a43fb4e",
+        "android_client_info": {
+          "package_name": "kz.pizzburg.pizzburg"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAML5oliT_8QpYksE6i3xHVxx12WcbjLV8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
