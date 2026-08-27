@@ -24,25 +24,16 @@ import { TelegramModule } from './telegram/telegram.module';
 
 @Controller()
 class RootController {
-  /// Подсказка на корне: сюда часто заходят руками и видят 404
+  /// Корень отвечает коротко и ничего не рассказывает.
+  ///
+  /// Раньше здесь была подсказка для разработчика: список эндпоинтов,
+  /// адреса на localhost и строка «БОЕВОЙ РЕЖИМ — заказы уходят на
+  /// планшеты Poster». Пока адрес был railway-овским, это никого не
+  /// смущало; на своём домене такую страницу открывает кто угодно —
+  /// и узнаёт, чем мы пользуемся и что стоит попробовать.
   @Get()
   root() {
-    return {
-      service: 'PizzBurg Delivery API',
-      posterDispatch:
-        process.env.POSTER_DRY_RUN === '1'
-          ? 'DRY RUN — заказы НЕ уходят на планшеты'
-          : 'БОЕВОЙ РЕЖИМ — заказы уходят на планшеты Poster',
-      приложение: 'http://localhost:3212',
-      админка: 'http://localhost:3211',
-      endpoints: [
-        'GET  /health',
-        'GET  /menu/:tenantSlug',
-        'POST /cart/:tenantSlug/preview',
-        'POST /orders/:tenantSlug',
-        'POST /poster/sync/:tenantId',
-      ],
-    };
+    return { service: 'PizzBurg' };
   }
 
   @Get('health')
