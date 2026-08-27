@@ -1,0 +1,648 @@
+<title>Замена SmartPicasso</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Unbounded:wght@500;600&display=swap">
+
+<style>
+  :root {
+    --ground:  #E8EAEA;
+    --surface: #FFFFFF;
+    --sunken:  #DFE2E2;
+    --ink:     #16191A;
+    --muted:   #5B6566;
+    --faint:   #8A9394;
+    --line:    #CFD4D4;
+    --hair:    #E4E7E7;
+
+    --accent:      #0E6E62;
+    --accent-soft: #DCEDEA;
+    --done:        #1F7A4D;
+    --done-soft:   #DFEFE6;
+    --wait:        #96601A;
+    --wait-soft:   #F5E9D8;
+    --you:         #6A3FA0;
+    --you-soft:    #EAE2F5;
+
+    --display: "Unbounded", "Trebuchet MS", sans-serif;
+    --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:  #131617;
+      --surface: #1C2122;
+      --sunken:  #232829;
+      --ink:     #E7EBEB;
+      --muted:   #9AA5A6;
+      --faint:   #6E797A;
+      --line:    #2D3435;
+      --hair:    #252B2C;
+
+      --accent:      #5FC9B8;
+      --accent-soft: #16302D;
+      --done:        #62C88F;
+      --done-soft:   #16301F;
+      --wait:        #DCA65C;
+      --wait-soft:   #322614;
+      --you:         #B79BE0;
+      --you-soft:    #251E33;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:  #131617;
+    --surface: #1C2122;
+    --sunken:  #232829;
+    --ink:     #E7EBEB;
+    --muted:   #9AA5A6;
+    --faint:   #6E797A;
+    --line:    #2D3435;
+    --hair:    #252B2C;
+    --accent:      #5FC9B8;
+    --accent-soft: #16302D;
+    --done:        #62C88F;
+    --done-soft:   #16301F;
+    --wait:        #DCA65C;
+    --wait-soft:   #322614;
+    --you:         #B79BE0;
+    --you-soft:    #251E33;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 0 24px 90px; }
+
+  header { padding: 68px 0 34px; display: flex; flex-direction: column; gap: 18px; }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.09em;
+    text-transform: uppercase; color: var(--accent);
+  }
+
+  h1 {
+    font-family: var(--display); font-weight: 600;
+    font-size: clamp(30px, 5vw, 44px); line-height: 1.1;
+    letter-spacing: -0.02em; margin: 0; text-wrap: balance;
+  }
+
+  .lede { max-width: 60ch; color: var(--muted); font-size: 17px; margin: 0; }
+
+  /* ── легенда ── */
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px;
+  }
+
+  .chip {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.03em;
+    padding: 3px 10px; border-radius: 20px; white-space: nowrap;
+  }
+
+  .chip.done { background: var(--done-soft); color: var(--done); }
+  .chip.now  { background: var(--accent-soft); color: var(--accent); }
+  .chip.wait { background: var(--wait-soft); color: var(--wait); }
+  .chip.you  { background: var(--you-soft); color: var(--you); }
+  .chip.me   { background: var(--sunken); color: var(--muted); }
+
+  /* ── состояние ── */
+  .state {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 12px; padding: 24px; margin-top: 8px;
+  }
+
+  .state h2 {
+    font-family: var(--display); font-weight: 500; font-size: 19px;
+    margin: 0 0 14px; letter-spacing: -0.01em;
+  }
+
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 22px; }
+  .cols h3 { font-size: 13px; margin: 0 0 8px; color: var(--faint); font-family: var(--mono); font-weight: 400; letter-spacing: 0.05em; text-transform: uppercase; }
+  .cols ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; }
+  .cols li { font-size: 14.5px; line-height: 1.45; }
+
+  /* ── этапы ── */
+  .phase {
+    margin-top: 44px; background: var(--surface);
+    border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+  }
+
+  .phase-head {
+    padding: 22px 24px 20px;
+    border-bottom: 1px solid var(--hair);
+    display: flex; flex-direction: column; gap: 10px;
+  }
+
+  .phase-tag {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.07em;
+    text-transform: uppercase; color: var(--faint);
+  }
+
+  .phase h2 {
+    font-family: var(--display); font-weight: 600;
+    font-size: clamp(20px, 3vw, 26px); line-height: 1.18;
+    letter-spacing: -0.018em; margin: 0; text-wrap: balance;
+  }
+
+  .goal {
+    font-size: 14.5px; color: var(--muted); max-width: 66ch; margin: 0;
+  }
+
+  .goal b { color: var(--ink); font-weight: 600; }
+
+  .tasks { display: flex; flex-direction: column; }
+
+  .task {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr) auto;
+    gap: 14px; align-items: start;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--hair);
+  }
+
+  .task:last-child { border-bottom: none; }
+
+  .num {
+    font-family: var(--mono); font-size: 13px; color: var(--faint);
+    font-variant-numeric: tabular-nums; padding-top: 2px;
+  }
+
+  .task-body { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .task-title { font-size: 15.5px; font-weight: 600; line-height: 1.35; }
+  .task-note { font-size: 14px; color: var(--muted); line-height: 1.5; }
+  .task-note code { font-family: var(--mono); font-size: 13px; background: var(--sunken); padding: 1px 5px; border-radius: 4px; }
+  .marks { display: flex; flex-direction: column; gap: 5px; align-items: flex-end; }
+
+  @media (max-width: 620px) {
+    .task { grid-template-columns: 40px minmax(0, 1fr); }
+    .marks { grid-column: 2; flex-direction: row; align-items: flex-start; }
+  }
+
+  .gate {
+    background: var(--sunken); padding: 14px 24px;
+    font-size: 14px; color: var(--muted);
+    display: flex; gap: 10px; align-items: baseline;
+  }
+
+  .gate b { color: var(--ink); font-weight: 600; font-size: 13px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+
+  /* ── потом ── */
+  .later {
+    margin-top: 44px; border: 1px dashed var(--line);
+    border-radius: 14px; padding: 24px;
+  }
+
+  .later h2 { font-family: var(--display); font-weight: 500; font-size: 20px; margin: 0 0 6px; }
+  .later p { color: var(--muted); font-size: 14.5px; margin: 0 0 14px; max-width: 66ch; }
+  .later ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 7px; }
+  .later li { font-size: 14.5px; }
+
+  footer { margin-top: 44px; color: var(--faint); font-size: 13px; font-family: var(--mono); }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <span class="eyebrow">Дорожная карта · PizzBurg</span>
+    <h1>Заменить SmartPicasso своим сервисом</h1>
+    <p class="lede">
+      Цель — перевести приложения для iOS и Android и сайт на собственную
+      разработку и отключить SmartPicasso. Порядок продиктован не удобством, а
+      зависимостями: Kaspi не выдаст сертификат без публикации в сторах, а сайт
+      нельзя переносить без Kaspi — там платят онлайном семеро из десяти.
+    </p>
+    <div class="legend">
+      <span class="chip done">сделано</span>
+      <span class="chip now">в работе</span>
+      <span class="chip wait">ждём внешнего</span>
+      <span class="chip you">вы</span>
+      <span class="chip me">я</span>
+    </div>
+  </header>
+
+  <div class="state">
+    <h2>Что уже есть</h2>
+    <div class="cols">
+      <div>
+        <h3>Работает на бою</h3>
+        <ul>
+          <li>Каталог, поиск, избранное, корзина, промокоды, баллы</li>
+          <li>Оформление с адресами и предзаказом</li>
+          <li>Живой экран заказа, отмена, разбор нехватки позиции</li>
+          <li>Интеграция с Poster, два отдела</li>
+          <li>Админка: касса, заказы, витрина, стоп-листы, акции, клиенты</li>
+          <li>Телеграм-бот для кассиров и руководства</li>
+          <li>Пуши на iOS и Android, SMS-вход через Mobizon</li>
+          <li>Два языка, четыре темы, анкета качества</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Готово, но не проверено людьми</h3>
+        <ul>
+          <li>Android-сборка — запускалась только на эмуляторе</li>
+          <li>Удаление аккаунта — проверено мной, не клиентами</li>
+          <li>Казахский — переведено, не вычитано носителем</li>
+          <li>Веб-версия — собирается, но нигде не размещена</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Нет совсем</h3>
+        <ul>
+          <li>Оплата Kaspi — только заглушка в справочнике способов</li>
+          <li>Возврат денег из админки</li>
+          <li>Роли: у кассира те же права, что у владельца</li>
+          <li>Юридические документы — пустые</li>
+          <li>Сегменты в рассылках — только «всем сразу»</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ЭТАП 1 -->
+  <section class="phase">
+    <div class="phase-head">
+      <div class="phase-tag"><span>Этап 1</span><span class="chip now">в работе</span></div>
+      <h2>Опубликовать приложения в обоих сторах</h2>
+      <p class="goal">
+        Публикуем <b>без онлайн-оплаты</b> — наличные и карта курьеру. Это не
+        переезд клиентов, а выполнение условия Kaspi: сертификат выдают только
+        тем, у кого приложения уже в сторах. Клиенты остаются на SmartPicasso.
+      </p>
+    </div>
+
+    <div class="tasks">
+      <div class="task">
+        <span class="num">1.1</span>
+        <div class="task-body">
+          <span class="task-title">Домен api.pizzburg.kz</span>
+          <span class="task-note">Адрес сервера зашивается в сборку: уедет с railway-адресом — переезд потом потребует обновления приложения. В Railway домен уже заведён, ждём две записи в чужом Cloudflare.</span>
+        </div>
+        <div class="marks"><span class="chip wait">ждём SmartPicasso</span><span class="chip you">вы</span></div>
+      </div>
+
+      <div class="task">
+        <span class="num">1.2</span>
+        <div class="task-body">
+          <span class="task-title">Юридические документы</span>
+          <span class="task-note">Оферта, политика конфиденциальности, реквизиты. Без публичной ссылки на политику карточку в сторах не заполнить. Драфты написаны, нужны ваши реквизиты и сроки.</span>
+        </div>
+        <div class="marks"><span class="chip wait">нужны реквизиты</span><span class="chip you">вы</span></div>
+      </div>
+
+      <div class="task">
+        <span class="num">1.3</span>
+        <div class="task-body">
+          <span class="task-title">Подтвердить аккаунт Google Play</span>
+          <span class="task-note">Осталось два пункта: доступ к Android-устройству через приложение Play Console и контактный телефон. Нужен физический Android — эмулятор не подходит.</span>
+        </div>
+        <div class="marks"><span class="chip wait">нужен телефон</span><span class="chip you">вы</span></div>
+      </div>
+
+      <div class="task">
+        <span class="num">1.4</span>
+        <div class="task-body">
+          <span class="task-title">Android: Firebase и ключ подписи</span>
+          <span class="task-note">Конфигурация Firebase подключена, ключ создан, бандл собирается и подписывается нашим ключом.</span>
+        </div>
+        <div class="marks"><span class="chip done">сделано</span></div>
+      </div>
+
+      <div class="task">
+        <span class="num">1.5</span>
+        <div class="task-body">
+          <span class="task-title">Проверить приложение на живом Android</span>
+          <span class="task-note">На эмуляторе прошёл каталог, вход, корзину, удаление аккаунта — нашёл и починил переполнение вёрстки. Осталось оформление, экран заказа, отмена, анкета. И проверка на настоящем телефоне.</span>
+        </div>
+        <div class="marks"><span class="chip now">частично</span><span class="chip me">я</span></div>
+      </div>
+
+      <div class="task">
+        <span class="num">1.6</span>
+        <div class="task-body">
+          <span class="task-title">Материалы карточек</span>
+          <span class="task-note">Скриншоты, описания, возрастной рейтинг, анкета Data Safety, доступ для проверяющих. Черновики за мной, проверка за вами.</span>
+        </div>
+        <div class="marks"><span class="chip me">я</span></div>
+      </div>
+
+      <div class="task">
+        <span class="num">1.7</span>
+        <div class="task-body">
+          <span class="task-title">Отправить iOS в ревью</span>
+          <span class="task-note">Блокеры сняты: удаление аккаунта, экспортное шифрование, только iPhone, защита от сборки без адреса сервера. Ждёт домен и документы.</span>
+        </div>
+        <div class="marks"><span class="chip wait">после 1.1 и 1.2</span></div>
+      </div>
+
+      <div class="task">
+        <span class="num">1.8</span>
+        <div class="task-body">
+          <span class="task-title">Закрытое тестирование Android</span>
+          <span class="task-note">Личный аккаунт обязывает: 12 человек, подписанных <b>непрерывно 14 дней</b>. Отсчёт с момента, когда подпишется двенадцатый. Берите 15 — кто-то сменит телефон.</span>
+        </div>
+        <div class="marks"><span class="chip wait">14 дней жёстко</span><span class="chip you">вы</span></div>
+      </div>
+    </div>
+
+    <div class="gate"><b>Готово, когда</b><span>оба приложения опубликованы и доступны для скачивания. Ориентир — три-четыре недели, из них две ничем не сократить.</span></div>
+  </section>
+
+  <!-- ЭТАП 2 -->
+  <section class="phase">
+    <div class="phase-head">
+      <div class="phase-tag"><span>Этап 2</span></div>
+      <h2>Подключить оплату Kaspi</h2>
+      <p class="goal">
+        Самый длинный этап по внешним ожиданиям и самый важный по деньгам: онлайном
+        платят <b>44% всех заказов</b>. Часть шагов можно начать до конца первого
+        этапа — они не зависят от публикации.
+      </p>
+    </div>
+
+    <div class="tasks">
+      <div class="task">
+        <span class="num">2.1</span>
+        <div class="task-body">
+          <span class="task-title">Статические исходящие IP на Railway</span>
+          <span class="task-note">Требование схемы с усиленной безопасностью — только она даёт возврат денег без участия клиента. Включается тумблером на сервисе backend, адресов выдаётся три, все три идут в заявку.</span>
+        </div>
+        <div class="marks"><span class="chip you">вы</span></div>
+      </div>
+
+      <div class="task">
+        <span class="num">2.2</span>
+        <div class="task-body">
+          <span class="task-title">Согласовать дизайн экранов оплаты</span>
+          <span class="task-note">Макет готов, отправлен. Ждём от Kaspi официальные элементы: блок с QR, кнопку, логотипы, иконки Gold и Red+. Рисовать их самим их правила запрещают.</span>
+        </div>
+        <div class="marks"><span class="chip wait">ждём ассеты</span></div>
+      </div>
+
+      <div class="task">
+        <span class="num">2.3</span>
+        <div class="task-body">
+          <span class="task-title">Анкета партнёра и вопросы по CSR</span>
+          <span class="task-note">Анкета заполнена, нужны юридическое название, оборот, контакты. Плюс три вопроса менеджеру: поля CSR, приём трёх IP, применяется ли обязательный блок QR при оплате по ссылке.</span>
+        </div>
+        <div class="marks"><span class="chip you">вы</span></div>
+      </div>
+
+      <div class="task">
+        <span class="num">2.4</span>
+        <div class="task-body">
+          <span class="task-title">Запросить и получить сертификат</span>
+          <span class="task-note">Ключ и CSR генерируете вы у себя — этот ключ разрешает возвраты с вашего счёта, через меня он проходить не должен. Письмо уходит с адреса из договора.</span>
+        </div>
+        <div class="marks"><span class="chip wait">после публикации</span><span class="chip you">вы</span></div>
+      </div>
+
+      <div class="task">
+        <span class="num">2.5</span>
+        <div class="task-body">
+          <span class="task-title">Реализовать оплату</span>
+          <span class="task-note">Две ветки: по ссылке для телефонов, QR для сайта с компьютера. Заказ уходит на кухню только после подтверждённой оплаты — ссылка живёт меньше четырёх минут.</span>
+        </div>
+        <div class="marks"><span class="chip me">я</span></div>
+      </div>
+
+      <div class="task">
+        <span class="num">2.6</span>
+        <div class="task-body">
+          <span class="task-title">Возврат денег из админки</span>
+          <span class="task-note">Полный и частичный, как сейчас в SmartPicasso. Без него кассир теряет инструмент, который у него уже есть.</span>
+        </div>
+        <div class="marks"><span class="chip me">я</span></div>
+      </div>
+    </div>
+
+    <div class="gate"><b>Готово, когда</b><span>клиент оплачивает заказ Kaspi в приложении, а кассир может вернуть деньги из админки. С этого момента идёт месяц, на который Kaspi разрешил два приложения на одном сертификате.</span></div>
+  </section>
+
+  <!-- ЭТАП 3 -->
+  <section class="phase">
+    <div class="phase-head">
+      <div class="phase-tag"><span>Этап 3</span></div>
+      <h2>Подготовить смену кассира и клиентов</h2>
+      <p class="goal">
+        Между «оплата заработала» и «зовём людей» лежит работа, которую нельзя
+        делать в последний день. Идёт параллельно второму этапу.
+      </p>
+    </div>
+
+    <div class="tasks">
+      <div class="task">
+        <span class="num">3.1</span>
+        <div class="task-body">
+          <span class="task-title">Роли в админке</span>
+          <span class="task-note">Сейчас один токен на всех: у кассира те же права, что у владельца — цены, база клиентов, настройки. Кассиру нужны «Касса» и «Заказы» плюс стоп-листы и временное закрытие приёма, перенесённые в его вкладки.</span>
+        </div>
+        <div class="marks"><span class="chip me">я</span></div>
+      </div>
+
+      <div class="task">
+        <span class="num">3.2</span>
+        <div class="task-body">
+          <span class="task-title">Обучить кассиров</span>
+          <span class="task-note">Они переходят из SmartPicasso в нашу админку. Делать это в первый же боевой вечер — плохая идея. Нужен тихий час и несколько тренировочных заказов.</span>
+        </div>
+        <div class="marks"><span class="chip you">вы</span></div>
+      </div>
+
+      <div class="task">
+        <span class="num">3.3</span>
+        <div class="task-body">
+          <span class="task-title">Сегментные рассылки</span>
+          <span class="task-note">Чтобы позвать людей в новое приложение адресно, а не всем подряд. Данные для сегментов уже есть: заказы, суммы, уровни, даты, события в приложении.</span>
+        </div>
+        <div class="marks"><span class="chip me">я</span></div>
+      </div>
+
+      <div class="task">
+        <span class="num">3.4</span>
+        <div class="task-body">
+          <span class="task-title">Вычитать казахский</span>
+          <span class="task-note">Переведено машинально мной. Носитель должен пройтись хотя бы по каталогу и оформлению — там ошибки видит каждый клиент.</span>
+        </div>
+        <div class="marks"><span class="chip you">вы</span></div>
+      </div>
+    </div>
+
+    <div class="gate"><b>Готово, когда</b><span>кассир уверенно работает в нашей админке, а вы можете позвать выбранную группу клиентов одним нажатием.</span></div>
+  </section>
+
+  <!-- ЭТАП 4 -->
+  <section class="phase">
+    <div class="phase-head">
+      <div class="phase-tag"><span>Этап 4</span></div>
+      <h2>Перевести клиентов приложений</h2>
+      <p class="goal">
+        Оба приложения работают одновременно и оба принимают Kaspi — Kaspi разрешил
+        это <b>временно, примерно на месяц</b>. Значит переход должен быть быстрым
+        и управляемым, а не бессрочным.
+      </p>
+    </div>
+
+    <div class="tasks">
+      <div class="task">
+        <span class="num">4.1</span>
+        <div class="task-body">
+          <span class="task-title">Уточнить у Kaspi границы месяца</span>
+          <span class="task-note">С какого события считается срок и можно ли продлить. Ответ определяет, насколько плотно надо переводить людей.</span>
+        </div>
+        <div class="marks"><span class="chip you">вы</span></div>
+      </div>
+
+      <div class="task">
+        <span class="num">4.2</span>
+        <div class="task-body">
+          <span class="task-title">Позвать первую группу</span>
+          <span class="task-note">Сотрудники и постоянные клиенты. Смотрим на долю дошедших до заказа, на отказы при входе, на жалобы кассиру.</span>
+        </div>
+        <div class="marks"><span class="chip you">вы</span></div>
+      </div>
+
+      <div class="task">
+        <span class="num">4.3</span>
+        <div class="task-body">
+          <span class="task-title">Перевести остальных</span>
+          <span class="task-note">Рассылками по сегментам. Ориентир — доля заказов, приходящих в нашу систему; сравниваем с прежними 33 в день.</span>
+        </div>
+        <div class="marks"><span class="chip you">вы</span></div>
+      </div>
+    </div>
+
+    <div class="gate"><b>Готово, когда</b><span>основная часть заказов из приложений приходит к нам, а не в SmartPicasso.</span></div>
+  </section>
+
+  <!-- ЭТАП 5 -->
+  <section class="phase">
+    <div class="phase-head">
+      <div class="phase-tag"><span>Этап 5</span></div>
+      <h2>Забрать сайт</h2>
+      <p class="goal">
+        Десять заказов в день, из них семь оплачены онлайном. Поэтому сайт
+        переносится последним и только после того, как Kaspi заработает.
+      </p>
+    </div>
+
+    <div class="tasks">
+      <div class="task">
+        <span class="num">5.1</span>
+        <div class="task-body">
+          <span class="task-title">Разместить веб-версию</span>
+          <span class="task-note">Сборка есть, хостинга нет. Нужен отдельный сервис в Railway либо Cloudflare Pages.</span>
+        </div>
+        <div class="marks"><span class="chip me">я</span></div>
+      </div>
+
+      <div class="task">
+        <span class="num">5.2</span>
+        <div class="task-body">
+          <span class="task-title">Довести веб-специфику</span>
+          <span class="task-note">Оплата по QR на большом экране, раскладка под десктоп, вес первой загрузки, веб-пуши. Отдельно решить, что делать с поисковой выдачей: Flutter рисуется на canvas, роботы его почти не читают.</span>
+        </div>
+        <div class="marks"><span class="chip me">я</span></div>
+      </div>
+
+      <div class="task">
+        <span class="num">5.3</span>
+        <div class="task-body">
+          <span class="task-title">Обкатать на поддомене</span>
+          <span class="task-note">Например <code>new.pizzburg.kz</code>. Основной сайт продолжает приносить деньги, пока новый ловит ошибки.</span>
+        </div>
+        <div class="marks"><span class="chip me">я</span></div>
+      </div>
+
+      <div class="task">
+        <span class="num">5.4</span>
+        <div class="task-body">
+          <span class="task-title">Забрать управление DNS</span>
+          <span class="task-note">Домен ваш, делегирование меняете вы, разрешения ни у кого спрашивать не нужно. Порядок: завести зону у себя, перенести все записи, проверить, и только потом менять NS в ps.kz. Выгрузку зоны стоит попросить у SmartPicasso — снаружи видно не всё.</span>
+        </div>
+        <div class="marks"><span class="chip you">вы</span></div>
+      </div>
+
+      <div class="task">
+        <span class="num">5.5</span>
+        <div class="task-body">
+          <span class="task-title">Переключить адрес</span>
+          <span class="task-note">Одна A-запись: с сервера SmartPicasso на наш. Их сайт при этом не ломается — на него просто перестают приходить. Обратный откат тоже одна запись.</span>
+        </div>
+        <div class="marks"><span class="chip you">вы</span></div>
+      </div>
+    </div>
+
+    <div class="gate"><b>Готово, когда</b><span>pizzburg.kz открывает наш сайт, и он принимает оплату Kaspi по QR.</span></div>
+  </section>
+
+  <!-- ЭТАП 6 -->
+  <section class="phase">
+    <div class="phase-head">
+      <div class="phase-tag"><span>Этап 6</span></div>
+      <h2>Отключить SmartPicasso</h2>
+      <p class="goal">
+        Последний шаг, и обратного хода у него нет. Делается, когда цифры показывают,
+        что старой системой почти не пользуются.
+      </p>
+    </div>
+
+    <div class="tasks">
+      <div class="task">
+        <span class="num">6.1</span>
+        <div class="task-body">
+          <span class="task-title">Выгрузить всё, что там осталось</span>
+          <span class="task-note">История заказов, база клиентов, выгрузка DNS-зоны. После отключения доступа к этому не будет.</span>
+        </div>
+        <div class="marks"><span class="chip you">вы</span></div>
+      </div>
+
+      <div class="task">
+        <span class="num">6.2</span>
+        <div class="task-body">
+          <span class="task-title">Убрать их приложения из сторов</span>
+          <span class="task-note">Чтобы клиенты не скачивали мёртвое. Снимается с публикации у них.</span>
+        </div>
+        <div class="marks"><span class="chip you">вы</span></div>
+      </div>
+
+      <div class="task">
+        <span class="num">6.3</span>
+        <div class="task-body">
+          <span class="task-title">Расторгнуть договор</span>
+          <span class="task-note">Не раньше, чем месяц проработаем на своём и убедимся, что возвращаться не придётся.</span>
+        </div>
+        <div class="marks"><span class="chip you">вы</span></div>
+      </div>
+    </div>
+
+    <div class="gate"><b>Готово, когда</b><span>заказы приходят только к нам, а счёт от SmartPicasso больше не выставляется.</span></div>
+  </section>
+
+  <div class="later">
+    <h2>Сознательно отложено</h2>
+    <p>
+      Это не забыто и не потеряно — просто ничего из этого не мешает заменить
+      SmartPicasso. Берём после шестого этапа или раньше, если цифры покажут нужду.
+    </p>
+    <ul>
+      <li><b>Курьерский модуль</b> — назначение курьеров, приложение курьера. У SmartPicasso он тоже платный и не сразу.</li>
+      <li><b>Зоны доставки</b> — Экибастуз укладывается в одну. Нужно будет, если продавать сервис другим городам.</li>
+      <li><b>Несколько точек и продажа сервиса другим заведениям</b> — фундамент в базе есть, `tenantId` в 62 моделях. Останется убрать зашитый слаг и сделать вход по владельцам.</li>
+      <li><b>Выгрузка заказов, расширенные фильтры</b> — при 40–70 заказах в день ищется глазами.</li>
+      <li><b>Аналитика, реферальная программа, сезонные темы</b> — рост, а не запуск.</li>
+      <li><b>Хранение персональных данных в Казахстане</b> — сервер и база за границей. Формально это нарушение закона, риск реальный, но публикации не мешает. Решать переездом базы, а не текстом в политике.</li>
+    </ul>
+  </div>
+
+  <footer>Составлено 27.08.2026 · состояние проверено по коду, не по памяти</footer>
+</div>
