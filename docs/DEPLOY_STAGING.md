@@ -1,3 +1,23 @@
+# Развёртывание
+
+**Боевой адрес API: `https://api.pizzburg.kz`.**
+
+Старый `pizzburg-staging-production.up.railway.app` продолжает работать, но в
+сборки его класть нельзя: адрес зашивается в бинарник, и приложение,
+уехавшее в магазин со старым адресом, останется на нём навсегда.
+
+Сборка приложения:
+
+```
+flutter build ios --release --dart-define=API_URL=https://api.pizzburg.kz
+flutter build appbundle --release --dart-define=API_URL=https://api.pizzburg.kz
+```
+
+Без `--dart-define` релизная сборка не запустится: покажет красный экран
+с текстом ошибки вместо пустого приложения.
+
+---
+
 # PizzBurg: Cloudflare R2 и Railway staging
 
 Пошаговая инструкция для владельца. Staging должен быть безопасным:

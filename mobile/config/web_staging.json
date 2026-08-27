@@ -1,5 +1,5 @@
 {
-  "API_URL": "https://pizzburg-staging-production.up.railway.app",
+  "API_URL": "https://api.pizzburg.kz",
   "TENANT": "pizzburg",
   "FIREBASE_API_KEY": "AIzaSyDJZfAxPxVDOMG5joGrHuvpnzACHW4-8Kk",
   "FIREBASE_AUTH_DOMAIN": "pizzburg-delivery.firebaseapp.com",
