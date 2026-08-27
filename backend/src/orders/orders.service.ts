@@ -268,6 +268,18 @@ export class OrdersService {
     // Ждём именно **срока**, а не ответа: привязка к ответу заперла бы
     // клиента навсегда, если разбирательство зависнет (крон не отработал,
     // сбой в кассе). По сроку он свободен через пять минут в любом случае.
+    // Согласие с офертой даётся оформлением заказа, а не отдельным экраном
+    // при запуске (DECISIONS §12.36). Снимок редакций лежит в самом заказе
+    // и отвечает на вопрос «с какой версией оформляли этот заказ»; отметка
+    // в профиле отвечает на другой — «соглашался ли человек вообще».
+    await this.prisma.customer.update({
+      where: { id: customer.id },
+      data: {
+        legalVersions: legalVersions as object,
+        legalAcceptedAt: new Date(),
+      },
+    });
+
     const pending = await this.prisma.order.findFirst({
       where: {
         customerId: customer.id,

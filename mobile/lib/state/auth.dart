@@ -41,7 +41,10 @@ class AuthState extends ChangeNotifier {
           .where((t) => t.isNotEmpty)
           .toList();
 
-  bool get needsLegalConsent => isAuthenticated && pendingLegal.isNotEmpty;
+  /// Экрана согласия при запуске больше нет (DECISIONS §12.36): согласие
+  /// даётся оформлением заказа, под кнопкой которого стоит прямая
+  /// подпись и ссылки на документы. `pendingLegal` остаётся — по нему
+  /// видно, что человек ещё не соглашался ни с одной редакцией.
 
   Future<void> acceptLegal() async {
     await api.acceptLegal();
