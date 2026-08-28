@@ -273,7 +273,6 @@ class S {
   static String get commentToCourier =>
       t('Комментарий курьеру', 'Курьерге түсініктеме');
   static String get placeOrder => t('Заказать', 'Тапсырыс беру');
-  static String get soon => t('скоро', 'жақында');
   static String entrance(String value) =>
       t('подъезд $value', '$value кіреберіс');
   static String floor(String value) => t('этаж $value', '$value қабат');

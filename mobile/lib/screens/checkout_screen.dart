@@ -509,12 +509,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       onTap: () =>
                           setState(() => _payment = 'CARD_ON_DELIVERY'),
                     ),
-                  _Chip(
-                    label: S.online,
-                    selected: false,
-                    disabled: true,
-                    onTap: () {},
-                  ),
+                  // Онлайн-оплаты в списке нет совсем, пока не заработает
+                  // Kaspi. Неактивная кнопка «скоро» обещает то, чего ещё
+                  // нет: покупателю бесполезна, а App Review читает такое
+                  // как незаконченную заготовку.
                 ],
               ),
 
@@ -704,21 +702,19 @@ class _Bordered extends StatelessWidget {
 class _Chip extends StatelessWidget {
   final String label;
   final bool selected;
-  final bool disabled;
   final VoidCallback onTap;
 
   const _Chip({
     required this.label,
     required this.selected,
     required this.onTap,
-    this.disabled = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     return PressScale.selection(
-      onTap: disabled ? null : onTap,
+      onTap: onTap,
       child: AnimatedContainer(
         duration: Motion.base,
         curve: Motion.change,
@@ -728,27 +724,13 @@ class _Chip extends StatelessWidget {
           borderRadius: R.pill,
           border: selected ? null : Border.all(color: c.border, width: 1.5),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w600,
-                color: disabled
-                    ? c.muted
-                    : selected
-                        ? c.surface
-                        : c.ink,
-              ),
-            ),
-            if (disabled)
-              Text(
-                S.soon,
-                style: TextStyle(fontSize: 11, color: c.muted),
-              ),
-          ],
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13.5,
+            fontWeight: FontWeight.w600,
+            color: selected ? c.surface : c.ink,
+          ),
         ),
       ),
     );
