@@ -185,6 +185,8 @@ class _CartScreenState extends State<CartScreen> {
         child: cart.isEmpty
             ? _Empty(embedded: widget.embedded)
             : ListView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
                 padding: const EdgeInsets.fromLTRB(
                   Gap.screen,
                   Gap.lg,

@@ -100,6 +100,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
       backgroundColor: c.page,
       body: SafeArea(
         child: ListView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: const EdgeInsets.fromLTRB(
             Gap.screen,
             Gap.lg,

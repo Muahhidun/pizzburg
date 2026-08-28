@@ -280,6 +280,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           key: _formKey,
           autovalidateMode: AutovalidateMode.onUserInteraction,
           child: ListView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.fromLTRB(
               Gap.screen,
               Gap.md,

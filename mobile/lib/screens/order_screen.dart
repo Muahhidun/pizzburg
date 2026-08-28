@@ -341,6 +341,7 @@ class _OrderScreenState extends State<OrderScreen> {
         backgroundColor: c.panel,
         body: SafeArea(
           child: ListView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.fromLTRB(
               Gap.screen,
               Gap.md,

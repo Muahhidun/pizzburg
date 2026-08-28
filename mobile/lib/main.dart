@@ -228,7 +228,18 @@ class PizzBurgApp extends StatelessWidget {
               child: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 460),
-                  child: child ?? const SizedBox.shrink(),
+                  // Тап мимо поля закрывает клавиатуру. Без этого её нечем
+                  // убрать: «Имя» стоит посреди списка оформления, кнопка
+                  // «Заказать» уходит под клавиатуру, и человек остаётся с
+                  // наполовину закрытым экраном. Обработчик стоит выше всех
+                  // экранов, а не в оформлении: поля есть ещё в корзине,
+                  // адресах, отзыве и входе, и чинить их поодиночке значит
+                  // забыть следующее.
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+                    child: child ?? const SizedBox.shrink(),
+                  ),
                 ),
               ),
             ),
