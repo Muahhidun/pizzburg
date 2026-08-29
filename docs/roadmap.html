@@ -303,9 +303,9 @@
         <span class="num">1.3</span>
         <div class="task-body">
           <span class="task-title">Подтвердить аккаунт Google Play</span>
-          <span class="task-note">Осталось два пункта: доступ к Android-устройству через приложение Play Console и контактный телефон. Нужен физический Android — эмулятор не подходит.</span>
+          <span class="task-note">Осталось два пункта: доступ к Android-устройству через приложение Play Console и контактный телефон. Нужен физический Android — эмулятор не подходит. <b>Это узкое место всего проекта:</b> пока пункт не закрыт, не стартуют 14 дней закрытого тестирования, а сократить их нечем.</span>
         </div>
-        <div class="marks"><span class="chip wait">нужен телефон</span><span class="chip you">вы</span></div>
+        <div class="marks"><span class="chip wait">узкое место</span><span class="chip you">вы</span></div>
       </div>
 
       <div class="task">
@@ -320,28 +320,28 @@
       <div class="task">
         <span class="num">1.5</span>
         <div class="task-body">
-          <span class="task-title">Проверить приложение на живом Android</span>
-          <span class="task-note">На эмуляторе прошёл каталог, вход, корзину, удаление аккаунта — нашёл и починил переполнение вёрстки. Осталось оформление, экран заказа, отмена, анкета. И проверка на настоящем телефоне.</span>
+          <span class="task-title">Проверить приложение на живом устройстве</span>
+          <span class="task-note">iOS проверен на настоящем iPhone: релизная сборка от боевого API. Нашлись и починены три вещи — клавиатуру нельзя было закрыть, при самовывозе приложение звало курьера, и висела кнопка «Онлайн · скоро». Android — по-прежнему только эмулятор: осталось оформление, экран заказа, отмена, анкета.</span>
         </div>
-        <div class="marks"><span class="chip now">частично</span><span class="chip me">я</span></div>
+        <div class="marks"><span class="chip now">iOS сделан</span><span class="chip me">я</span></div>
       </div>
 
       <div class="task">
         <span class="num">1.6</span>
         <div class="task-body">
           <span class="task-title">Материалы карточек</span>
-          <span class="task-note">Скриншоты, описания, возрастной рейтинг, анкета Data Safety, доступ для проверяющих. Черновики за мной, проверка за вами.</span>
+          <span class="task-note">App Store готов: тексты по всем полям в <code>docs/APP_STORE.md</code>, шесть скриншотов 1320×2868 разложены по порядку загрузки. За вами два решения — адрес поддержки и строка про оплату. Google Play остался.</span>
         </div>
-        <div class="marks"><span class="chip me">я</span></div>
+        <div class="marks"><span class="chip now">App Store готов</span><span class="chip me">я</span></div>
       </div>
 
       <div class="task">
         <span class="num">1.7</span>
         <div class="task-body">
           <span class="task-title">Отправить iOS в ревью</span>
-          <span class="task-note">Блокеры сняты: удаление аккаунта, экспортное шифрование, только iPhone, защита от сборки без адреса сервера. Ждёт домен и документы.</span>
+          <span class="task-note">Блокеры сняты, домен и документы на бою, материалы готовы. Упирается в одно: нужен сертификат распространения, а он выпускается входом в Xcode под вашим Apple ID.</span>
         </div>
-        <div class="marks"><span class="chip wait">после 1.1 и 1.2</span></div>
+        <div class="marks"><span class="chip wait">нужен сертификат</span><span class="chip you">вы</span></div>
       </div>
 
       <div class="task">
@@ -358,9 +358,9 @@
         <span class="num">1.9</span>
         <div class="task-body">
           <span class="task-title">Резервное копирование базы</span>
-          <span class="task-note">Копий базы сейчас нет никаких, а с момента публикации возможны живые заказы. Проверка восстановления обязательна: бэкап, который ни разу не разворачивали, бэкапом не является.</span>
+          <span class="task-note">Скрипт снимает копию через Railway, восстановление проверено разворачиванием — бэкап, который ни разу не разворачивали, бэкапом не является. Ежедневное расписание в Railway включено.</span>
         </div>
-        <div class="marks"><span class="chip me">я</span></div>
+        <div class="marks"><span class="chip done">сделано</span></div>
       </div>
 
     <div class="gate"><b>Готово, когда</b><span>оба приложения опубликованы и доступны для скачивания. Ориентир — три-четыре недели, из них две ничем не сократить.</span></div>
@@ -401,9 +401,9 @@
         <span class="num">2.3</span>
         <div class="task-body">
           <span class="task-title">Анкета партнёра и вопросы по CSR</span>
-          <span class="task-note">Анкета заполнена, нужны юридическое название, оборот, контакты. Плюс три вопроса менеджеру: поля CSR, приём трёх IP, применяется ли обязательный блок QR при оплате по ссылке.</span>
+          <span class="task-note">Анкета заполнена целиком: ИП PIZZBURG, ИИН, контакты, обороты подставлены. Осталось отправить вместе с тремя вопросами менеджеру: поля CSR, приём трёх IP, применяется ли обязательный блок QR при оплате по ссылке.</span>
         </div>
-        <div class="marks"><span class="chip you">вы</span></div>
+        <div class="marks"><span class="chip now">готова к отправке</span><span class="chip you">вы</span></div>
       </div>
 
       <div class="task">
@@ -674,5 +674,5 @@
     </ul>
   </div>
 
-  <footer>Составлено 27.08.2026 · состояние проверено по коду, не по памяти</footer>
+  <footer>Обновлено 29.08.2026 · состояние проверено по коду и по боевой базе, не по памяти</footer>
 </div>
