@@ -505,7 +505,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     ),
                   if (_availability.cardOnDeliveryEnabled)
                     _Chip(
-                      label: S.cardToCourier,
+                      // Курьера при самовывозе нет: карту там подают
+                      // кассиру. Способ оплаты тот же, меняется подпись.
+                      label: delivery ? S.cardToCourier : S.cardOnSite,
                       selected: _payment == 'CARD_ON_DELIVERY',
                       onTap: () =>
                           setState(() => _payment = 'CARD_ON_DELIVERY'),
@@ -554,7 +556,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                             ),
                           if (_changeOptions.every((a) => a <= _total))
                             Text(
-                              S.bigBillHint,
+                              delivery ? S.bigBillHint : S.bigBillHintPickup,
                               style: TextStyle(fontSize: 12.5, color: c.muted),
                             ),
                         ],
@@ -567,7 +569,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               // ─── Комментарий ─────────────────────────────────────
               const SizedBox(height: Gap.blockWide),
               FieldCard(
-                label: S.commentToCourier,
+                label: delivery ? S.commentToCourier : S.orderComment,
                 controller: _comment,
                 maxLines: 2,
               ),

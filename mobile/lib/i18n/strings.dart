@@ -263,6 +263,7 @@ class S {
   static String get payment => t('Оплата', 'Төлем');
   static String get cash => t('Наличными', 'Қолма-қол');
   static String get cardToCourier => t('Картой курьеру', 'Курьерге картамен');
+  static String get cardOnSite => t('Картой на месте', 'Орнында картамен');
   static String get online => t('Онлайн', 'Онлайн');
   static String get prepareChangeFrom =>
       t('Подготовить сдачу с', 'Қайырымды дайындау');
@@ -270,8 +271,14 @@ class S {
         'Сумма заказа больше обычных купюр — скажите курьеру, с чего готовить сдачу',
         'Тапсырыс сомасы кәдімгі купюралардан үлкен — курьерге қайырымды неден дайындау керегін айтыңыз',
       );
+  static String get bigBillHintPickup => t(
+        'Сумма заказа больше обычных купюр — скажите кассиру, с чего готовить сдачу',
+        'Тапсырыс сомасы кәдімгі купюралардан үлкен — кассирге қайырымды неден дайындау керегін айтыңыз',
+      );
   static String get commentToCourier =>
       t('Комментарий курьеру', 'Курьерге түсініктеме');
+  static String get orderComment =>
+      t('Комментарий к заказу', 'Тапсырысқа түсініктеме');
   static String get placeOrder => t('Заказать', 'Тапсырыс беру');
   static String entrance(String value) =>
       t('подъезд $value', '$value кіреберіс');
