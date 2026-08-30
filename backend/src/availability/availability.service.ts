@@ -79,6 +79,8 @@ export interface RushSettings {
 export interface AvailabilityState {
   timezone: string;
   mode: OrderingMode;
+  /** Когда временное ограничение снимется само */
+  orderingUntil: string | null;
   /** Открыто ли заведение прямо сейчас по расписанию */
   isOpenNow: boolean;
   /** Можно ли оформить доставку/самовывоз с учётом режима и расписания */
@@ -239,7 +241,9 @@ export class AvailabilityService {
     const s = this.settingsOf(tenantSettings);
     const timezone: string = s.timezone ?? DEFAULT_TIMEZONE;
     const ordering = s.ordering ?? {};
-    const mode: OrderingMode = ordering.mode ?? 'ALL';
+    const orderingAlive =
+      !ordering.until || new Date(ordering.until as string).getTime() > now.getTime();
+    const mode: OrderingMode = orderingAlive ? (ordering.mode ?? 'ALL') : 'ALL';
 
     const preorder: PreorderSettings = { ...DEFAULT_PREORDER, ...(s.preorder ?? {}) };
     const payments: PaymentSettings = { ...DEFAULT_PAYMENTS, ...(s.payments ?? {}) };
@@ -302,6 +306,7 @@ export class AvailabilityService {
     return {
       timezone,
       mode,
+      orderingUntil: mode !== 'ALL' && ordering.until ? ordering.until : null,
       isOpenNow,
       deliveryAvailable: acceptingNowOrPreorder && !pickupOnly,
       pickupAvailable: acceptingNowOrPreorder,

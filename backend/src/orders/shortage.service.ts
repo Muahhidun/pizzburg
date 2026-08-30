@@ -190,6 +190,7 @@ export class ShortageService {
     orderId: string,
     itemIds: string[],
     now = new Date(),
+    actorName?: string,
   ) {
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, tenantId },
@@ -296,7 +297,8 @@ export class ShortageService {
     await this.telegram.notify(
       order.tenantId,
       `❗️ <b>Кассир отметил позицию отсутствующей</b>\n` +
-        `Заказ №${order.number}: «${names}».`,
+        `Заказ №${order.number}: «${names}».` +
+        (actorName ? `\nСотрудник: ${actorName}` : ''),
     );
 
     return this.state(order.id);

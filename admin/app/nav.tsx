@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { clearToken } from '@/lib/api';
+import { AdminProfile, api, clearToken } from '@/lib/api';
 import { ThemePicker } from './theme';
 
 /**
@@ -81,6 +81,8 @@ const groups: {
     tint: 'text-teal-600 dark:text-teal-400',
     links: [
       { href: '/operations', label: 'Режим работы' },
+      { href: '/staff', label: 'Сотрудники' },
+      { href: '/audit', label: 'Журнал действий' },
       { href: '/legal', label: 'Документы' },
       { href: '/settings', label: 'Настройки' },
     ],
@@ -90,12 +92,24 @@ const groups: {
 export function Nav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [me, setMe] = useState<AdminProfile | null>(null);
 
   // Переход по ссылке закрывает меню на телефоне: иначе оно остаётся
   // поверх страницы, ради которой его и открывали.
   useEffect(() => setOpen(false), [pathname]);
 
+  useEffect(() => {
+    if (pathname === '/') return;
+    api.get<AdminProfile>('/admin/auth/me').then(setMe).catch(() => undefined);
+  }, [pathname]);
+
   if (pathname === '/') return null;
+
+  const visibleGroups = !me
+    ? []
+    : me.role === 'CASHIER'
+      ? [{ title: 'Смена', tint: 'text-emerald-600 dark:text-emerald-400', links: [{ href: '/cashier', label: 'Касса' }] }]
+      : groups;
 
   return (
     <>
@@ -141,7 +155,14 @@ export function Nav() {
           </button>
         </div>
 
-        {groups.map((group, i) => (
+        {me && (
+          <div className="mb-4 px-2 text-xs text-neutral-500">
+            <div className="truncate font-medium text-neutral-700 dark:text-neutral-200">{me.displayName}</div>
+            <div>{me.role === 'CASHIER' ? 'Кассир' : 'Владелец'}</div>
+          </div>
+        )}
+
+        {visibleGroups.map((group, i) => (
           <div
             key={group.title}
             className={`mb-4 ${

@@ -9,6 +9,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum StaffRole {
+  OWNER
+  CASHIER
+}
+
 // ─── Тенанты и точки ────────────────────────────────────────────────
 
 model Tenant {
@@ -33,6 +38,51 @@ model Tenant {
   events          AppEvent[]
   paymentAttempts PaymentAttempt[]
   paymentRefunds  PaymentRefund[]
+  staffUsers      StaffUser[]
+  adminAuditLogs  AdminAuditLog[]
+}
+
+/// Отдельный доступ каждого сотрудника в админку.
+/// Сотрудника не удаём: `isActive = false` закрывает вход,
+/// но оставляет его имя в истории операций.
+model StaffUser {
+  id             String    @id @default(cuid())
+  tenantId       String
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  username       String
+  displayName    String
+  passwordHash   String
+  role           StaffRole @default(CASHIER)
+  isActive       Boolean   @default(true)
+  sessionVersion Int       @default(0)
+  lastLoginAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  auditLogs AdminAuditLog[]
+
+  @@unique([tenantId, username])
+  @@index([tenantId, isActive])
+}
+
+/// Журнал операционных действий в админке.
+model AdminAuditLog {
+  id          String     @id @default(cuid())
+  tenantId    String
+  tenant      Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  staffUserId String?
+  staffUser   StaffUser? @relation(fields: [staffUserId], references: [id], onDelete: SetNull)
+  actorName   String
+  actorRole   StaffRole
+  action      String
+  entityType  String?
+  entityId    String?
+  summary     String
+  metadata    Json?
+  createdAt   DateTime   @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([staffUserId, createdAt])
 }
 
 /// Аккаунт Poster = отдел на своём планшете. У тенанта их может быть

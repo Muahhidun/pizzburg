@@ -85,6 +85,7 @@ export class StopListService {
     preset: StopPreset,
     reason = '',
     now = new Date(),
+    actorName?: string,
   ) {
     const until = stopDeadline(preset, await this.scheduleLookup(tenantId, now), now);
     const note = reason.trim().slice(0, 200);
@@ -120,7 +121,8 @@ export class StopListService {
         tenantId,
         `⛔️ <b>Стоп-лист</b>\n«${label}» снята с продажи до ` +
           `${await this.localLabel(tenantId, until)}` +
-          (note ? `\nПричина: ${note}` : ''),
+          (note ? `\nПричина: ${note}` : '') +
+          (actorName ? `\nСотрудник: ${actorName}` : ''),
       );
       return { name: label, until };
     }
@@ -150,7 +152,8 @@ export class StopListService {
         tenantId,
         `⛔️ <b>Стоп-лист: целая категория</b>\n«${category.name}» снята с продажи до ` +
           `${await this.localLabel(tenantId, until)}` +
-          (note ? `\nПричина: ${note}` : ''),
+          (note ? `\nПричина: ${note}` : '') +
+          (actorName ? `\nСотрудник: ${actorName}` : ''),
       );
       return { name: category.name, until };
     }

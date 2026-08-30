@@ -615,9 +615,9 @@ export class AdminService {
   }
 
   /** Кассир отмечает позиции, которых нет; пустой список снимает пометку */
-  async markShortage(orderId: string, itemIds: string[]) {
+  async markShortage(orderId: string, itemIds: string[], actorName?: string) {
     const tenant = await this.tenant();
-    return this.shortage.markUnavailable(tenant.id, orderId, itemIds);
+    return this.shortage.markUnavailable(tenant.id, orderId, itemIds, new Date(), actorName);
   }
 
   // ─── Стоп-листы со сроком (DECISIONS §12.3) ──────────────────
@@ -632,13 +632,15 @@ export class AdminService {
     appCategoryId?: string;
     preset: StopPreset;
     reason?: string;
-  }) {
+  }, actorName?: string) {
     const tenant = await this.tenant();
     return this.stops.stop(
       tenant.id,
       { productId: dto.productId, appCategoryId: dto.appCategoryId },
       dto.preset,
       dto.reason ?? '',
+      new Date(),
+      actorName,
     );
   }
 
@@ -1232,7 +1234,12 @@ export class AdminService {
 
   /** Аварийный режим приёма: всё / только самовывоз / приём закрыт */
   async updateOrdering(dto: UpdateOrderingDto) {
-    return this.patchSettings('ordering', { ...dto });
+    // Владелец здесь задаёт бессрочный режим. Если до этого
+    // кассир ставил таймер, его нельзя оставлять скрыто доживать.
+    return this.patchSettings('ordering', {
+      ...dto,
+      ...(dto.mode ? { until: null, reason: null } : {}),
+    });
   }
 
   /**

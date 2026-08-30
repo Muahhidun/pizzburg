@@ -83,6 +83,24 @@ test('режим CLOSED запрещает и доставку, и самовы�
   );
 });
 
+test('временная остановка снимается точно по сроку', () => {
+  const until = new Date(thursdayAfternoon.getTime() + 30 * 60_000);
+  const settings = {
+    ...weekdaySchedule,
+    ordering: { mode: 'CLOSED', until: until.toISOString() },
+  };
+  const active = availability.getState(settings, thursdayAfternoon);
+  assert.equal(active.mode, 'CLOSED');
+  assert.equal(active.orderingUntil, until.toISOString());
+
+  const expired = availability.getState(
+    settings,
+    new Date(until.getTime() + 1),
+  );
+  assert.equal(expired.mode, 'ALL');
+  assert.equal(expired.orderingUntil, null);
+});
+
 test('профиль с датами перекрывает базовое расписание', () => {
   const ramadan = {
     ...weekdaySchedule,

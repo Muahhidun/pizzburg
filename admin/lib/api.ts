@@ -16,6 +16,29 @@ export function clearToken() {
   localStorage.removeItem(TOKEN_KEY);
 }
 
+export interface AdminProfile {
+  id: string | null;
+  tenantId?: string;
+  username: string;
+  displayName: string;
+  role: 'OWNER' | 'CASHIER';
+  isActive?: boolean;
+  legacy: boolean;
+  lastLoginAt?: string | null;
+  createdAt?: string | null;
+}
+
+export async function loginAdmin(username: string, password: string) {
+  const res = await fetch(`${BASE}/admin/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.message ?? 'Не удалось войти');
+  return body as { token: string; user: AdminProfile };
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const isFormData = typeof FormData !== 'undefined' && init?.body instanceof FormData;
   const res = await fetch(`${BASE}${path}`, {
@@ -430,6 +453,7 @@ export interface PaymentSettings {
 export interface AvailabilityNow {
   timezone: string;
   mode: OrderingMode;
+  orderingUntil: string | null;
   isOpenNow: boolean;
   deliveryAvailable: boolean;
   pickupAvailable: boolean;
@@ -460,6 +484,7 @@ export interface Settings {
     };
     ordering?: {
       mode?: OrderingMode;
+      until?: string | null;
       closedMessage?: string;
       pickupOnlyMessage?: string;
     };

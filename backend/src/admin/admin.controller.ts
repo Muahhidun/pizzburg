@@ -19,6 +19,11 @@ import { AdminService } from './admin.service';
 import { MessagesService } from '../messages/messages.service';
 import { RushService } from '../availability/rush.service';
 import { UpsellService } from '../upsell/upsell.service';
+import { OrderingService } from '../availability/ordering.service';
+import { StaffRole } from '@prisma/client';
+import { AdminActor, AdminActorValue, AdminRoles } from './admin-actor';
+import { AdminAuditService } from './admin-audit.service';
+import { TemporaryOrderingDto } from './admin-auth.dto';
 import {
   PosterAccountDto,
   PromotionDto,
@@ -60,9 +65,12 @@ export class AdminController {
     private readonly messages: MessagesService,
     private readonly rush: RushService,
     private readonly upsell: UpsellService,
+    private readonly ordering: OrderingService,
+    private readonly audit: AdminAuditService,
   ) {}
 
   @Get('storefront')
+  @AdminRoles(StaffRole.OWNER, StaffRole.CASHIER)
   storefront(@Query('tenant') tenant?: string) {
     return this.admin.storefront(tenant);
   }
@@ -139,28 +147,62 @@ export class AdminController {
    * нет, и ей нужен короткий список живых заказов с составом, а не отчёт.
    */
   @Get('orders/queue')
+  @AdminRoles(StaffRole.OWNER, StaffRole.CASHIER)
   orderQueue() {
     return this.admin.orderQueue();
   }
 
   /** «Этой позиции нет»: пустой список снимает пометку (DECISIONS §12.9) */
   @Post('orders/:id/shortage')
-  markShortage(@Param('id') id: string, @Body() dto: MarkShortageDto) {
-    return this.admin.markShortage(id, dto.itemIds);
+  @AdminRoles(StaffRole.OWNER, StaffRole.CASHIER)
+  async markShortage(
+    @AdminActor() actor: AdminActorValue,
+    @Param('id') id: string,
+    @Body() dto: MarkShortageDto,
+  ) {
+    const result = await this.admin.markShortage(id, dto.itemIds, actor.displayName);
+    await this.audit.record(actor, {
+      action: dto.itemIds.length ? 'ORDER_SHORTAGE_MARKED' : 'ORDER_SHORTAGE_CLEARED',
+      entityType: 'Order', entityId: id,
+      summary: dto.itemIds.length
+        ? `Отмечено отсутствующих позиций: ${dto.itemIds.length}`
+        : 'Пометка о нехватке снята',
+      metadata: { itemIds: dto.itemIds },
+    });
+    return result;
   }
 
   @Patch('orders/:id/status')
-  updateOrderStatus(
+  @AdminRoles(StaffRole.OWNER, StaffRole.CASHIER)
+  async updateOrderStatus(
+    @AdminActor() actor: AdminActorValue,
     @Param('id') id: string,
     @Body() dto: UpdateOrderStatusDto,
   ) {
-    return this.admin.updateOrderStatus(id, dto.status);
+    const result = await this.admin.updateOrderStatus(id, dto.status);
+    await this.audit.record(actor, {
+      action: 'ORDER_STATUS_CHANGED', entityType: 'Order', entityId: id,
+      summary: `Статус заказа: ${dto.status}`,
+    });
+    return result;
   }
 
   /** Отмена оператором: причина обязательна, иначе отчёт неполон */
   @Patch('orders/:id/cancel')
-  cancelOrder(@Param('id') id: string, @Body() dto: CancelOrderByAdminDto) {
-    return this.admin.cancelOrder(id, dto.reasonId, dto.comment);
+  @AdminRoles(StaffRole.OWNER, StaffRole.CASHIER)
+  async cancelOrder(
+    @AdminActor() actor: AdminActorValue,
+    @Param('id') id: string,
+    @Body() dto: CancelOrderByAdminDto,
+  ) {
+    const result = await this.admin.cancelOrder(id, dto.reasonId, dto.comment);
+    await this.audit.record(actor, {
+      action: 'ORDER_CANCELLED', entityType: 'Order', entityId: id,
+      summary: `Заказ отменён${dto.comment ? `: ${dto.comment}` : ''}`,
+      metadata: { reasonId: dto.reasonId },
+      notifyOwner: true,
+    });
+    return result;
   }
 
   /** Техническая карточка оплаты и всех попыток возврата. */
@@ -185,20 +227,39 @@ export class AdminController {
 
   /** Что сейчас на стопе + доступные сроки */
   @Get('stoplist')
+  @AdminRoles(StaffRole.OWNER, StaffRole.CASHIER)
   stopList() {
     return this.admin.stopList();
   }
 
   /** Поставить позицию или категорию на стоп. Срок обязателен */
   @Post('stoplist')
-  stopItem(@Body() dto: StopItemDto) {
-    return this.admin.stopItem(dto);
+  @AdminRoles(StaffRole.OWNER, StaffRole.CASHIER)
+  async stopItem(@AdminActor() actor: AdminActorValue, @Body() dto: StopItemDto) {
+    const result = await this.admin.stopItem(dto, actor.displayName);
+    await this.audit.record(actor, {
+      action: 'STOP_SET',
+      entityType: dto.productId ? 'Product' : 'AppCategory',
+      entityId: dto.productId ?? dto.appCategoryId,
+      summary: `Стоп-лист: ${result.name}`,
+      metadata: { preset: dto.preset, reason: dto.reason ?? '' },
+    });
+    return result;
   }
 
   /** Досрочно вернуть в продажу */
   @Post('stoplist/release')
-  releaseStop(@Body() dto: ReleaseStopDto) {
-    return this.admin.releaseStop(dto);
+  @AdminRoles(StaffRole.OWNER, StaffRole.CASHIER)
+  async releaseStop(@AdminActor() actor: AdminActorValue, @Body() dto: ReleaseStopDto) {
+    const result = await this.admin.releaseStop(dto);
+    await this.audit.record(actor, {
+      action: 'STOP_RELEASED',
+      entityType: dto.productId ? 'Product' : 'AppCategory',
+      entityId: dto.productId ?? dto.appCategoryId,
+      summary: 'Позиция досрочно вернута в продажу',
+      notifyOwner: true,
+    });
+    return result;
   }
 
   /** Ручной синк меню с Poster — не ждать четверть часа */
@@ -393,8 +454,50 @@ export class AdminController {
   }
 
   @Patch('settings/rush')
-  updateRush(@Body() dto: UpdateRushDto) {
-    return this.rush.set(dto.extraMinutes);
+  @AdminRoles(StaffRole.OWNER, StaffRole.CASHIER)
+  async updateRush(
+    @AdminActor() actor: AdminActorValue,
+    @Body() dto: UpdateRushDto,
+  ) {
+    const result = await this.rush.set(dto.extraMinutes, new Date(), actor.displayName);
+    await this.audit.record(actor, {
+      action: 'RUSH_CHANGED',
+      summary: dto.extraMinutes
+        ? `Высокий спрос: +${dto.extraMinutes} минут`
+        : 'Режим высокого спроса снят',
+    });
+    return result;
+  }
+
+  /** Короткий срез для единого экрана кассира. */
+  @Get('cashier/state')
+  @AdminRoles(StaffRole.OWNER, StaffRole.CASHIER)
+  cashierState(@AdminActor() actor: AdminActorValue) {
+    return this.ordering.current(actor.tenantId);
+  }
+
+  /** Кассир может ограничить приём только на заданный срок. */
+  @Patch('cashier/ordering')
+  @AdminRoles(StaffRole.OWNER, StaffRole.CASHIER)
+  async temporaryOrdering(
+    @AdminActor() actor: AdminActorValue,
+    @Body() dto: TemporaryOrderingDto,
+  ) {
+    const result = await this.ordering.setTemporary(
+      actor.tenantId,
+      dto.mode,
+      dto.durationMinutes,
+      dto.reason ?? '',
+      actor.displayName,
+    );
+    await this.audit.record(actor, {
+      action: 'ORDERING_CHANGED',
+      summary: dto.mode === 'ALL'
+        ? 'Приём заказов возобновлён'
+        : `${dto.mode === 'CLOSED' ? 'Приём заказов' : 'Доставка'} остановлена на ${dto.durationMinutes} минут`,
+      metadata: { mode: dto.mode, durationMinutes: dto.durationMinutes, reason: dto.reason ?? '' },
+    });
+    return result;
   }
 
   @Patch('settings/cancellation')
@@ -418,6 +521,7 @@ export class AdminController {
   // ─── Причины отмены ──────────────────────────────────────────
 
   @Get('cancel-reasons')
+  @AdminRoles(StaffRole.OWNER, StaffRole.CASHIER)
   cancelReasons() {
     return this.admin.cancelReasons();
   }

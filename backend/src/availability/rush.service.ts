@@ -48,7 +48,7 @@ export class RushService {
    * `extraMinutes = 0` снимает. Повторное нажатие той же кнопки — не
    * ошибка, а обычный случай: завал не кончился, час продлевается.
    */
-  async set(extraMinutes: number, now = new Date()) {
+  async set(extraMinutes: number, now = new Date(), actorName?: string) {
     if (extraMinutes !== 0 && !RUSH_STEPS.includes(extraMinutes as never)) {
       throw new BadRequestException('Допустимы только +20, +40, +60 или снятие');
     }
@@ -83,14 +83,15 @@ export class RushService {
         `🔺 Высокий спрос: +${extraMinutes} мин к сроку до ${this.hhmm(
           updated.settings,
           until as Date,
-        )}\n\nКлиенты видят: «${state.rushNotice}»`,
+        )}\nСотрудник: ${actorName ?? 'не указан'}\n\nКлиенты видят: «${state.rushNotice}»`,
       );
     } else if (before.rushExtraMinutes > 0) {
       // Молчим, если снимать было нечего: сообщение о снятии того, чего
       // не было, приучает не читать этот чат.
       await this.announce(
         tenant.id,
-        '🔻 Высокий спрос снят вручную — обещаем обычный срок',
+        '🔻 Высокий спрос снят вручную — обещаем обычный срок' +
+          (actorName ? `\nСотрудник: ${actorName}` : ''),
       );
     }
 

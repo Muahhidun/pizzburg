@@ -9,6 +9,10 @@ import { PromotionsModule } from '../promotions/promotions.module';
 import { OrdersModule } from '../orders/orders.module';
 import { MessagesModule } from '../messages/messages.module';
 import { StopListModule } from '../stoplist/stoplist.module';
+import { AdminAuthController } from './admin-auth.controller';
+import { AdminStaffController } from './admin-staff.controller';
+import { AdminAuthService } from './admin-auth.service';
+import { AdminAuditService } from './admin-audit.service';
 
 @Module({
   imports: [
@@ -20,7 +24,7 @@ import { StopListModule } from '../stoplist/stoplist.module';
     MessagesModule,
     StopListModule,
   ],
-  controllers: [AdminController],
-  providers: [AdminService, AdminGuard],
+  controllers: [AdminController, AdminAuthController, AdminStaffController],
+  providers: [AdminService, AdminGuard, AdminAuthService, AdminAuditService],
 })
 export class AdminModule {}
