@@ -167,7 +167,7 @@ class PizzBurgApp extends StatelessWidget {
       // Язык тоже слушаем здесь: переключение перерисовывает всё дерево,
       // и человек видит смену сразу, без перезапуска приложения.
       child: Consumer2<ThemeStore, LangStore>(
-        builder: (context, themes, _lang, _) => _app(context, themes.current),
+        builder: (context, themes, _, _) => _app(context, themes.current),
       ),
     );
   }

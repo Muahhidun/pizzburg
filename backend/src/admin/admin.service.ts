@@ -23,6 +23,7 @@ import {
   PublishLegalDto,
   CancelReasonDto,
   UpdateCancelReasonDto,
+  RefundPaymentDto,
 } from './admin.dto';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { OrdersService } from '../orders/orders.service';
@@ -41,6 +42,7 @@ import { PromotionsService } from '../promotions/promotions.service';
 import { OrderStatus } from '@prisma/client';
 import { GeoService } from '../geo/geo.service';
 import { streetKey } from '../geo/address-search';
+import { PaymentsService } from '../payments/payments.service';
 
 /**
  * Период отчёта из строк «ГГГГ-ММ-ДД».
@@ -143,6 +145,7 @@ export class AdminService {
     private readonly stops: StopListService,
     private readonly telegram: TelegramService,
     private readonly posterSync: PosterSyncService,
+    private readonly payments: PaymentsService,
   ) {}
 
   private async tenant(slug = 'pizzburg') {
@@ -336,6 +339,11 @@ export class AdminService {
           include: { posterAccount: { select: { name: true, sortOrder: true } } },
           orderBy: { posterAccount: { sortOrder: 'asc' } },
         },
+        paymentAttempts: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          include: { refunds: { orderBy: { createdAt: 'desc' } } },
+        },
       },
     });
 
@@ -359,6 +367,26 @@ export class AdminService {
         status: o.status,
         paymentMethod: o.paymentMethod,
         paymentStatus: o.paymentStatus,
+        paidAt: o.paidAt,
+        cancelUntil: o.cancelUntil,
+        payment: o.paymentAttempts[0]
+          ? {
+              id: o.paymentAttempts[0].id,
+              status: o.paymentAttempts[0].status,
+              amount: o.paymentAttempts[0].amount,
+              processedAt: o.paymentAttempts[0].processedAt,
+              errorMessage: o.paymentAttempts[0].errorMessage,
+              refunds: o.paymentAttempts[0].refunds.map((refund) => ({
+                id: refund.id,
+                amount: refund.amount,
+                status: refund.status,
+                attemptCount: refund.attemptCount,
+                nextRetryAt: refund.nextRetryAt,
+                lastError: refund.lastError,
+                completedAt: refund.completedAt,
+              })),
+            }
+          : null,
         customer: o.customer,
         address: o.address,
         comment: o.comment,
@@ -556,6 +584,28 @@ export class AdminService {
   async cancelOrder(id: string, reasonId: string, comment?: string) {
     const tenant = await this.tenant();
     return this.orderService.cancelByOperator(id, tenant.id, reasonId, comment);
+  }
+
+  async orderPayment(id: string) {
+    const tenant = await this.tenant();
+    return this.payments.orderPayment(id, tenant.id);
+  }
+
+  async refundPayment(id: string, dto: RefundPaymentDto) {
+    const tenant = await this.tenant();
+    return this.payments.requestRefund({
+      orderId: id,
+      tenantId: tenant.id,
+      requestedBy: 'ADMIN',
+      reason: dto.reason,
+      amount: dto.amount,
+      idempotencyKey: dto.idempotencyKey,
+    });
+  }
+
+  async retryRefund(id: string) {
+    const tenant = await this.tenant();
+    return this.payments.retryRefund(id, tenant.id);
   }
 
   /** Живая лента для консоли кассира (DECISIONS §12.9) */

@@ -406,8 +406,8 @@ class S {
   static String get noOperationsYet => t('Операций ещё не было', 'Әзірге операция болған жоқ');
   static String get signOut => t('Выйти', 'Шығу');
   static String get pointEqualsTenge => t(
-        '1 балл = 1 ₸, списывайте любой суммой',
-        '1 ұпай = 1 ₸, кез келген сомамен жұмсаңыз болады',
+        '1 балл = 1 ₸, оплатите до 30% заказа',
+        '1 ұпай = 1 ₸, тапсырыстың 30%-ына дейін төлеңіз',
       );
   static String cashbackPercent(int pct) => t('Кэшбэк $pct%', 'Кэшбэк $pct%');
   static String levelOf(int level, int total) =>

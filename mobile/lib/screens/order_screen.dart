@@ -100,11 +100,13 @@ class _OrderScreenState extends State<OrderScreen> {
     // «Ещё можно отменить» с бегущими секундами — человек нажал, ничего
     // не изменилось, и он идёт звонить.
     if ((_data?['status'] ?? 'NEW') != 'NEW') return null;
+    final explicit = DateTime.tryParse(
+      _data?['cancelUntil']?.toString() ?? '',
+    );
     final created = DateTime.tryParse(_data?['createdAt']?.toString() ?? '');
-    if (created == null) return null;
-    final left = created
-        .add(Duration(minutes: window))
-        .difference(DateTime.now());
+    final deadline = explicit ?? created?.add(Duration(minutes: window));
+    if (deadline == null) return null;
+    final left = deadline.difference(DateTime.now());
     return left.isNegative ? null : left;
   }
 
@@ -239,9 +241,12 @@ class _OrderScreenState extends State<OrderScreen> {
     if (window <= 0) return false;
     if (!context.read<AuthState>().isAuthenticated) return false;
     if ((_data?['status'] ?? 'NEW') != 'NEW') return false;
+    final explicit = DateTime.tryParse(
+      _data?['cancelUntil']?.toString() ?? '',
+    );
     final created = DateTime.tryParse(_data?['createdAt']?.toString() ?? '');
-    if (created == null) return false;
-    return DateTime.now().isBefore(created.add(Duration(minutes: window)));
+    final deadline = explicit ?? created?.add(Duration(minutes: window));
+    return deadline != null && DateTime.now().isBefore(deadline);
   }
 
   /// Заказ ещё живой — по нему есть о чём писать.

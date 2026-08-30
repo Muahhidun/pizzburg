@@ -26,6 +26,24 @@ const PAY_RU: Record<string, string> = {
   KASPI_ONLINE: 'Kaspi онлайн',
 };
 
+const PAYMENT_STATUS_RU: Record<string, string> = {
+  PENDING: 'ожидается оплата',
+  PAID: 'оплачено',
+  REFUND_PENDING: 'возврат выполняется',
+  PARTIALLY_REFUNDED: 'частично возвращено',
+  REFUNDED: 'возвращено полностью',
+  REFUND_FAILED: 'возврат требует внимания',
+  NOT_REQUIRED: 'оплата при получении',
+};
+
+const REFUND_STATUS_RU: Record<string, string> = {
+  PENDING: 'в очереди',
+  PROCESSING: 'выполняется',
+  RETRY_PENDING: 'будет повторён',
+  SUCCEEDED: 'выполнен',
+  FAILED: 'нужен ручной повтор',
+};
+
 const PART_RU: Record<string, string> = {
   NEW: 'новый',
   ACCEPTED: 'принят',
@@ -214,6 +232,19 @@ function OrderDetails({ order, onRefresh }: { order: AdminOrder; onRefresh: () =
         <div className="space-y-1.5">
           <h3 className="font-medium">Детали</h3>
           <p className="text-neutral-500">Оплата: {PAY_RU[order.paymentMethod]}</p>
+          {order.paymentMethod === 'KASPI_ONLINE' && (
+            <p
+              className={
+                order.paymentStatus === 'REFUND_FAILED'
+                  ? 'font-medium text-red-600'
+                  : order.paymentStatus === 'REFUND_PENDING'
+                    ? 'font-medium text-amber-600'
+                    : 'text-neutral-500'
+              }
+            >
+              Деньги: {PAYMENT_STATUS_RU[order.paymentStatus] ?? order.paymentStatus}
+            </p>
+          )}
           <p className="text-neutral-500">Статус: {STATUS_RU[order.status] ?? order.status}</p>
           {order.pointsEarned > 0 && (
             <p className="text-emerald-600">Начислено: {order.pointsEarned} баллов</p>
@@ -255,8 +286,139 @@ function OrderDetails({ order, onRefresh }: { order: AdminOrder; onRefresh: () =
             {busy ? 'Обновляем…' : '↻ Обновить статусы с планшетов'}
           </button>
           <StatusActions order={order} onRefresh={onRefresh} />
+          <PaymentPanel order={order} onRefresh={onRefresh} />
         </div>
       </div>
+    </div>
+  );
+}
+
+function PaymentPanel({
+  order,
+  onRefresh,
+}: {
+  order: AdminOrder;
+  onRefresh: () => void;
+}) {
+  const [amount, setAmount] = useState('');
+  const [reason, setReason] = useState('Возврат по заказу');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  if (order.paymentMethod !== 'KASPI_ONLINE') return null;
+  const canRefund = ['PAID', 'PARTIALLY_REFUNDED'].includes(order.paymentStatus);
+
+  async function refund() {
+    const parsed = amount.trim() ? Number(amount) : undefined;
+    if (parsed != null && (!Number.isInteger(parsed) || parsed <= 0)) {
+      setError('Укажите целую сумму больше нуля');
+      return;
+    }
+    const label = parsed == null ? 'полный возврат' : `возврат ${formatTenge(parsed)}`;
+    if (!window.confirm(`Подтвердить ${label} по заказу №${order.number}?`)) return;
+    setBusy('refund');
+    setError(null);
+    try {
+      await api.post(`/admin/orders/${order.id}/refund`, {
+        ...(parsed != null ? { amount: parsed } : {}),
+        reason: reason.trim() || 'Возврат по заказу',
+        idempotencyKey: crypto.randomUUID(),
+      });
+      setAmount('');
+      onRefresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function retry(refundId: string) {
+    setBusy(refundId);
+    setError(null);
+    try {
+      await api.post(`/admin/refunds/${refundId}/retry`);
+      onRefresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="mt-3 rounded-xl border border-black/10 p-3 dark:border-white/15">
+      <p className="font-medium">Kaspi: платежи и возвраты</p>
+      {order.payment ? (
+        <>
+          <p className="mt-1 text-xs text-neutral-500">
+            Операция: {order.payment.status} · {formatTenge(order.payment.amount)}
+          </p>
+          {order.payment.errorMessage && (
+            <p className="mt-1 text-xs text-red-600">{order.payment.errorMessage}</p>
+          )}
+          {order.payment.refunds.length > 0 && (
+            <ul className="mt-2 space-y-1 text-xs">
+              {order.payment.refunds.map((refund) => (
+                <li key={refund.id} className="rounded-lg bg-black/5 p-2 dark:bg-white/5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span>
+                      {formatTenge(refund.amount)} ·{' '}
+                      {REFUND_STATUS_RU[refund.status] ?? refund.status}
+                    </span>
+                    {refund.status === 'FAILED' && (
+                      <button
+                        onClick={() => retry(refund.id)}
+                        disabled={busy !== null}
+                        className="rounded-md border border-red-300 px-2 py-1 text-red-600 disabled:opacity-50"
+                      >
+                        {busy === refund.id ? 'Повторяем…' : 'Повторить'}
+                      </button>
+                    )}
+                  </div>
+                  {refund.lastError && (
+                    <p className="mt-1 text-red-600">{refund.lastError}</p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      ) : (
+        <p className="mt-1 text-xs text-neutral-500">Операция Kaspi ещё не создана</p>
+      )}
+
+      {canRefund && (
+        <div className="mt-3 space-y-2">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <input
+              type="number"
+              min="1"
+              max={order.total}
+              step="1"
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+              placeholder={`Сумма; пусто = ${order.total}`}
+              className="rounded-lg border border-black/10 bg-transparent px-2 py-1.5 text-xs dark:border-white/15"
+            />
+            <input
+              value={reason}
+              maxLength={300}
+              onChange={(event) => setReason(event.target.value)}
+              placeholder="Причина возврата"
+              className="rounded-lg border border-black/10 bg-transparent px-2 py-1.5 text-xs dark:border-white/15"
+            />
+          </div>
+          <button
+            onClick={refund}
+            disabled={busy !== null}
+            className="rounded-lg border border-red-300 px-3 py-1.5 text-xs text-red-600 disabled:opacity-50"
+          >
+            {busy === 'refund' ? 'Возвращаем…' : 'Оформить возврат'}
+          </button>
+        </div>
+      )}
+      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
     </div>
   );
 }

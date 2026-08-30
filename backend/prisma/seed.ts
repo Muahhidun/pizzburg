@@ -17,6 +17,11 @@ async function main() {
       settings: {
         loyalty: { levels: [{ level: 1, name: 'Новичок', cashbackPct: 3 }] },
         currency: 'KZT',
+        support: {
+          phone: '+7 777 320 04 00',
+          email: 'muahhidun@gmail.com',
+          hours: 'ежедневно с 10:00 до 21:20',
+        },
       },
       venues: {
         create: {

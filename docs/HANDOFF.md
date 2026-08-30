@@ -104,6 +104,7 @@ PATCH /admin/settings/preorder            — lead time, слоты, стоп «
 PATCH /admin/settings/payments            — способы оплаты, «уточнять сдачу»
 PATCH /admin/settings/cancellation        — окно отмены клиентом, минут
 GET  /legal/:slug | /legal/:slug/:type    — оферта, политика, реквизиты
+GET  /legal/:slug/support/page            — публичная поддержка и удаление
 POST /legal/:slug/accept                  — согласие клиента (Bearer)
 GET  /orders/:slug/cancel-reasons         — причины, доступные клиенту
 GET  /geo/suggest?q=                      — подсказки адресов 2ГИС
@@ -111,6 +112,9 @@ GET  /orders/:slug/last                   — прошлый заказ для �
 POST /orders/by-id/:id/repeat             — собрать корзину из прошлого заказа
 GET/POST /admin/legal                     — история и публикация редакций
 PATCH /admin/orders/:id/cancel            — отмена оператором с причиной
+GET  /admin/orders/:id/payment           — попытки оплаты, возвраты и журнал
+POST /admin/orders/:id/refund            — полный/частичный возврат Kaspi
+POST /admin/refunds/:id/retry             — ручной повтор после автоошибок
 GET  /admin/stoplist                      — что на стопе + сроки
 POST /admin/stoplist                      — снять с продажи на срок
 POST /admin/stoplist/release              — вернуть досрочно
@@ -796,5 +800,56 @@ Team привязана к Apple ID владельца). Бесплатный Ap
 
 ## Android
 
-`flutter build apk --debug` собирается (проверено 15.08.2026). Релизная
-сборка потребует keystore и подпись — завести до публикации в Google Play.
+Подписанный release App Bundle `1.0.0+1` собран 29.08.2026 с
+`API_URL=https://api.pizzburg.kz` и лежит в
+`export/stores/pizzburg-1.0.0+1-release.aab`. Keystore подключён через
+`mobile/android/key.properties`; его значения не выводить и не коммитить.
+
+## Подготовка карточек магазинов (29.08.2026)
+
+- `docs/APP_STORE.md` — готовые поля русской карточки, уточнённая анкета
+  приватности и порядок шести кадров.
+- `docs/GOOGLE_PLAY.md` — русская и казахская карточки, App access, Data
+  safety, контентная анкета и порядок закрытого тестирования.
+- App Store PNG без alpha лежат в `~/Desktop/PizzBurg-AppStore-Ready/`;
+  кадр оформления переснят с нормальным статус-баром, а профиль — с
+  актуальным текстом про лимит списания 30%.
+- Google icon готов; feature graphic без alpha сохранён как
+  `export/stores/play-feature-1024x500.jpg`.
+- Пять Android-скриншотов 1080 × 1920 RGB без alpha лежат в
+  `~/Desktop/PizzBurg-GooglePlay-Ready/`: каталог, блюдо, корзина с
+  баллами, оформление и профиль. Живой заказ не создавали, чтобы не
+  затронуть production и реальные планшеты Poster.
+- Backend получил мультитенантную страницу поддержки. Контакты лежат в
+  `Tenant.settings.support`; для существующего production-тенанта применить:
+  `npx tsx prisma/set-support.ts pizzburg '+7 777 320 04 00' 'muahhidun@gmail.com' 'ежедневно с 10:00 до 21:20'`.
+- Проверка production 29.08.2026: `/health` и страница privacy отвечают 200,
+  новый `/legal/pizzburg/support/page` пока отвечает 404 — код ещё не
+  развёрнут. Не указывать URL в консолях магазинов до деплоя и ответа 200.
+- На странице поддержки есть запрос удаления аккаунта по почте для Google
+  Play, а также честное описание удаляемых и сохраняемых данных.
+- Перед загрузкой остаются: развернуть backend и проверить URL, затем
+  загрузить AAB во внутренний трек и заполнить карточки по документам.
+
+## Финансовый каркас Kaspi без сертификата (30.08.2026)
+
+- Профильный документ: `docs/KASPI_QR_INTEGRATION.md`.
+- Миграция `20260830120000_payment_foundation` добавляет отдельные попытки
+  оплаты, возвраты, журнал событий, `paidAt` и точный `cancelUntil`.
+- `backend/src/payments/` содержит provider-интерфейс, оркестрацию,
+  идемпотентные возвраты и фоновый повтор. Сейчас подключён только
+  `DisabledKaspiProvider`: он не ходит в сеть и всегда отвечает, что Kaspi
+  не настроен. Реальные деньги этот код затронуть не может.
+- При будущем `Processed` начинается 60 секунд клиентской отмены; затем
+  сохраняется 10 секунд буфера и заказ допускается к отправке в Poster.
+  `dispatchToPoster` и фоновая отправка дополнительно отвергают
+  неподтверждённый `KASPI_ONLINE`.
+- Любая отмена подтверждённого Kaspi-заказа ставит полный возврат в очередь.
+  Частичный возврат и ручной повтор доступны через admin API и карточку
+  заказа. Ошибка не теряется: `RETRY_PENDING`, экспоненциальная пауза,
+  после восьми неудач `FAILED`/`REFUND_FAILED`.
+- Unit-тесты платежей проверяют безопасную заглушку, 60+10 секунд, успешный
+  возврат и повтор после временной ошибки.
+- Ответ SmartPicasso по старому `.pfx`/private key ожидается 31.08.2026.
+  До него реальный provider, переменные сертификата и включение способа
+  оплаты не делать.

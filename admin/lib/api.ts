@@ -188,6 +188,24 @@ export interface AdminOrder {
   status: string;
   paymentMethod: string;
   paymentStatus: string;
+  paidAt: string | null;
+  cancelUntil: string | null;
+  payment: {
+    id: string;
+    status: string;
+    amount: number;
+    processedAt: string | null;
+    errorMessage: string | null;
+    refunds: {
+      id: string;
+      amount: number;
+      status: string;
+      attemptCount: number;
+      nextRetryAt: string | null;
+      lastError: string | null;
+      completedAt: string | null;
+    }[];
+  } | null;
   customer: { name: string | null; phone: string } | null;
   address: Record<string, string> | null;
   comment: string;

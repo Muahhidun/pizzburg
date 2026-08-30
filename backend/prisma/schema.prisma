@@ -19,18 +19,20 @@ model Tenant {
   settings  Json     @default("{}")
   createdAt DateTime @default(now())
 
-  venues         Venue[]
-  posterAccounts PosterAccount[]
-  categories     Category[]
-  products       Product[]
-  customers      Customer[]
-  orders         Order[]
-  promoCodes     PromoCode[]
-  loyaltyTxns    LoyaltyTransaction[]
-  stopEvents     StopEvent[]
-  upsells        UpsellItem[]
-  reviews        OrderReview[]
-  events         AppEvent[]
+  venues          Venue[]
+  posterAccounts  PosterAccount[]
+  categories      Category[]
+  products        Product[]
+  customers       Customer[]
+  orders          Order[]
+  promoCodes      PromoCode[]
+  loyaltyTxns     LoyaltyTransaction[]
+  stopEvents      StopEvent[]
+  upsells         UpsellItem[]
+  reviews         OrderReview[]
+  events          AppEvent[]
+  paymentAttempts PaymentAttempt[]
+  paymentRefunds  PaymentRefund[]
 }
 
 /// Аккаунт Poster = отдел на своём планшете. У тенанта их может быть
@@ -190,12 +192,12 @@ model Product {
   displayNameKk        String?
   displayDescriptionKk String?
   weightLabelKk        String? // «8 дана» вместо «8 шт.»
-  isHit              Boolean      @default(false)
-  isSpicy            Boolean      @default(false)
-  isNew              Boolean      @default(false)
-  priceOverride      Int? // ручная цена витрины; приоритет: priceOverride > цена источника «Приложение» в Poster > базовая
-  sortOverride       Int? // ручной порядок внутри витринной категории
-  isVisible          Boolean      @default(true)
+  isHit                Boolean @default(false)
+  isSpicy              Boolean @default(false)
+  isNew                Boolean @default(false)
+  priceOverride        Int? // ручная цена витрины; приоритет: priceOverride > цена источника «Приложение» в Poster > базовая
+  sortOverride         Int? // ручной порядок внутри витринной категории
+  isVisible            Boolean @default(true)
 
   /// ─ Наш стоп-лист со сроком (DECISIONS §12.3) ─
   ///
@@ -303,7 +305,7 @@ model Customer {
   /// Когда клиент удалил аккаунт. Строка остаётся: на неё ссылаются
   /// заказы, которые нужны кассе и отчётности, — но персональные данные
   /// из неё вычищены (DECISIONS §12.33).
-  deletedAt       DateTime?
+  deletedAt DateTime?
 
   orders          Order[]
   loyaltyTxns     LoyaltyTransaction[]
@@ -562,7 +564,42 @@ enum PaymentMethod {
 enum PaymentStatus {
   PENDING
   PAID
+  REFUND_PENDING
+  PARTIALLY_REFUNDED
+  REFUNDED
+  REFUND_FAILED
   NOT_REQUIRED // оплата при получении
+}
+
+/// Провайдер вынесен в отдельное поле: заказ знает лишь способ оплаты,
+/// а техническая попытка — через какую интеграцию реально прошли деньги.
+enum PaymentProvider {
+  KASPI
+}
+
+enum PaymentChannel {
+  MOBILE_LINK
+  WEB_QR
+}
+
+/// CREATED — локальная запись до сетевого вызова. Остальные состояния
+/// повторяют жизненный цикл Kaspi QR, чтобы при разборе инцидента не
+/// переводить потерявшийся статус из нашей собственной терминологии.
+enum PaymentAttemptStatus {
+  CREATED
+  QR_TOKEN_CREATED
+  WAIT
+  PROCESSED
+  ERROR
+  EXPIRED
+}
+
+enum PaymentRefundStatus {
+  PENDING
+  PROCESSING
+  RETRY_PENDING
+  SUCCEEDED
+  FAILED
 }
 
 /// Разбирательство по нехватке позиции (DECISIONS §12.9).
@@ -610,6 +647,14 @@ model Order {
   total              Int
   paymentMethod      PaymentMethod
   paymentStatus      PaymentStatus @default(NOT_REQUIRED)
+  /// Время подтверждения онлайн-оплаты. Для оплаты при получении пусто.
+  paidAt             DateTime?
+  /// Точный конец клиентского окна отмены.
+  ///
+  /// Для обычного заказа совпадает с createdAt + настройка. Для Kaspi
+  /// выставляется после Processed: время в приложении Kaspi не должно
+  /// съедать минуту на раздумье уже оплаченного заказа.
+  cancelUntil        DateTime?
   promoCode          String?
   /// Купюра для сдачи при оплате наличными; кассир готовит размен
   changeFrom         Int?
@@ -645,13 +690,15 @@ model Order {
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
-  items         OrderItem[]
-  dispatches    OrderDispatch[]
-  loyaltyTxns   LoyaltyTransaction[]
-  messages      OrderMessage[]
+  items           OrderItem[]
+  dispatches      OrderDispatch[]
+  loyaltyTxns     LoyaltyTransaction[]
+  messages        OrderMessage[]
   /// Когда спросили впечатления. Пусто — ещё не спрашивали
-  reviewAskedAt DateTime?
-  review        OrderReview?
+  reviewAskedAt   DateTime?
+  review          OrderReview?
+  paymentAttempts PaymentAttempt[]
+  paymentRefunds  PaymentRefund[]
 
   @@unique([tenantId, number])
   @@index([tenantId, status])
@@ -660,6 +707,97 @@ model Order {
   @@index([shortageState, shortageDeadline])
   /// Фоновая отправка ищет созревшие заказы каждые несколько секунд
   @@index([dispatchAfter])
+  @@index([cancelUntil])
+}
+
+/// Одна попытка оплаты. Повтор после истечения ссылки создаёт новую
+/// запись, поэтому история не затирается и деньги можно сверить с Kaspi.
+model PaymentAttempt {
+  id                       String               @id @default(cuid())
+  tenantId                 String
+  tenant                   Tenant               @relation(fields: [tenantId], references: [id])
+  orderId                  String
+  order                    Order                @relation(fields: [orderId], references: [id])
+  provider                 PaymentProvider      @default(KASPI)
+  channel                  PaymentChannel
+  status                   PaymentAttemptStatus @default(CREATED)
+  amount                   Int
+  currency                 String               @default("KZT")
+  /// Идемпотентный идентификатор в нашей системе, передаваемый в Kaspi.
+  externalId               String
+  /// Int64 Kaspi храним строкой: JavaScript Number теряет точность.
+  providerPaymentId        String?
+  providerTransactionId    String?
+  expiresAt                DateTime?
+  statusPollingIntervalSec Int?
+  activationTimeoutSec     Int?
+  confirmationTimeoutSec   Int?
+  paymentMethods           Json                 @default("[]")
+  processedAt              DateTime?
+  lastStatusAt             DateTime?
+  errorCode                String?
+  errorMessage             String?
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
+
+  refunds PaymentRefund[]
+  events  PaymentEvent[]
+
+  @@unique([provider, externalId])
+  @@index([orderId, status])
+  @@index([tenantId, status])
+  @@index([providerPaymentId])
+}
+
+/// Возврат — отдельная финансовая операция, а не флаг на заказе.
+/// Так сохраняются частичные возвраты, повторы и причина сбоя.
+model PaymentRefund {
+  id               String              @id @default(cuid())
+  tenantId         String
+  tenant           Tenant              @relation(fields: [tenantId], references: [id])
+  orderId          String
+  order            Order               @relation(fields: [orderId], references: [id])
+  paymentAttemptId String
+  paymentAttempt   PaymentAttempt      @relation(fields: [paymentAttemptId], references: [id])
+  amount           Int
+  status           PaymentRefundStatus @default(PENDING)
+  /// CUSTOMER | ADMIN | SYSTEM
+  requestedBy      String
+  reason           String?
+  idempotencyKey   String
+  providerRefundId String?
+  attemptCount     Int                 @default(0)
+  nextRetryAt      DateTime?
+  lastError        String?
+  completedAt      DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  events PaymentEvent[]
+
+  @@unique([paymentAttemptId, idempotencyKey])
+  @@index([orderId, status])
+  @@index([tenantId, status])
+  @@index([status, nextRetryAt])
+}
+
+/// Безопасный технический журнал: только статусы и служебные метаданные,
+/// без сертификата, приватного ключа, пароля, QR-токена и платёжной ссылки.
+model PaymentEvent {
+  id               String         @id @default(cuid())
+  paymentAttemptId String
+  paymentAttempt   PaymentAttempt @relation(fields: [paymentAttemptId], references: [id])
+  refundId         String?
+  refund           PaymentRefund? @relation(fields: [refundId], references: [id])
+  kind             String
+  requestId        String?
+  providerStatus   String?
+  metadata         Json           @default("{}")
+  createdAt        DateTime       @default(now())
+
+  @@index([paymentAttemptId, createdAt])
+  @@index([refundId, createdAt])
+  @@index([requestId])
 }
 
 /// Отправка части заказа в конкретный отдел (аккаунт Poster).

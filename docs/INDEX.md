@@ -38,6 +38,8 @@
 | `POSTER_INTEGRATION.md` | Интеграция, разделение заказов и сверка Poster |
 | `FCM_SETUP.md` | Push-уведомления Firebase |
 | `KASPI_QR_INTEGRATION.md` | План интеграции Kaspi QR |
+| `APP_STORE.md` | Поля, приватность, скриншоты и проверка карточки App Store |
+| `GOOGLE_PLAY.md` | Карточка Google Play, Data safety, тестирование и релиз Android |
 | `DEPLOY_STAGING.md` | Railway staging и переменные окружения |
 | `ARCHITECTURE.md` | Архитектура сервисов и данные |
 | `PROJECT.md` | Подробная история проекта и выполненных работ |

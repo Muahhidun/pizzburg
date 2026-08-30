@@ -252,6 +252,14 @@ export class CancelOrderByAdminDto {
   @IsOptional() @IsString() @MaxLength(300) comment?: string;
 }
 
+/** Полный или частичный возврат подтверждённой онлайн-оплаты. */
+export class RefundPaymentDto {
+  @IsOptional() @IsInt() @Min(1) @Max(10_000_000) amount?: number;
+  @IsString() @Length(3, 300) reason: string;
+  /** Генерируется интерфейсом один раз и защищает двойной клик/повтор сети. */
+  @IsString() @Length(8, 100) idempotencyKey: string;
+}
+
 export class UpdateOrderStatusDto {
   @IsEnum(OrderStatus)
   status: OrderStatus;

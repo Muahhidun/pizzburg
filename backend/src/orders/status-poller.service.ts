@@ -106,6 +106,12 @@ export class StatusPollerService {
       where: {
         dispatchAfter: { lte: new Date() },
         status: { notIn: ['CANCELLED', 'DELIVERED'] },
+        // Будущий онлайн-заказ не попадёт на планшет до Processed, даже
+        // если срок отправки был выставлен ошибочно или вручную.
+        OR: [
+          { paymentMethod: { not: 'KASPI_ONLINE' } },
+          { paymentStatus: { in: ['PAID', 'PARTIALLY_REFUNDED'] } },
+        ],
       },
       select: { id: true, number: true },
     });

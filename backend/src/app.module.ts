@@ -21,6 +21,7 @@ import { SmsModule } from './sms/sms.module';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TelegramModule } from './telegram/telegram.module';
+import { PaymentsModule } from './payments/payments.module';
 
 @Controller()
 class RootController {
@@ -53,6 +54,9 @@ class RootController {
     UpsellModule,
     EventsModule,
     SmsModule,
+    // Пока использует безопасный provider без сети. Импорт до OrdersModule:
+    // отмена любого заказа должна видеть единый сервис возвратов.
+    PaymentsModule,
     /**
      * Общий потолок частоты (DECISIONS §12.26).
      *

@@ -19,6 +19,7 @@ import { AddressesService } from '../auth/addresses.service';
 import { TelegramService } from '../telegram/telegram.service';
 import { ServiceReceiptService } from './service-receipt.service';
 import { OrderMessagesService } from './order-messages.service';
+import { PaymentsService } from '../payments/payments.service';
 
 /**
  * Окно, в котором повторный такой же заказ считается сорвавшимся
@@ -108,6 +109,7 @@ export class OrdersService {
     private readonly telegram: TelegramService,
     private readonly serviceReceipt: ServiceReceiptService,
     private readonly messages: OrderMessagesService,
+    private readonly payments: PaymentsService,
   ) {}
 
   async createOrder(
@@ -508,10 +510,12 @@ export class OrdersService {
     const cancelWindowMs =
       availability.cancellation.customerWindowMinutes * 60_000;
     if (cancelWindowMs > 0) {
+      const cancelUntil = new Date(Date.now() + cancelWindowMs);
       await this.prisma.order.update({
         where: { id: order.id },
         data: {
-          dispatchAfter: new Date(Date.now() + cancelWindowMs + DISPATCH_BUFFER_MS),
+          cancelUntil,
+          dispatchAfter: new Date(cancelUntil.getTime() + DISPATCH_BUFFER_MS),
         },
       });
       this.logger.log(
@@ -553,6 +557,7 @@ export class OrdersService {
       deliveryFee,
       total,
       pointsSpent,
+      cancelUntil: fresh.cancelUntil,
       dispatchAfter: fresh.dispatchAfter,
       dispatches: fresh.dispatches.map((d) => ({
         department: d.posterAccount.name,
@@ -766,6 +771,17 @@ export class OrdersService {
         tenant: { select: { settings: true } },
       },
     });
+
+    // Онлайн-заказ не должен попасть на кухню по одному факту создания.
+    // Только подтверждённый Kaspi Processed открывает отправку в Poster.
+    if (
+      order.paymentMethod === 'KASPI_ONLINE' &&
+      !['PAID', 'PARTIALLY_REFUNDED'].includes(order.paymentStatus)
+    ) {
+      throw new BadRequestException(
+        `Заказ №${order.number}: оплата Kaspi ещё не подтверждена`,
+      );
+    }
 
     const resendIds = new Set(options?.resend ?? []);
     // Часть, в которой не осталось ни одной позиции, из нумерации выпадает:
@@ -1151,9 +1167,13 @@ export class OrdersService {
       );
     }
 
-    const deadline = new Date(
-      order.createdAt.getTime() + cancellation.customerWindowMinutes * 60_000,
-    );
+    // Новые заказы получают точный срок. Fallback по createdAt оставлен
+    // для заказов, созданных до миграции поля cancelUntil.
+    const deadline =
+      order.cancelUntil ??
+      new Date(
+        order.createdAt.getTime() + cancellation.customerWindowMinutes * 60_000,
+      );
     if (now > deadline) {
       throw new BadRequestException(
         `Отменить можно в течение ${cancellation.customerWindowMinutes} ` +
@@ -1235,6 +1255,7 @@ export class OrdersService {
       // Повторный запрос безопасно завершает начисление/возврат после временного
       // сбоя между сохранением статуса и записью операции лояльности.
       await this.loyalty.onStatusChanged(order.id, next);
+      if (next === 'CANCELLED') await this.ensureKaspiRefund(order.id);
       return this.prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     }
     const allowed: Record<OrderStatus, OrderStatus[]> = {
@@ -1282,11 +1303,29 @@ export class OrdersService {
       });
     }
     await this.loyalty.onStatusChanged(order.id, next);
+    if (next === 'CANCELLED') await this.ensureKaspiRefund(order.id);
     if (options?.notify !== false) {
       await this.notifications.sendOrderStatus(order.id, next);
     }
     if (next === 'CANCELLED') await this.announceCancellation(order.id);
     return this.prisma.order.findUniqueOrThrow({ where: { id: updated.id } });
+  }
+
+  /**
+   * Отмена заказа не должна откатиться из-за временной ошибки Kaspi.
+   * Возврат имеет собственный durable-статус и будет повторён фоном.
+   */
+  private async ensureKaspiRefund(orderId: string) {
+    // Часть unit-тестов собирает сервис вручную без Nest-контейнера.
+    // В приложении PaymentsService обязателен и всегда присутствует.
+    if (!this.payments) return;
+    try {
+      await this.payments.refundCancelledOrder(orderId);
+    } catch (error) {
+      this.logger.error(
+        `Заказ ${orderId} отменён, но возврат Kaspi не поставлен в очередь: ${String(error)}`,
+      );
+    }
   }
 
   /**

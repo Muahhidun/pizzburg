@@ -48,6 +48,7 @@ import {
   PublishLegalDto,
   CancelReasonDto,
   CancelOrderByAdminDto,
+  RefundPaymentDto,
   UpdateCancelReasonDto,
 } from './admin.dto';
 
@@ -160,6 +161,24 @@ export class AdminController {
   @Patch('orders/:id/cancel')
   cancelOrder(@Param('id') id: string, @Body() dto: CancelOrderByAdminDto) {
     return this.admin.cancelOrder(id, dto.reasonId, dto.comment);
+  }
+
+  /** Техническая карточка оплаты и всех попыток возврата. */
+  @Get('orders/:id/payment')
+  orderPayment(@Param('id') id: string) {
+    return this.admin.orderPayment(id);
+  }
+
+  /** Полный возврат по умолчанию; amount задаёт частичный. */
+  @Post('orders/:id/refund')
+  refundPayment(@Param('id') id: string, @Body() dto: RefundPaymentDto) {
+    return this.admin.refundPayment(id, dto);
+  }
+
+  /** Ручной повтор после того, как автоматические попытки исчерпаны. */
+  @Post('refunds/:id/retry')
+  retryRefund(@Param('id') id: string) {
+    return this.admin.retryRefund(id);
   }
 
   // ─── Стоп-листы со сроком (DECISIONS §12.3) ──────────────────
