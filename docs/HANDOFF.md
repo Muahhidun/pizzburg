@@ -865,10 +865,10 @@ Team привязана к Apple ID владельца). Бесплатный Ap
   До него реальный provider, переменные сертификата и включение способа
   оплаты не делать.
 
-## Роли админки и единая касса (30.08.2026, код готов)
+## Роли админки и единая касса (production 31.08.2026)
 
-- Миграция `20260830170000_staff_roles` добавляет `StaffUser`, роли
-  `OWNER`/`CASHIER` и `AdminAuditLog`. **На production ещё не применена.**
+- Миграция `20260830170000_staff_roles` добавила `StaffUser`, роли
+  `OWNER`/`CASHIER` и `AdminAuditLog`; Railway подтвердил `All migrations have been successfully applied`.
 - Вход по логину/паролю, 12-часовой admin JWT, пароли в `scrypt`-хэшах.
   Старый `ADMIN_TOKEN` сохранён как переходный вход `owner` и для уже
   открытых браузеров. После создания первого активного именного `OWNER`
@@ -883,3 +883,8 @@ Team привязана к Apple ID владельца). Бесплатный Ap
 - Telegram руководства получает имя кассира для стопа, нехватки, паузы,
   высокого спроса, отмены и досрочного снятия стопа.
 - Проверки: backend typecheck/build, admin typecheck/production build, 220 backend-тестов.
+- Production smoke-test: `/health`, личный вход `OWNER`, `/admin/settings`,
+  `/admin/staff`, `/admin/audit`, `/admin/cashier/state` и страницы admin ответили 200.
+  Старый `ADMIN_TOKEN` после создания именного владельца отвечает 401.
+- Первый именной владелец: логин `dom`, имя «Дом», роль `OWNER`.
+  Пароль в документах и Git не хранится.
