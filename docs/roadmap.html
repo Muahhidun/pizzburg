@@ -250,20 +250,20 @@
         </ul>
       </div>
       <div>
-        <h3>Готово, но не проверено людьми</h3>
+        <h3>Проверено / требует вычитки</h3>
         <ul>
-          <li>Android-сборка — запускалась только на эмуляторе</li>
-          <li>Казахский — переведено, не вычитано носителем</li>
+          <li>iOS build 4 одобрен Apple; 08.10 подтверждено ожидание ручного выпуска</li>
+          <li>Android проверен на физическом устройстве до приёма заказа в Poster</li>
+          <li>Казахский и контент меню требуют финальной вычитки</li>
           <li>Веб-версия — собирается, но нигде не размещена</li>
-          <li>iOS — проверен на живом iPhone, но только владельцем</li>
         </ul>
       </div>
       <div>
-        <h3>Нет совсем</h3>
+        <h3>Готово в тесте / ещё выключено</h3>
         <ul>
-          <li>Оплата Kaspi — только заглушка в справочнике способов</li>
-          <li>Возврат денег из админки</li>
-          <li>Роли: у кассира те же права, что у владельца</li>
+          <li>Kaspi: mTLS, ссылка/QR и статусы до Processed проверены на test API</li>
+          <li>Возвраты Kaspi и повторы готовы; production выключен</li>
+          <li>Роли владельца и кассира развёрнуты на production</li>
           <li>Сегменты в рассылках — только «всем сразу»</li>
         </ul>
       </div>
@@ -276,9 +276,9 @@
       <div class="phase-tag"><span>Этап 1</span><span class="chip now">в работе</span></div>
       <h2>Опубликовать приложения в обоих сторах</h2>
       <p class="goal">
-        Публикуем <b>без онлайн-оплаты</b> — наличные и карта курьеру. Это не
-        переезд клиентов, а выполнение условия Kaspi: сертификат выдают только
-        тем, у кого приложения уже в сторах. Клиенты остаются на SmartPicasso.
+        Сначала обе наши версии проходят проверки и ждут управляемого выпуска.
+        Затем SmartPicasso снимает свои карточки, мы вручную публикуем свои
+        <b>без онлайн-Kaspi</b> и передаём ссылки Kaspi.
       </p>
     </div>
 
@@ -305,9 +305,9 @@
         <span class="num">1.3</span>
         <div class="task-body">
           <span class="task-title">Подтвердить аккаунт Google Play</span>
-          <span class="task-note">Осталось два пункта: доступ к Android-устройству через приложение Play Console и контактный телефон. Нужен физический Android — эмулятор не подходит. <b>Это узкое место всего проекта:</b> пока пункт не закрыт, не стартуют 14 дней закрытого тестирования, а сократить их нечем.</span>
+          <span class="task-note">Аккаунт, контактный телефон и физическое Android-устройство подтверждены 01.09. Теперь доступно создание и тестирование приложения.</span>
         </div>
-        <div class="marks"><span class="chip wait">узкое место</span><span class="chip you">вы</span></div>
+        <div class="marks"><span class="chip done">сделано</span><span class="chip you">вы</span></div>
       </div>
 
       <div class="task">
@@ -323,38 +323,37 @@
         <span class="num">1.5</span>
         <div class="task-body">
           <span class="task-title">Проверить приложение на живом устройстве</span>
-          <span class="task-note">iOS проверен на настоящем iPhone: релизная сборка от боевого API. Нашлись и починены три вещи — клавиатуру нельзя было закрыть, при самовывозе приложение звало курьера, и висела кнопка «Онлайн · скоро». Android — по-прежнему только эмулятор: осталось оформление, экран заказа, отмена, анкета.</span>
+          <span class="task-note">iOS build 4 проверен через TestFlight. Android build 3 установлен из внутреннего трека: проверены SMS-вход, отмена в минутное окно и полный заказ до приёма в Poster.</span>
         </div>
-        <div class="marks"><span class="chip now">iOS сделан</span><span class="chip me">я</span></div>
+        <div class="marks"><span class="chip done">сделано</span><span class="chip you">вы</span><span class="chip me">я</span></div>
       </div>
 
       <div class="task">
         <span class="num">1.6</span>
         <div class="task-body">
           <span class="task-title">Материалы карточек</span>
-          <span class="task-note">App Store готов: тексты по всем полям в <code>docs/APP_STORE.md</code>, шесть скриншотов 1320×2868 разложены по порядку загрузки. За вами два решения — адрес поддержки и строка про оплату. Google Play остался.</span>
+          <span class="task-note">Карточки App Store и Google Play заполнены: тексты, анкеты, иконки и отдельные наборы скриншотов загружены.</span>
         </div>
-        <div class="marks"><span class="chip now">App Store готов</span><span class="chip me">я</span></div>
+        <div class="marks"><span class="chip done">сделано</span><span class="chip me">я</span></div>
       </div>
 
       <div class="task">
         <span class="num">1.7</span>
         <div class="task-body">
-          <span class="task-title">Отправить iOS в ревью</span>
-          <span class="task-note">Блокеры сняты, домен и документы на бою, материалы готовы. Упирается в одно: нужен сертификат распространения, а он выпускается входом в Xcode под вашим Apple ID.</span>
+          <span class="task-title">Ответить App Review по Guideline 2.1</span>
+          <span class="task-note">Apple одобрила версию 1.0 / build 4. 08.10 повторно проверено: «Ожидание выпуска разработчиком», ручной выпуск. До согласования со SmartPicasso не публикуем.</span>
         </div>
-        <div class="marks"><span class="chip wait">нужен сертификат</span><span class="chip you">вы</span></div>
+        <div class="marks"><span class="chip done">одобрено</span><span class="chip you">вы</span><span class="chip me">я</span></div>
       </div>
 
       <div class="task">
         <span class="num">1.8</span>
         <div class="task-body">
-          <span class="task-title">Закрытое тестирование Android</span>
-          <span class="task-note">Личный аккаунт обязывает: 12 человек, подписанных <b>непрерывно 14 дней</b>. Отсчёт с момента, когда подпишется двенадцатый. Берите 15 — кто-то сменит телефон.</span>
+          <span class="task-title">Закрытая проверка Android, затем рабочий выпуск</span>
+          <span class="task-note">Аккаунт уже организационный, 12 × 14 дней не требуются. 08.10 build 4 отправлен в Alpha только для владельца/Казахстана, без Keshav. Ждём Google, затем закрытая установка и рабочая заявка с ручным удержанием; публичный выпуск только после согласования со SmartPicasso.</span>
         </div>
-        <div class="marks"><span class="chip wait">14 дней жёстко</span><span class="chip you">вы</span></div>
+        <div class="marks"><span class="chip wait">ждём Google</span><span class="chip you">вы</span><span class="chip me">я</span></div>
       </div>
-    </div>
 
       <div class="task">
         <span class="num">1.9</span>
@@ -364,6 +363,16 @@
         </div>
         <div class="marks"><span class="chip done">сделано</span></div>
       </div>
+
+      <div class="task">
+        <span class="num">1.10</span>
+        <div class="task-body">
+          <span class="task-title">Согласовать смену карточек приложений</span>
+          <span class="task-note">Когда обе наши версии одобрены и ждут ручного выпуска: предупредить SmartPicasso, получить подтверждение снятия их приложений, затем выпустить наши и передать ссылки Kaspi.</span>
+        </div>
+        <div class="marks"><span class="chip wait">после одобрения</span><span class="chip you">вы</span><span class="chip me">я</span></div>
+      </div>
+    </div>
 
     <div class="gate"><b>Готово, когда</b><span>оба приложения опубликованы и доступны для скачивания. Ориентир — три-четыре недели, из них две ничем не сократить.</span></div>
   </section>
@@ -394,7 +403,7 @@
         <span class="num">2.2</span>
         <div class="task-body">
           <span class="task-title">Согласовать дизайн экранов оплаты</span>
-          <span class="task-note">Макет готов, отправлен. Ждём от Kaspi официальные элементы: блок с QR, кнопку, логотипы, иконки Gold и Red+. Рисовать их самим их правила запрещают.</span>
+          <span class="task-note">Структура мобильных состояний реализована и выключена флагом. Ждём от Kaspi официальные элементы и доступ к Figma для финальной сверки: рисовать кнопку и логотип самим запрещено.</span>
         </div>
         <div class="marks"><span class="chip wait">ждём ассеты</span></div>
       </div>
@@ -402,17 +411,17 @@
       <div class="task">
         <span class="num">2.3</span>
         <div class="task-body">
-          <span class="task-title">Анкета партнёра и вопросы по CSR</span>
-          <span class="task-note">Анкета заполнена целиком: ИП PIZZBURG, ИИН, контакты, обороты подставлены. Осталось отправить вместе с тремя вопросами менеджеру: поля CSR, приём трёх IP, применяется ли обязательный блок QR при оплате по ссылке.</span>
+          <span class="task-title">Анкета партнёра и рабочая группа</span>
+          <span class="task-note">Заявка предварительно одобрена, рабочая группа с разработчиком Kaspi создана, протокол и Figma получены.</span>
         </div>
-        <div class="marks"><span class="chip now">готова к отправке</span><span class="chip you">вы</span></div>
+        <div class="marks"><span class="chip done">сделано</span><span class="chip you">вы</span></div>
       </div>
 
       <div class="task">
         <span class="num">2.4</span>
         <div class="task-body">
-          <span class="task-title">Запросить и получить сертификат</span>
-          <span class="task-note">Ключ и CSR генерируете вы у себя — этот ключ разрешает возвраты с вашего счёта, через меня он проходить не должен. Письмо уходит с адреса из договора.</span>
+          <span class="task-title">Получить новый боевой сертификат</span>
+          <span class="task-note">Только после публикации и проверки приложений Kaspi. Новый сертификат отзывает старый и остаётся только в нашей инфраструктуре; в SmartPicasso его не устанавливаем.</span>
         </div>
         <div class="marks"><span class="chip wait">после публикации</span><span class="chip you">вы</span></div>
       </div>
@@ -421,22 +430,22 @@
         <span class="num">2.5</span>
         <div class="task-body">
           <span class="task-title">Реализовать оплату</span>
-          <span class="task-note">Две ветки: по ссылке для телефонов, QR для сайта с компьютера. Заказ уходит на кухню только после подтверждённой оплаты — ссылка живёт меньше четырёх минут.</span>
+          <span class="task-note">Настоящий provider третьей схемы и серверный poller готовы. На тестовом API пройдены create → scan → Wait → confirm → Processed. Production выключен до сертификата и согласованных ассетов.</span>
         </div>
-        <div class="marks"><span class="chip me">я</span></div>
+        <div class="marks"><span class="chip done">тест готов</span><span class="chip me">я</span></div>
       </div>
 
       <div class="task">
         <span class="num">2.6</span>
         <div class="task-body">
           <span class="task-title">Возврат денег из админки</span>
-          <span class="task-note">Полный и частичный, как сейчас в SmartPicasso. Без него кассир теряет инструмент, который у него уже есть.</span>
+          <span class="task-note">Полный и частичный возврат, идемпотентность, временные повторы и ручной повтор готовы. Тестовый refund получил корректно классифицированный ответ Kaspi.</span>
         </div>
-        <div class="marks"><span class="chip me">я</span></div>
+        <div class="marks"><span class="chip done">тест готов</span><span class="chip me">я</span></div>
       </div>
     </div>
 
-    <div class="gate"><b>Готово, когда</b><span>клиент оплачивает заказ Kaspi в приложении, а кассир может вернуть деньги из админки. С этого момента идёт месяц, на который Kaspi разрешил два приложения на одном сертификате.</span></div>
+    <div class="gate"><b>Готово, когда</b><span>новый сертификат работает только у нас, клиент оплачивает Kaspi в нашем приложении, а кассир может вернуть деньги из админки.</span></div>
   </section>
 
   <!-- ЭТАП 3 -->
@@ -455,27 +464,27 @@
         <span class="num">3.1</span>
         <div class="task-body">
           <span class="task-title">Роли в админке</span>
-          <span class="task-note">Сейчас один токен на всех: у кассира те же права, что у владельца — цены, база клиентов, настройки. Кассиру нужны «Касса» и «Заказы» плюс стоп-листы и временное закрытие приёма, перенесённые в его вкладки.</span>
+          <span class="task-note">Именные OWNER/CASHIER, отзыв сессий и единая кассирская вкладка развёрнуты на production. Владелец работает под super-owner.</span>
         </div>
-        <div class="marks"><span class="chip me">я</span></div>
+        <div class="marks"><span class="chip done">сделано</span><span class="chip me">я</span></div>
+      </div>
+
+      <div class="task">
+        <span class="num">3.1a</span>
+        <div class="task-body">
+          <span class="task-title">Журнал действий администраторов</span>
+          <span class="task-note">Журнал действий сотрудников и имя кассира в Telegram-уведомлениях развёрнуты на production.</span>
+        </div>
+        <div class="marks"><span class="chip done">сделано</span><span class="chip me">я</span></div>
       </div>
 
       <div class="task">
         <span class="num">3.2</span>
         <div class="task-body">
-          <span class="task-title">Журнал действий администраторов</span>
-          <span class="task-note">Кто поменял цену, кто закрыл приём заказов, кто начислил баллы. Без него роли — половина решения.</span>
-        </div>
-        <div class="marks"><span class="chip me">я</span></div>
-      </div>
-
-      <div class="task">
-        <span class="num">3.3</span>
-        <div class="task-body">
           <span class="task-title">Обучить кассиров</span>
-          <span class="task-note">Они переходят из SmartPicasso в нашу админку. Делать это в первый же боевой вечер — плохая идея. Нужен тихий час и несколько тренировочных заказов.</span>
+          <span class="task-note">Кассир Альбина создана, ограниченная страница проверена владельцем. Перед переходом остаётся провести тихую тренировочную смену с несколькими заказами.</span>
         </div>
-        <div class="marks"><span class="chip you">вы</span></div>
+        <div class="marks"><span class="chip now">пилот начат</span><span class="chip you">вы</span></div>
       </div>
 
       <div class="task">
@@ -490,10 +499,10 @@
       <div class="task">
         <span class="num">3.4</span>
         <div class="task-body">
-          <span class="task-title">Вычитать казахский</span>
-          <span class="task-note">Переведено машинально мной. Носитель должен пройтись хотя бы по каталогу и оформлению — там ошибки видит каждый клиент.</span>
+          <span class="task-title">Вычитать казахский и контент меню</span>
+          <span class="task-note">Во время 14-дневного Android-теста проверить RU/KK названия, описания и фотографии блюд одним проходом, затем собрать исправления в следующую сборку.</span>
         </div>
-        <div class="marks"><span class="chip you">вы</span></div>
+        <div class="marks"><span class="chip now">следующий шаг</span><span class="chip you">вы</span><span class="chip me">я</span></div>
       </div>
     </div>
 
@@ -506,9 +515,9 @@
       <div class="phase-tag"><span>Этап 4</span></div>
       <h2>Перевести клиентов приложений</h2>
       <p class="goal">
-        Оба приложения работают одновременно и оба принимают Kaspi — Kaspi разрешил
-        это <b>временно, примерно на месяц</b>. Значит переход должен быть быстрым
-        и управляемым, а не бессрочным.
+        Новое приложение становится единственным доступным для скачивания.
+        Старое остаётся у уже установивших его клиентов, но после перевыпуска
+        сертификата работает без онлайн-Kaspi: карта, наличные или терминал на месте.
       </p>
     </div>
 
@@ -516,8 +525,8 @@
       <div class="task">
         <span class="num">4.1</span>
         <div class="task-body">
-          <span class="task-title">Уточнить у Kaspi границы месяца</span>
-          <span class="task-note">С какого события считается срок и можно ли продлить. Ответ определяет, насколько плотно надо переводить людей.</span>
+          <span class="task-title">Зафиксировать окно перехода</span>
+          <span class="task-note">Согласовать со SmartPicasso снятие карточек, наш ручной выпуск и резервные способы оплаты для пользователей старого приложения.</span>
         </div>
         <div class="marks"><span class="chip you">вы</span></div>
       </div>
@@ -638,8 +647,8 @@
       <div class="task">
         <span class="num">6.3</span>
         <div class="task-body">
-          <span class="task-title">Убрать их приложения из сторов</span>
-          <span class="task-note">Чтобы клиенты не скачивали мёртвое. Снимается с публикации у них.</span>
+          <span class="task-title">Проверить снятие их приложений со сторов</span>
+          <span class="task-note">Само снятие выполняется перед нашим ручным выпуском на этапе 1. Здесь проверяем, что старые карточки больше нигде не доступны новым клиентам.</span>
         </div>
         <div class="marks"><span class="chip you">вы</span></div>
       </div>

@@ -28,3 +28,6 @@ tmp/
 # Flutter
 mobile/build/
 mobile/.dart_tool/
+
+# Signed store bundles: large binaries, rebuilt from tagged source when needed.
+export/stores/*.aab
