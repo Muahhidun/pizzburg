@@ -287,6 +287,7 @@ export interface CashierOrder {
   type: 'DELIVERY' | 'PICKUP';
   status: string;
   paymentMethod: string;
+  paymentStatus?: string;
   customer: { name: string | null; phone: string } | null;
   comment: string;
   total: number;
@@ -303,6 +304,51 @@ export interface CashierOrder {
   otherActiveOrders: number[];
   items: CashierItem[];
   parts: CashierPart[];
+}
+
+/** Секрет Wolt никогда не возвращается в браузер — только признак и хвост. */
+export interface WoltDriveSettings {
+  mode: 'disabled' | 'test' | 'production';
+  merchantKeyConfigured: boolean;
+  merchantKeyHint: string | null;
+  merchantId: string;
+  venueId: string;
+  city: string;
+  postCode: string;
+  webhookConfigured: boolean;
+  webhookId: string;
+  webhookCallbackUrl: string;
+  ready: boolean;
+}
+
+export interface WoltDriveDelivery {
+  id: string;
+  status: string;
+  promiseValidUntil: string;
+  quotePriceAmount: number;
+  quoteCurrency: string;
+  quoteIsBinding: boolean;
+  pickupEtaMinutes: number | null;
+  dropoffEtaMinutes: number | null;
+  preparationTimeMinutes: number;
+  bagCount: number;
+  woltOrderReferenceId: string | null;
+  trackingUrl: string | null;
+  pickupEta: string | null;
+  dropoffEtaMin: string | null;
+  dropoffEtaMax: string | null;
+  deliveredAt: string | null;
+  courierVehicleType: string | null;
+  handshakePin: string | null;
+  requestedBy: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  updatedAt: string;
+}
+
+export interface WoltDriveState {
+  settings: WoltDriveSettings;
+  delivery: WoltDriveDelivery | null;
 }
 
 export interface CashierQueue {

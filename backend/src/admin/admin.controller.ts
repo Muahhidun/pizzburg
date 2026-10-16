@@ -23,6 +23,13 @@ import { OrderingService } from '../availability/ordering.service';
 import { StaffRole } from '@prisma/client';
 import { AdminActor, AdminActorValue, AdminRoles } from './admin-actor';
 import { AdminAuditService } from './admin-audit.service';
+import { WoltDriveService } from '../wolt-drive/wolt-drive.service';
+import {
+  CancelWoltDriveDto,
+  RegisterWoltDriveWebhookDto,
+  UpdateWoltDriveSettingsDto,
+  WoltDriveQuoteDto,
+} from '../wolt-drive/wolt-drive.dto';
 import { TemporaryOrderingDto } from './admin-auth.dto';
 import {
   PosterAccountDto,
@@ -67,6 +74,7 @@ export class AdminController {
     private readonly upsell: UpsellService,
     private readonly ordering: OrderingService,
     private readonly audit: AdminAuditService,
+    private readonly woltDrive: WoltDriveService,
   ) {}
 
   @Get('storefront')
@@ -211,6 +219,68 @@ export class AdminController {
     return this.admin.orderPayment(id);
   }
 
+  // ─── Wolt Drive: резервный курьер ──────────────────────────────
+
+  @Get('orders/:id/wolt-drive')
+  @AdminRoles(StaffRole.OWNER, StaffRole.CASHIER)
+  woltDriveState(
+    @AdminActor() actor: AdminActorValue,
+    @Param('id') id: string,
+  ) {
+    return this.woltDrive.state(actor.tenantId, id);
+  }
+
+  /** Расчёт не вызывает курьера: он только сохраняет binding promise. */
+  @Post('orders/:id/wolt-drive/quote')
+  @AdminRoles(StaffRole.OWNER, StaffRole.CASHIER)
+  woltDriveQuote(
+    @AdminActor() actor: AdminActorValue,
+    @Param('id') id: string,
+    @Body() dto: WoltDriveQuoteDto,
+  ) {
+    return this.woltDrive.quote(
+      actor.tenantId,
+      id,
+      dto.preparationTimeMinutes,
+      dto.bagCount,
+    );
+  }
+
+  /** Отдельное подтверждение защищает от случайного платного вызова. */
+  @Post('orders/:id/wolt-drive/dispatch')
+  @AdminRoles(StaffRole.OWNER, StaffRole.CASHIER)
+  async woltDriveDispatch(
+    @AdminActor() actor: AdminActorValue,
+    @Param('id') id: string,
+  ) {
+    const result = await this.woltDrive.dispatch(actor.tenantId, id, actor.displayName);
+    await this.audit.record(actor, {
+      action: 'WOLT_DRIVE_DISPATCHED',
+      entityType: 'Order',
+      entityId: id,
+      summary: 'Вызван резервный курьер Wolt Drive',
+    });
+    return result;
+  }
+
+  @Patch('orders/:id/wolt-drive/cancel')
+  @AdminRoles(StaffRole.OWNER, StaffRole.CASHIER)
+  async woltDriveCancel(
+    @AdminActor() actor: AdminActorValue,
+    @Param('id') id: string,
+    @Body() dto: CancelWoltDriveDto,
+  ) {
+    const result = await this.woltDrive.cancel(actor.tenantId, id, dto.reason);
+    await this.audit.record(actor, {
+      action: 'WOLT_DRIVE_CANCELLED',
+      entityType: 'Order',
+      entityId: id,
+      summary: `Вызов Wolt Drive отменён: ${dto.reason}`,
+      notifyOwner: true,
+    });
+    return result;
+  }
+
   /** Полный возврат по умолчанию; amount задаёт частичный. */
   @Post('orders/:id/refund')
   refundPayment(@Param('id') id: string, @Body() dto: RefundPaymentDto) {
@@ -336,6 +406,47 @@ export class AdminController {
   @Patch('settings/payments')
   updatePayments(@Body() dto: UpdatePaymentsDto) {
     return this.admin.updatePayments(dto);
+  }
+
+  @Get('settings/wolt-drive')
+  woltDriveSettings(@AdminActor() actor: AdminActorValue) {
+    return this.woltDrive.publicSettings(actor.tenantId);
+  }
+
+  @Patch('settings/wolt-drive')
+  async updateWoltDriveSettings(
+    @AdminActor() actor: AdminActorValue,
+    @Body() dto: UpdateWoltDriveSettingsDto,
+  ) {
+    const result = await this.woltDrive.updateSettings(actor.tenantId, dto);
+    await this.audit.record(actor, {
+      action: 'WOLT_DRIVE_SETTINGS_CHANGED',
+      summary: `Wolt Drive: ${dto.mode}`,
+      metadata: {
+        mode: dto.mode,
+        venueId: dto.venueId,
+        city: dto.city,
+        merchantKeyChanged: Boolean(dto.merchantKey?.trim()),
+      },
+    });
+    return result;
+  }
+
+  @Post('settings/wolt-drive/webhook')
+  async registerWoltDriveWebhook(
+    @AdminActor() actor: AdminActorValue,
+    @Body() dto: RegisterWoltDriveWebhookDto,
+  ) {
+    const result = await this.woltDrive.registerWebhook(
+      actor.tenantId,
+      dto.callbackUrl,
+    );
+    await this.audit.record(actor, {
+      action: 'WOLT_DRIVE_WEBHOOK_REGISTERED',
+      summary: 'Подключены статусы Wolt Drive',
+      metadata: { callbackUrl: dto.callbackUrl },
+    });
+    return result;
   }
 
   // ─── Лента сообщений ─────────────────────────────────────────

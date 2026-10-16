@@ -13,6 +13,7 @@ import { AdminAuthController } from './admin-auth.controller';
 import { AdminStaffController } from './admin-staff.controller';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminAuditService } from './admin-audit.service';
+import { WoltDriveModule } from '../wolt-drive/wolt-drive.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { AdminAuditService } from './admin-audit.service';
     PromotionsModule,
     MessagesModule,
     StopListModule,
+    WoltDriveModule,
   ],
   controllers: [AdminController, AdminAuthController, AdminStaffController],
   providers: [AdminService, AdminGuard, AdminAuthService, AdminAuditService],

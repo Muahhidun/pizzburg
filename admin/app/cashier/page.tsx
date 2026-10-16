@@ -9,6 +9,8 @@ import {
   StopListResponse,
   StopPreset,
   Storefront,
+  WoltDriveDelivery,
+  WoltDriveState,
   api,
   formatTenge,
 } from '@/lib/api';
@@ -165,6 +167,7 @@ function OrderCard({ order, onDone }: { order: CashierOrder; onDone: () => void 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [woltOpen, setWoltOpen] = useState(false);
 
   const waiting = order.shortageState === 'AWAITING_CUSTOMER';
   const cancelled = order.status === 'CANCELLED';
@@ -354,11 +357,20 @@ function OrderCard({ order, onDone }: { order: CashierOrder; onDone: () => void 
             Позиции нашлись
           </button>
         )}
+        {!cancelled && order.type === 'DELIVERY' && (
+          <button
+            onClick={() => setWoltOpen(true)}
+            disabled={busy}
+            className="ml-auto rounded-lg bg-sky-600 px-3 py-1.5 text-sm text-white disabled:opacity-40"
+          >
+            Wolt Drive
+          </button>
+        )}
         {!cancelled && (
           <button
             onClick={() => setCancelling(true)}
             disabled={busy}
-            className="ml-auto rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-700 disabled:opacity-40 dark:border-red-900 dark:text-red-300"
+            className={`${order.type === 'DELIVERY' ? '' : 'ml-auto'} rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-700 disabled:opacity-40 dark:border-red-900 dark:text-red-300`}
           >
             Отменить заказ
           </button>
@@ -371,8 +383,154 @@ function OrderCard({ order, onDone }: { order: CashierOrder; onDone: () => void 
           onDone={() => { setCancelling(false); onDone(); }}
         />
       )}
+      {woltOpen && (
+        <WoltDriveDialog
+          order={order}
+          onClose={() => setWoltOpen(false)}
+        />
+      )}
     </li>
   );
+}
+
+const WOLT_STATUS_RU: Record<string, string> = {
+  QUOTED: 'Рассчитано',
+  REQUESTING: 'Отправляем в Wolt',
+  INFO_RECEIVED: 'Заявка принята Wolt',
+  RECEIVED: 'Заявка принята Wolt',
+  VENUE_ACCEPTED: 'Принято',
+  PICKUP_STARTED: 'Курьер едет в заведение',
+  PICKUP_COMPLETED: 'Заказ забран',
+  PICKED_UP: 'Заказ забран',
+  DROPOFF_STARTED: 'Курьер едет к клиенту',
+  DROPOFF_COMPLETED: 'Доставлено',
+  DELIVERED: 'Доставлено',
+  CUSTOMER_NO_SHOW: 'Клиент недоступен',
+  CANCELLED: 'Отменено',
+  REJECTED: 'Отменено',
+  ERROR: 'Нужна ручная проверка',
+};
+
+/**
+ * Сначала показываем цену и ETA, и только отдельная
+ * кнопка создаёт платную доставку. Ответ с неопределённым
+ * сетевым исходом не повторяем: два курьера дороже ручной проверки.
+ */
+function WoltDriveDialog({ order, onClose }: { order: CashierOrder; onClose: () => void }) {
+  const [state, setState] = useState<WoltDriveState | null>(null);
+  const [preparationTimeMinutes, setPreparationTimeMinutes] = useState(5);
+  const [bagCount, setBagCount] = useState(1);
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    setState(await api.get<WoltDriveState>(`/admin/orders/${order.id}/wolt-drive`));
+  }, [order.id]);
+
+  useEffect(() => {
+    load().catch((e) => setError((e as Error).message));
+  }, [load]);
+
+  async function quote() {
+    setBusy('quote'); setError('');
+    try {
+      const delivery = await api.post<WoltDriveDelivery>(
+        `/admin/orders/${order.id}/wolt-drive/quote`,
+        { preparationTimeMinutes, bagCount },
+      );
+      setState((current) => current ? { ...current, delivery } : current);
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(''); }
+  }
+
+  async function dispatch() {
+    if (!window.confirm('Вызвать платного курьера Wolt по показанной цене?')) return;
+    setBusy('dispatch'); setError('');
+    try {
+      const delivery = await api.post<WoltDriveDelivery>(
+        `/admin/orders/${order.id}/wolt-drive/dispatch`,
+      );
+      setState((current) => current ? { ...current, delivery } : current);
+    } catch (e) { setError((e as Error).message); await load().catch(() => undefined); }
+    finally { setBusy(''); }
+  }
+
+  async function cancel() {
+    const reason = window.prompt('Причина отмены Wolt Drive:');
+    if (!reason?.trim()) return;
+    setBusy('cancel'); setError('');
+    try {
+      const delivery = await api.patch<WoltDriveDelivery>(
+        `/admin/orders/${order.id}/wolt-drive/cancel`,
+        { reason: reason.trim() },
+      );
+      setState((current) => current ? { ...current, delivery } : current);
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(''); }
+  }
+
+  const delivery = state?.delivery;
+  const called = Boolean(delivery?.woltOrderReferenceId);
+  const quoteFresh = delivery?.status === 'QUOTED' &&
+    new Date(delivery.promiseValidUntil).getTime() > Date.now();
+  const maxDeliveryPriceTenge = order.total >= 8000 ? 2000 : order.total >= 6000 ? 1500 : 1200;
+  const quoteWithinLimit = Boolean(delivery &&
+    delivery.quoteCurrency === 'KZT' &&
+    delivery.quotePriceAmount <= maxDeliveryPriceTenge * 100);
+  const canCancel = called && ![
+    'CANCELLED',
+    'REJECTED',
+    'DROPOFF_COMPLETED',
+    'DELIVERED',
+    'CUSTOMER_NO_SHOW',
+  ].includes(delivery!.status);
+
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <div className="w-full max-w-lg rounded-2xl bg-white p-5 dark:bg-neutral-900" onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-start justify-between gap-3">
+        <div><h3 className="text-lg font-semibold">Wolt Drive · заказ №{order.number}</h3><p className="text-sm text-neutral-500">Резервный курьер — клиенту выбирать ничего не нужно.</p></div>
+        <button onClick={onClose} className="text-xl text-neutral-400" aria-label="Закрыть">×</button>
+      </div>
+
+      {!state && !error && <p className="mt-4 text-sm text-neutral-500">Загрузка…</p>}
+      {state && !state.settings.ready && <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+        Wolt Drive ещё не настроен. Владелец должен ввести тестовые Merchant Key и Venue ID в «Настройках».
+      </p>}
+      {order.paymentMethod === 'CARD_ON_DELIVERY' && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+        Нельзя вызвать Wolt: клиент выбрал оплату картой курьеру, а терминал есть только у нашего курьера.
+      </p>}
+
+      {state?.settings.ready && !called && order.paymentMethod !== 'CARD_ON_DELIVERY' && <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <label className="text-sm">Заказ будет готов через
+          <select value={preparationTimeMinutes} onChange={(e) => setPreparationTimeMinutes(Number(e.target.value))} disabled={!!busy} className="mt-1 w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15">
+            {[5, 10, 15, 20, 25, 30, 40, 50, 60].map((minutes) => <option key={minutes} value={minutes}>{minutes} минут</option>)}
+          </select>
+        </label>
+        <label className="text-sm">Сколько пакетов
+          <input type="number" min={1} max={20} value={bagCount} onChange={(e) => setBagCount(Math.max(1, Math.min(20, Number(e.target.value) || 1)))} disabled={!!busy} className="mt-1 w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15" />
+        </label>
+      </div>}
+
+      {delivery && <div className="mt-4 rounded-xl bg-black/[.04] p-3 text-sm dark:bg-white/[.06]">
+        <div className="flex justify-between gap-3"><b>{WOLT_STATUS_RU[delivery.status] ?? delivery.status}</b><b>{formatTenge(delivery.quotePriceAmount / 100)}</b></div>
+        <p className="mt-1 text-neutral-500">Подача: {delivery.pickupEtaMinutes ?? '—'} мин · до клиента: {delivery.dropoffEtaMinutes ?? '—'} мин · пакетов: {delivery.bagCount}</p>
+        {delivery.courierVehicleType && <p className="mt-1 text-neutral-500">Транспорт курьера: {delivery.courierVehicleType}</p>}
+        {delivery.handshakePin && <p className="mt-1 font-medium text-amber-700 dark:text-amber-300">Код передачи заказа: {delivery.handshakePin}</p>}
+        {!called && <p className="mt-1 text-xs text-neutral-400">Расчёт действует до {new Date(delivery.promiseValidUntil).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</p>}
+        {!called && !quoteWithinLimit && <p className="mt-2 font-medium text-red-600">Вызов заблокирован: для заказа на {formatTenge(order.total)} лимит доставки — {formatTenge(maxDeliveryPriceTenge)}.</p>}
+        {delivery.trackingUrl && <a href={delivery.trackingUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-sky-600 underline">Открыть отслеживание</a>}
+        {delivery.errorMessage && <p className="mt-2 text-red-600">{delivery.errorMessage}. Сначала проверьте заказ в Wolt, не нажимайте повторно.</p>}
+      </div>}
+      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+
+      <div className="mt-5 flex flex-wrap justify-end gap-2">
+        <button onClick={onClose} disabled={!!busy} className="rounded-lg border border-black/10 px-3 py-1.5 text-sm dark:border-white/15">Закрыть</button>
+        {state?.settings.ready && !called && order.paymentMethod !== 'CARD_ON_DELIVERY' && <button onClick={quote} disabled={!!busy} className="rounded-lg border border-sky-200 px-3 py-1.5 text-sm text-sky-700 disabled:opacity-40 dark:border-sky-900 dark:text-sky-300">{busy === 'quote' ? 'Считаем…' : 'Рассчитать'}</button>}
+        {quoteFresh && <button onClick={dispatch} disabled={!!busy || !quoteWithinLimit} className="rounded-lg bg-sky-600 px-3 py-1.5 text-sm text-white disabled:opacity-40">{busy === 'dispatch' ? 'Вызываем…' : 'Вызвать курьера'}</button>}
+        {canCancel && <button onClick={cancel} disabled={!!busy} className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-700 disabled:opacity-40 dark:border-red-900 dark:text-red-300">{busy === 'cancel' ? 'Отменяем…' : 'Отменить Wolt'}</button>}
+      </div>
+    </div>
+  </div>;
 }
 
 function CashierCancelDialog({ order, onClose, onDone }: { order: CashierOrder; onClose: () => void; onDone: () => void }) {

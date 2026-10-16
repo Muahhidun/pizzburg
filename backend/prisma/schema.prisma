@@ -24,22 +24,25 @@ model Tenant {
   settings  Json     @default("{}")
   createdAt DateTime @default(now())
 
-  venues          Venue[]
-  posterAccounts  PosterAccount[]
-  categories      Category[]
-  products        Product[]
-  customers       Customer[]
-  orders          Order[]
-  promoCodes      PromoCode[]
-  loyaltyTxns     LoyaltyTransaction[]
-  stopEvents      StopEvent[]
-  upsells         UpsellItem[]
-  reviews         OrderReview[]
-  events          AppEvent[]
-  paymentAttempts PaymentAttempt[]
-  paymentRefunds  PaymentRefund[]
-  staffUsers      StaffUser[]
-  adminAuditLogs  AdminAuditLog[]
+  venues                 Venue[]
+  posterAccounts         PosterAccount[]
+  categories             Category[]
+  products               Product[]
+  customers              Customer[]
+  orders                 Order[]
+  promoCodes             PromoCode[]
+  loyaltyTxns            LoyaltyTransaction[]
+  stopEvents             StopEvent[]
+  upsells                UpsellItem[]
+  reviews                OrderReview[]
+  events                 AppEvent[]
+  paymentAttempts        PaymentAttempt[]
+  paymentRefunds         PaymentRefund[]
+  woltDriveAccount       WoltDriveAccount?
+  woltDriveDeliveries    WoltDriveDelivery[]
+  woltDriveWebhookEvents WoltDriveWebhookEvent[]
+  staffUsers             StaffUser[]
+  adminAuditLogs         AdminAuditLog[]
 }
 
 /// Отдельный доступ каждого сотрудника в админку.
@@ -740,15 +743,16 @@ model Order {
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
-  items           OrderItem[]
-  dispatches      OrderDispatch[]
-  loyaltyTxns     LoyaltyTransaction[]
-  messages        OrderMessage[]
+  items             OrderItem[]
+  dispatches        OrderDispatch[]
+  loyaltyTxns       LoyaltyTransaction[]
+  messages          OrderMessage[]
   /// Когда спросили впечатления. Пусто — ещё не спрашивали
-  reviewAskedAt   DateTime?
-  review          OrderReview?
-  paymentAttempts PaymentAttempt[]
-  paymentRefunds  PaymentRefund[]
+  reviewAskedAt     DateTime?
+  review            OrderReview?
+  paymentAttempts   PaymentAttempt[]
+  paymentRefunds    PaymentRefund[]
+  woltDriveDelivery WoltDriveDelivery?
 
   @@unique([tenantId, number])
   @@index([tenantId, status])
@@ -758,6 +762,87 @@ model Order {
   /// Фоновая отправка ищет созревшие заказы каждые несколько секунд
   @@index([dispatchAfter])
   @@index([cancelUntil])
+}
+
+/// Настройки Wolt Drive хранятся отдельно для каждого арендатора.
+/// Merchant key наружу никогда не отдаётся; это такой же секрет, как токен
+/// Poster. Один аккаунт пока обслуживает одну заранее настроенную Wolt venue —
+/// для текущей модели заведений этого достаточно, а tenantId не даёт смешать
+/// настройки разных клиентов платформы.
+model WoltDriveAccount {
+  id                 String   @id @default(cuid())
+  tenantId           String   @unique
+  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  mode               String   @default("disabled") // disabled | test | production
+  merchantKey        String   @default("")
+  merchantId         String?
+  venueId            String   @default("")
+  city               String   @default("")
+  postCode           String?
+  webhookId          String?
+  webhookSecret      String?
+  webhookCallbackUrl String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+/// Связь нашего заказа с расчётом и созданной доставкой Wolt Drive.
+/// Одна строка на заказ защищает от двойного вызова курьера при повторном
+/// нажатии или повторе сетевого запроса.
+model WoltDriveDelivery {
+  id                     String                  @id @default(cuid())
+  tenantId               String
+  tenant                 Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orderId                String                  @unique
+  order                  Order                   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status                 String                  @default("QUOTED")
+  shipmentPromiseId      String
+  promiseValidUntil      DateTime
+  promiseDropoff         Json
+  quotePriceAmount       Int
+  quoteCurrency          String
+  quoteIsBinding         Boolean
+  pickupEtaMinutes       Int?
+  dropoffEtaMinutes      Int?
+  preparationTimeMinutes Int
+  bagCount               Int                     @default(1)
+  woltOrderReferenceId   String?                 @unique
+  trackingUrl            String?
+  pickupEta              DateTime?
+  dropoffEtaMin          DateTime?
+  dropoffEtaMax          DateTime?
+  deliveredAt            DateTime?
+  courierVehicleType     String?
+  handshakePin           String?
+  requestedBy            String?
+  errorCode              String?
+  errorMessage           String?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  webhookEvents          WoltDriveWebhookEvent[]
+
+  @@index([tenantId, status])
+}
+
+/// Идемпотентный журнал подписанных webhook-событий Wolt. Полный payload
+/// сохраняется для разбора спорных доставок, неизвестные будущие поля не
+/// ломают приём событий.
+model WoltDriveWebhookEvent {
+  id                       String             @id @default(cuid())
+  tenantId                 String
+  tenant                   Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  deliveryId               String?
+  delivery                 WoltDriveDelivery? @relation(fields: [deliveryId], references: [id], onDelete: SetNull)
+  eventId                  String             @unique
+  type                     String
+  dispatchedAt             DateTime
+  woltOrderReferenceId     String?
+  merchantOrderReferenceId String?
+  payload                  Json
+  createdAt                DateTime           @default(now())
+
+  @@index([tenantId, dispatchedAt])
+  @@index([deliveryId, dispatchedAt])
 }
 
 /// Одна попытка оплаты. Повтор после истечения ссылки создаёт новую

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Settings, TelegramSettings, api, formatTenge } from '@/lib/api';
+import { Settings, TelegramSettings, WoltDriveSettings, api, formatTenge } from '@/lib/api';
 
 export default function SettingsPage() {
   const [data, setData] = useState<Settings | null>(null);
@@ -221,6 +221,8 @@ export default function SettingsPage() {
       </section>
 
       <TelegramSection />
+
+      <WoltDriveSection />
 
       <section className="rounded-2xl bg-white p-5 shadow-sm dark:bg-neutral-900">
         <h2 className="mb-3 font-semibold">Точки</h2>
@@ -570,4 +572,90 @@ function TelegramSection() {
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
     </section>
   );
+}
+
+/**
+ * Wolt выдаёт тестовые и боевые доступы отдельно. Ключ никогда не
+ * возвращается из API: поле пустое, пока его не меняют.
+ */
+function WoltDriveSection() {
+  const [state, setState] = useState<WoltDriveSettings | null>(null);
+  const [mode, setMode] = useState<WoltDriveSettings['mode']>('disabled');
+  const [merchantKey, setMerchantKey] = useState('');
+  const [merchantId, setMerchantId] = useState('');
+  const [venueId, setVenueId] = useState('');
+  const [city, setCity] = useState('');
+  const [postCode, setPostCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    const next = await api.get<WoltDriveSettings>('/admin/settings/wolt-drive');
+    setState(next);
+    setMode(next.mode);
+    setMerchantId(next.merchantId);
+    setVenueId(next.venueId);
+    setCity(next.city);
+    setPostCode(next.postCode);
+  }, []);
+
+  useEffect(() => { load().catch((e) => setError((e as Error).message)); }, [load]);
+
+  async function save() {
+    if (mode === 'production' && state?.mode !== 'production' &&
+      !window.confirm('Включить боевой Wolt Drive? После этого кнопка вызова создаёт реальную платную доставку.')) return;
+    setBusy(true); setError(''); setNote('');
+    try {
+      const next = await api.patch<WoltDriveSettings>('/admin/settings/wolt-drive', {
+        mode,
+        ...(merchantKey.trim() ? { merchantKey: merchantKey.trim() } : {}),
+        merchantId: merchantId.trim(),
+        venueId: venueId.trim(),
+        city: city.trim(),
+        postCode: postCode.trim(),
+      });
+      setState(next); setMerchantKey(''); setNote('Настройки Wolt Drive сохранены');
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  }
+
+  if (!state) return error ? <p className="text-sm text-red-600">{error}</p> : null;
+  const enabledValid = mode === 'disabled' ||
+    ((state.merchantKeyConfigured || merchantKey.trim().length > 0) && venueId.trim() && city.trim());
+
+  return <section className="rounded-2xl bg-white p-5 shadow-sm dark:bg-neutral-900">
+    <div className="flex flex-wrap items-start justify-between gap-2">
+      <div><h2 className="font-semibold">Wolt Drive · резервный курьер</h2><p className="mt-1 max-w-2xl text-sm text-neutral-500">Вызов идёт только из экрана «Касса»: сначала цена и ETA, затем отдельное подтверждение.</p></div>
+      <span className={`rounded-lg px-2 py-1 text-xs font-medium ${state.ready ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800'}`}>{state.ready ? (state.mode === 'test' ? 'тестовый режим' : 'боевой режим') : 'выключен'}</span>
+    </div>
+    <p className="mt-3 rounded-xl bg-sky-50 px-3 py-2 text-sm text-sky-800 dark:bg-sky-950 dark:text-sky-200">Сейчас нужны выданные Wolt <b>development Merchant Key</b> и <b>test Venue ID</b>. В публичной инструкции их нет.</p>
+    {state.webhookConfigured && <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">Webhook статусов подключён: {state.webhookCallbackUrl}</p>}
+    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <label className="text-sm">Режим
+        <select value={mode} onChange={(e) => setMode(e.target.value as WoltDriveSettings['mode'])} className="mt-1 w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15">
+          <option value="disabled">Выключен</option><option value="test">Тест Wolt</option><option value="production">Боевой Wolt</option>
+        </select>
+      </label>
+      <label className="text-sm">Merchant Key {state.merchantKeyConfigured && <span className="text-xs text-emerald-600">задан {state.merchantKeyHint}</span>}
+        <input type="password" value={merchantKey} onChange={(e) => setMerchantKey(e.target.value)} placeholder={state.merchantKeyConfigured ? 'оставьте пустым, чтобы не менять' : 'Bearer token от Wolt'} className="mt-1 w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 font-mono dark:border-white/15" />
+      </label>
+      <label className="text-sm">Venue ID
+        <input value={venueId} onChange={(e) => setVenueId(e.target.value)} maxLength={200} className="mt-1 w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 font-mono dark:border-white/15" />
+      </label>
+      <label className="text-sm">Merchant ID <span className="text-xs text-neutral-400">понадобится для webhook</span>
+        <input value={merchantId} onChange={(e) => setMerchantId(e.target.value)} maxLength={200} className="mt-1 w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 font-mono dark:border-white/15" />
+      </label>
+      <label className="text-sm">Город
+        <input value={city} onChange={(e) => setCity(e.target.value)} maxLength={120} placeholder="Ekibastuz" className="mt-1 w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15" />
+      </label>
+      <label className="text-sm">Почтовый индекс <span className="text-xs text-neutral-400">необязательно</span>
+        <input value={postCode} onChange={(e) => setPostCode(e.target.value)} maxLength={30} className="mt-1 w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15" />
+      </label>
+    </div>
+    <p className="mt-3 rounded-xl bg-neutral-50 px-3 py-2 text-sm text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">Лимит цены Wolt задаётся автоматически: заказ меньше 6 000 ₸ — 1 200 ₸; от 6 000 до 7 999 ₸ — 1 500 ₸; от 8 000 ₸ — 2 000 ₸.</p>
+    {mode === 'production' && <p className="mt-3 text-sm text-red-600">Боевой режим включайте только после тестов и выдачи production-ключа Wolt.</p>}
+    <div className="mt-4 flex items-center gap-3"><button onClick={save} disabled={busy || !enabledValid} className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-40 dark:bg-white dark:text-black">{busy ? 'Сохраняем…' : 'Сохранить Wolt Drive'}</button>{note && <span className="text-sm text-emerald-600">{note}</span>}</div>
+    {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+  </section>;
 }
