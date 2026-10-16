@@ -70,6 +70,14 @@ class KzPhoneInputFormatter extends TextInputFormatter {
   }
 }
 
+/// Приводит номер из API или другого экрана к той же маске, что и поле ввода.
+String formatKzPhone(String raw) {
+  if (raw.trim().isEmpty) return '';
+  return KzPhoneInputFormatter()
+      .formatEditUpdate(TextEditingValue.empty, TextEditingValue(text: raw))
+      .text;
+}
+
 final nameInputFormatters = <TextInputFormatter>[
   FilteringTextInputFormatter.allow(RegExp("[$_letters '’-]")),
   LengthLimitingTextInputFormatter(60),
@@ -108,9 +116,7 @@ final commentInputFormatters = <TextInputFormatter>[
 
 String? validateKzPhone(String? value) {
   final digits = (value ?? '').replaceAll(RegExp(r'\D'), '');
-  return RegExp(r'^7\d{10}$').hasMatch(digits)
-      ? null
-      : S.enterFullPhone;
+  return RegExp(r'^7\d{10}$').hasMatch(digits) ? null : S.enterFullPhone;
 }
 
 String? validateName(String? value) {

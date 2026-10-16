@@ -17,22 +17,32 @@ import '../i18n/strings.dart';
 /// Здесь ровно два шага — номер и код, — потому что третьего у входа по
 /// смс не бывает, а лишний экран между ними теряет людей.
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  /// Номер, который человек уже ввёл при оформлении заказа.
+  ///
+  /// Профиль открывает экран без него, а оформление передаёт заполненное
+  /// значение, чтобы не просить одни и те же данные дважды.
+  final String? initialPhone;
+
+  const LoginScreen({super.key, this.initialPhone});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _phone = TextEditingController();
+  late final TextEditingController _phone;
   final _code = TextEditingController();
   bool _codeSent = false;
   bool _busy = false;
   String? _error;
 
-  /// Код, который сервер вернул прямо в ответе. Так он поступает только с
-  /// заранее названными тестовыми номерами и только пока не подключён
-  /// SMS-шлюз: в обычном режиме поле пустое, и код приходит в смс.
+  @override
+  void initState() {
+    super.initState();
+    _phone = TextEditingController(
+      text: formatKzPhone(widget.initialPhone ?? ''),
+    );
+  }
 
   @override
   void dispose() {
@@ -96,9 +106,7 @@ class _LoginScreenState extends State<LoginScreen> {
   /// обёртку исключения показывать нельзя.
   String _message(Object e) {
     final text = e.toString().replaceFirst('Exception: ', '');
-    return text.isEmpty || text.length > 120
-        ? S.tryAgainShort
-        : text;
+    return text.isEmpty || text.length > 120 ? S.tryAgainShort : text;
   }
 
   @override
@@ -123,9 +131,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: Gap.sm),
               Text(
-                _codeSent
-                    ? S.sentTo(_phone.text)
-                    : S.smsInsteadOfPassword,
+                _codeSent ? S.sentTo(_phone.text) : S.smsInsteadOfPassword,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: Gap.block),

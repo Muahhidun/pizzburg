@@ -61,7 +61,11 @@ class _CatalogData {
 const _activeStatuses = {'NEW', 'ACCEPTED', 'COOKING', 'READY', 'ON_WAY'};
 
 Map<String, String> get _stageLabels => {
-  'NEW': S.stageSentToKitchen,
+  // NEW означает, что Poster ещё не подтвердил заказ. Называть
+  // его «отправленным на кухню» рано: клиент читает это как
+  // подтверждение. Карточка в каталоге и экран заказа должны говорить
+  // одно и то же.
+  'NEW': S.statusNew,
   'ACCEPTED': S.stageAccepted,
   'COOKING': S.statusCooking,
   'READY': S.statusReady,
@@ -951,9 +955,9 @@ class _MenuScreenState extends State<MenuScreen> {
       await context.read<Favorites>().toggle(productId);
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(S.saveFailed)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(S.saveFailed)));
     }
   }
 

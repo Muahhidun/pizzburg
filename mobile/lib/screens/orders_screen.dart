@@ -41,9 +41,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
   void initState() {
     super.initState();
     // Меню нужно для повтора: корзина собирается по текущим ценам
-    context.read<ApiClient>().fetchMenu().then((menu) {
-      if (mounted) setState(() => _menu = menu);
-    }).catchError((_) => null);
+    context
+        .read<ApiClient>()
+        .fetchMenu()
+        .then((menu) {
+          if (mounted) setState(() => _menu = menu);
+        })
+        .catchError((_) => null);
   }
 
   Future<void> _repeat(Map<String, dynamic> order) async {
@@ -58,9 +62,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
       final added = context.read<Cart>().fillFromRepeat(result, loaded);
       if (added == 0) {
         await Haptics.warning();
-        messenger.showSnackBar(
-          SnackBar(content: Text(S.nothingFromThatOrder)),
-        );
+        messenger.showSnackBar(SnackBar(content: Text(S.nothingFromThatOrder)));
         return;
       }
       Haptics.success();
@@ -69,9 +71,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
           content: Text(
             result.unavailable.isEmpty
                 ? S.orderMovedToCart
-                : S.notMoved(
-                    result.unavailable.map((u) => u.name).join(', '),
-                  ),
+                : S.notMoved(result.unavailable.map((u) => u.name).join(', ')),
           ),
         ),
       );
@@ -81,8 +81,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
     }
   }
 
-  void _open(Map<String, dynamic> order) {
-    Navigator.push(
+  Future<void> _open(Map<String, dynamic> order) async {
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => OrderScreen(
@@ -95,6 +95,19 @@ class _OrdersScreenState extends State<OrdersScreen> {
         ),
       ),
     );
+    if (!mounted) return;
+
+    // Статус мог измениться на экране заказа (например, клиент отменил его).
+    // При возврате список должен сразу показать серверное состояние, а не
+    // держать старую активную карточку до ручного обновления.
+    final auth = context.read<AuthState>();
+    if (!auth.isAuthenticated) return;
+    try {
+      await auth.refresh();
+    } catch (_) {
+      // Существующий список остаётся доступным офлайн; pull-to-refresh даст
+      // пользователю повторить запрос, когда сеть вернётся.
+    }
   }
 
   @override
@@ -227,7 +240,6 @@ class _ActiveCard extends StatelessWidget {
       ),
     );
   }
-
 }
 
 class _HistoryRow extends StatelessWidget {
@@ -304,9 +316,9 @@ class _HistoryRow extends StatelessWidget {
               children: [
                 Text(
                   formatTenge((order['total'] as num?)?.toInt() ?? 0),
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontSize: 15,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleMedium?.copyWith(fontSize: 15),
                 ),
                 const SizedBox(height: Gap.sm),
                 PressScale(

@@ -13,6 +13,7 @@ import 'package:pizzburg/utils/input_validation.dart';
 import 'package:pizzburg/widgets/glass_nav_bar.dart';
 import 'package:pizzburg/i18n/lang.dart';
 import 'package:pizzburg/i18n/strings.dart';
+import 'package:pizzburg/screens/login_screen.dart';
 
 void main() {
   test('formatTenge разделяет разряды', () {
@@ -105,6 +106,21 @@ void main() {
     expect(validateKzPhone('+770712727894646*#'), isNotNull);
   });
 
+  testWidgets('вход из оформления получает уже введённый телефон', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.build(),
+        home: const LoginScreen(initialPhone: '+7 (718) 755-60-84'),
+      ),
+    );
+
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.controller?.text, '+7 (718) 755-60-84');
+    expect(find.text('Получить код'), findsOneWidget);
+  });
+
   test('поля оформления отклоняют некорректные значения', () {
     expect(validateName('Жандос'), isNull);
     expect(validateName('Жандос123'), isNotNull);
@@ -169,7 +185,11 @@ void main() {
         'todayHours': [
           ['10:00', '22:00'],
         ],
-        'payments': {'cash': true, 'cardOnDelivery': false, 'askChangeFrom': true},
+        'payments': {
+          'cash': true,
+          'cardOnDelivery': false,
+          'askChangeFrom': true,
+        },
         'cancelWindowMinutes': 15,
       },
     });
@@ -350,7 +370,12 @@ void main() {
           'id': 'c1',
           'name': 'Пиццы',
           'products': [
-            {'id': 'p1', 'name': 'Маргарита', 'price': 2550, 'modifierGroups': []},
+            {
+              'id': 'p1',
+              'name': 'Маргарита',
+              'price': 2550,
+              'modifierGroups': [],
+            },
           ],
         },
       ],
@@ -381,7 +406,12 @@ void main() {
           'id': 'c1',
           'name': 'Пиццы',
           'products': [
-            {'id': 'p1', 'name': 'Маргарита', 'price': 2550, 'modifierGroups': []},
+            {
+              'id': 'p1',
+              'name': 'Маргарита',
+              'price': 2550,
+              'modifierGroups': [],
+            },
           ],
         },
       ],
@@ -426,7 +456,11 @@ void main() {
       for (var i = 0; i < 12; i++) {
         final shorter = text.substring(0, text.length - 1);
         final next = apply(text, shorter);
-        expect(next.length < text.length, isTrue, reason: 'застряло на «$text»');
+        expect(
+          next.length < text.length,
+          isTrue,
+          reason: 'застряло на «$text»',
+        );
         text = next;
         if (text == '+7') break;
       }

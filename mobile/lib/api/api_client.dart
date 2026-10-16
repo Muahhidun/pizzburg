@@ -71,6 +71,25 @@ class ApiClient {
     return CreatedOrder.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
   }
 
+  Future<KaspiPayment> createKaspiPayment(String orderId) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/payments/orders/$orderId'),
+      headers: _headers,
+      body: jsonEncode({'channel': 'MOBILE_LINK'}),
+    );
+    _ensureOk(res);
+    return KaspiPayment.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
+  }
+
+  Future<KaspiPayment> syncKaspiPayment(String orderId) async {
+    final res = await http.get(
+      Uri.parse('$baseUrl/payments/orders/$orderId'),
+      headers: _headers,
+    );
+    _ensureOk(res);
+    return KaspiPayment.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
+  }
+
   /// Режим приёма заказов, расписание и окно отмены.
   /// Экрану заказа нужен `cancelWindowMinutes`, а он приходит только сюда.
   Future<Availability> fetchAvailability() async {

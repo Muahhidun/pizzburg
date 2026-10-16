@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../state/auth.dart';
 import '../state/cart.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
@@ -99,6 +102,17 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   /// Повторный тап по своей вкладке не переключает экран, а возвращает его
   /// наверх — так ведут себя системные табы iOS и все крупные приложения.
   void _go(int index) {
+    // `IndexedStack` сохраняет экраны вместе с их состоянием. Это удобно для
+    // прокрутки, но профиль с историей заказов сам по себе не перечитывался:
+    // после отмены карточка NEW висела до ручного pull-to-refresh. Поэтому
+    // каждый вход в «Заказы» сверяет историю с сервером, включая повторный
+    // тап по уже открытой вкладке.
+    if (index == 3) {
+      final auth = context.read<AuthState>();
+      if (auth.isAuthenticated) {
+        unawaited(auth.refresh().catchError((_) {}));
+      }
+    }
     if (index == _index) {
       _scrollToTop(index);
       return;

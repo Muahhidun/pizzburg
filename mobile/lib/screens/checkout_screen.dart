@@ -18,6 +18,7 @@ import '../utils/input_validation.dart';
 import '../widgets/motion.dart';
 import 'legal_screen.dart';
 import 'order_screen.dart';
+import 'kaspi_payment_screen.dart';
 import '../i18n/strings.dart';
 
 /// Оформление заказа по прототипу «Сигнал».
@@ -108,7 +109,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   String _firstEnabledPayment() {
     if (_availability.cashEnabled) return 'CASH';
     if (_availability.cardOnDeliveryEnabled) return 'CARD_ON_DELIVERY';
-    return 'KASPI_ONLINE';
+    if (_availability.kaspiOnlineEnabled && kKaspiBrandAssetsReady) {
+      return 'KASPI_ONLINE';
+    }
+    // Нормальная конфигурация всегда оставляет хотя бы один способ.
+    // Без официальных материалов Kaspi принудительно не выбираем скрытый
+    // вариант: сервер всё равно перепроверит настройку при отправке.
+    return 'CASH';
   }
 
   Future<void> _loadSlots() async {
@@ -136,7 +143,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final auth = context.read<AuthState>();
     if (!auth.isAuthenticated) return;
     setState(() {
-      _phone.text = auth.phone;
+      _phone.text = formatKzPhone(auth.phone);
       if (_name.text.isEmpty && auth.name.isNotEmpty) _name.text = auth.name;
     });
     _loadAddresses(keepChosen: keepAddress);
@@ -179,6 +186,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       _points.clamp(0, widget.preview.subtotal);
 
   Future<void> _submit() async {
+    // Сначала проверяем уже заполненную форму. Иначе гость с опечаткой в
+    // адресе или телефоне попадал на вход, а ошибку видел только после SMS.
+    if (!_formKey.currentState!.validate()) {
+      await Haptics.warning();
+      return;
+    }
+
     // Заказ только для вошедших (DECISIONS §12.22): подтверждённый по SMS
     // номер — защита от ложных заказов. Отправляем на вход отсюда, а не
     // получаем отказ сервера после нажатия «Заказать».
@@ -187,7 +201,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (!mounted) return;
       final entered = await Navigator.push<bool>(
         context,
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        MaterialPageRoute(
+          builder: (_) => LoginScreen(initialPhone: _phone.text.trim()),
+        ),
       );
       if (entered != true || !mounted) return;
       // Подставляем телефон, который человек только что подтвердил, но
@@ -195,10 +211,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       // Дальше метод идёт своим чередом и оформляет заказ — второй раз
       // жать «Заказать» не нужно.
       _prefillProfile(keepAddress: true);
-    }
-    if (!_formKey.currentState!.validate()) {
-      await Haptics.warning();
-      return;
     }
     setState(() {
       _sending = true;
@@ -233,6 +245,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       // этого вернуться к статусу после закрытия приложения было бы нельзя.
       await LastPlacedOrder.remember(order.id, order.number, order.total);
       if (!mounted) return;
+
+      if (_payment == 'KASPI_ONLINE') {
+        Haptics.success();
+        cart.clear();
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => KaspiPaymentScreen(order: order)),
+          (route) => route.isFirst,
+        );
+        return;
+      }
 
       // Разрешение на уведомления спрашиваем здесь, а не на первом
       // запуске.
@@ -371,7 +394,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           padding: const EdgeInsets.only(bottom: Gap.sm),
                           child: _AddressRow(
                             address: a,
-                            selected: !_newAddress && _selectedAddressId == a.id,
+                            selected:
+                                !_newAddress && _selectedAddressId == a.id,
                             onTap: () => setState(() => _applyAddress(a)),
                           ),
                         ),
@@ -399,7 +423,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                             }
                           }),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: Gap.sm),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: Gap.sm,
+                            ),
                             child: Text(
                               S.newAddress,
                               style: TextStyle(
@@ -512,10 +538,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       onTap: () =>
                           setState(() => _payment = 'CARD_ON_DELIVERY'),
                     ),
-                  // Онлайн-оплаты в списке нет совсем, пока не заработает
-                  // Kaspi. Неактивная кнопка «скоро» обещает то, чего ещё
-                  // нет: покупателю бесполезна, а App Review читает такое
-                  // как незаконченную заготовку.
+                  if (_availability.kaspiOnlineEnabled &&
+                      kKaspiBrandAssetsReady)
+                    _Chip(
+                      label: S.kaspiOnline,
+                      selected: _payment == 'KASPI_ONLINE',
+                      onTap: () => setState(() => _payment = 'KASPI_ONLINE'),
+                    ),
                 ],
               ),
 
@@ -542,16 +571,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       Wrap(
                         spacing: 7,
                         children: [
-                          for (final amount
-                              in _changeOptions.where((a) => a > _total))
+                          for (final amount in _changeOptions.where(
+                            (a) => a > _total,
+                          ))
                             _Chip(
                               label: formatTenge(amount, withCurrency: false),
                               selected: _changeFrom == amount,
                               // Повторный тап снимает выбор: человек мог
                               // передумать и заплатить без сдачи.
                               onTap: () => setState(
-                                () => _changeFrom =
-                                    _changeFrom == amount ? null : amount,
+                                () => _changeFrom = _changeFrom == amount
+                                    ? null
+                                    : amount,
                               ),
                             ),
                           if (_changeOptions.every((a) => a <= _total))
@@ -576,10 +607,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
               if (_error != null) ...[
                 const SizedBox(height: Gap.lg),
-                Text(
-                  _error!,
-                  style: TextStyle(fontSize: 13, color: c.accent),
-                ),
+                Text(_error!, style: TextStyle(fontSize: 13, color: c.accent)),
               ],
 
               // Про наплыв говорим здесь, у самой кнопки.
@@ -894,10 +922,8 @@ class _ConsentText extends StatelessWidget {
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => LegalDocumentScreen(
-                type: 'OFFER',
-                title: S.publicOffer,
-              ),
+              builder: (_) =>
+                  LegalDocumentScreen(type: 'OFFER', title: S.publicOffer),
             ),
           ),
           child: Text(S.offerLink, style: link),
@@ -910,10 +936,8 @@ class _ConsentText extends StatelessWidget {
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => LegalDocumentScreen(
-                type: 'PRIVACY',
-                title: S.privacyPolicy,
-              ),
+              builder: (_) =>
+                  LegalDocumentScreen(type: 'PRIVACY', title: S.privacyPolicy),
             ),
           ),
           child: Text(S.privacyLink, style: link),
@@ -922,4 +946,3 @@ class _ConsentText extends StatelessWidget {
     );
   }
 }
-

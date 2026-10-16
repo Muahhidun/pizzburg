@@ -360,7 +360,8 @@ class Availability {
   /// считаем, что всё доступно, а сервер всё равно перепроверит.
   factory Availability.fromJson(Map<String, dynamic>? json) {
     final j = json ?? const <String, dynamic>{};
-    final payments = (j['payments'] as Map?)?.cast<String, dynamic>() ??
+    final payments =
+        (j['payments'] as Map?)?.cast<String, dynamic>() ??
         const <String, dynamic>{};
     return Availability(
       mode: j['mode'] ?? 'ALL',
@@ -382,7 +383,8 @@ class Availability {
       // уже разложенным полем. Модель одна на оба ответа, поэтому читаем
       // обе: раньше понимали только вложенную, и в ответе корзины окно
       // всегда было нулём — кнопка отмены не появлялась.
-      cancelWindowMinutes: j['cancelWindowMinutes'] ??
+      cancelWindowMinutes:
+          j['cancelWindowMinutes'] ??
           (j['cancellation'] ?? const {})['customerWindowMinutes'] ??
           0,
       rushNoticeRu: j['rushNotice'],
@@ -398,10 +400,8 @@ class PreorderSlot {
 
   const PreorderSlot({required this.at, required this.label});
 
-  factory PreorderSlot.fromJson(Map<String, dynamic> json) => PreorderSlot(
-    at: DateTime.parse(json['at']),
-    label: json['label'] ?? '',
-  );
+  factory PreorderSlot.fromJson(Map<String, dynamic> json) =>
+      PreorderSlot(at: DateTime.parse(json['at']), label: json['label'] ?? '');
 }
 
 class CartGift {
@@ -443,6 +443,50 @@ class CreatedOrder {
     number: json['number'],
     total: json['total'],
     pointsSpent: json['pointsSpent'] ?? 0,
+  );
+}
+
+/// Безопасная проекция попытки Kaspi: сертификат, DeviceToken и запросы к
+/// банку остаются только на сервере.
+class KaspiPayment {
+  final String id;
+  final String orderId;
+  final String status;
+  final int amount;
+  final String? paymentLink;
+  final int pollingIntervalSeconds;
+  final int activationTimeoutSeconds;
+  final int confirmationTimeoutSeconds;
+  final String? errorMessage;
+
+  const KaspiPayment({
+    required this.id,
+    required this.orderId,
+    required this.status,
+    required this.amount,
+    this.paymentLink,
+    required this.pollingIntervalSeconds,
+    required this.activationTimeoutSeconds,
+    required this.confirmationTimeoutSeconds,
+    this.errorMessage,
+  });
+
+  bool get isProcessed => status == 'PROCESSED';
+  bool get isError => status == 'ERROR' || status == 'EXPIRED';
+
+  factory KaspiPayment.fromJson(Map<String, dynamic> json) => KaspiPayment(
+    id: json['id']?.toString() ?? '',
+    orderId: json['orderId']?.toString() ?? '',
+    status: json['status']?.toString() ?? 'CREATED',
+    amount: (json['amount'] as num?)?.toInt() ?? 0,
+    paymentLink: json['paymentLink']?.toString(),
+    pollingIntervalSeconds:
+        (json['statusPollingIntervalSec'] as num?)?.toInt() ?? 5,
+    activationTimeoutSeconds:
+        (json['activationTimeoutSec'] as num?)?.toInt() ?? 65,
+    confirmationTimeoutSeconds:
+        (json['confirmationTimeoutSec'] as num?)?.toInt() ?? 180,
+    errorMessage: json['errorMessage']?.toString(),
   );
 }
 

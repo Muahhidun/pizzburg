@@ -100,9 +100,7 @@ class _OrderScreenState extends State<OrderScreen> {
     // «Ещё можно отменить» с бегущими секундами — человек нажал, ничего
     // не изменилось, и он идёт звонить.
     if ((_data?['status'] ?? 'NEW') != 'NEW') return null;
-    final explicit = DateTime.tryParse(
-      _data?['cancelUntil']?.toString() ?? '',
-    );
+    final explicit = DateTime.tryParse(_data?['cancelUntil']?.toString() ?? '');
     final created = DateTime.tryParse(_data?['createdAt']?.toString() ?? '');
     final deadline = explicit ?? created?.add(Duration(minutes: window));
     if (deadline == null) return null;
@@ -219,10 +217,8 @@ class _OrderScreenState extends State<OrderScreen> {
   /// состояние до нажатия, а не узнавать об отказе после (§12.21).
   Map<String, dynamic>? _messageState;
 
-  int get _messagesSent =>
-      (_messageState?['sent'] as num?)?.toInt() ?? 0;
-  int get _messagesLimit =>
-      (_messageState?['limit'] as num?)?.toInt() ?? 3;
+  int get _messagesSent => (_messageState?['sent'] as num?)?.toInt() ?? 0;
+  int get _messagesLimit => (_messageState?['limit'] as num?)?.toInt() ?? 3;
 
   /// Сколько ещё ждать до следующего обращения; null — можно писать
   Duration? get _messageWait {
@@ -241,9 +237,7 @@ class _OrderScreenState extends State<OrderScreen> {
     if (window <= 0) return false;
     if (!context.read<AuthState>().isAuthenticated) return false;
     if ((_data?['status'] ?? 'NEW') != 'NEW') return false;
-    final explicit = DateTime.tryParse(
-      _data?['cancelUntil']?.toString() ?? '',
-    );
+    final explicit = DateTime.tryParse(_data?['cancelUntil']?.toString() ?? '');
     final created = DateTime.tryParse(_data?['createdAt']?.toString() ?? '');
     final deadline = explicit ?? created?.add(Duration(minutes: window));
     return deadline != null && DateTime.now().isBefore(deadline);
@@ -283,9 +277,9 @@ class _OrderScreenState extends State<OrderScreen> {
       if (!mounted) return;
       setState(() => _messageState = state);
       Haptics.success();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(S.passedToCashier)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(S.passedToCashier)));
     } catch (e) {
       if (!mounted) return;
       await Haptics.warning();
@@ -366,11 +360,7 @@ class _OrderScreenState extends State<OrderScreen> {
                         color: c.surface.withValues(alpha: 0.12),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(
-                        Icons.arrow_back,
-                        size: 18,
-                        color: c.surface,
-                      ),
+                      child: Icon(Icons.arrow_back, size: 18, color: c.surface),
                     ),
                   ),
                 ],
@@ -386,7 +376,7 @@ class _OrderScreenState extends State<OrderScreen> {
                 ),
               ),
               const SizedBox(height: Gap.sm),
-              Text(
+              _ResponsiveHeadline(
                 loaded
                     ? (_awaitingShortage
                           ? S.onePositionMissing
@@ -397,9 +387,7 @@ class _OrderScreenState extends State<OrderScreen> {
                     ? S.loadFailed
                     : S.loading,
                 style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                  color: loaded
-                      ? c.surface
-                      : c.surface.withValues(alpha: 0.35),
+                  color: loaded ? c.surface : c.surface.withValues(alpha: 0.35),
                 ),
               ),
 
@@ -500,7 +488,9 @@ class _OrderScreenState extends State<OrderScreen> {
                       borderRadius: R.pill,
                     ),
                     child: Text(
-                      status == 'DELIVERED' ? S.deliveredLower : S.inProgressLower,
+                      status == 'DELIVERED'
+                          ? S.deliveredLower
+                          : S.inProgressLower,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontSize: 15.5,
                         color: c.onBenefit,
@@ -721,7 +711,10 @@ class _OrderScreenState extends State<OrderScreen> {
         decoration: BoxDecoration(
           color: c.surface.withValues(alpha: 0.1),
           borderRadius: R.thumb,
-          border: Border.all(color: c.accent.withValues(alpha: 0.7), width: 1.5),
+          border: Border.all(
+            color: c.accent.withValues(alpha: 0.7),
+            width: 1.5,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -767,7 +760,10 @@ class _OrderScreenState extends State<OrderScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 15),
                 alignment: Alignment.center,
-                decoration: BoxDecoration(color: c.benefit, borderRadius: R.pill),
+                decoration: BoxDecoration(
+                  color: c.benefit,
+                  borderRadius: R.pill,
+                ),
                 child: Text(
                   _answering ? S.oneSecond : S.bringWithoutIt,
                   style: TextStyle(
@@ -817,6 +813,48 @@ class _OrderScreenState extends State<OrderScreen> {
     final type = _data?['type'] == 'PICKUP' ? S.pickup : S.delivery;
     return count == 0 ? type : S.positionsShort(count, type);
   }
+}
+
+/// Большой заголовок статуса должен оставаться читаемым на узких
+/// Android-экранах и при увеличенном системном шрифте. Подбираем
+/// размер по фактической ширине, не отключая accessibility scaling для
+/// остального текста.
+class _ResponsiveHeadline extends StatelessWidget {
+  final String text;
+  final TextStyle? style;
+
+  const _ResponsiveHeadline(this.text, {this.style});
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final base = style ?? const TextStyle(fontSize: 32);
+      var fontSize = base.fontSize ?? 32;
+      final scaler = MediaQuery.textScalerOf(context);
+
+      while (fontSize > 24) {
+        final painter = TextPainter(
+          text: TextSpan(
+            text: text,
+            style: base.copyWith(fontSize: fontSize),
+          ),
+          maxLines: 2,
+          textDirection: Directionality.of(context),
+          textScaler: scaler,
+          locale: Localizations.maybeLocaleOf(context),
+        )..layout(maxWidth: constraints.maxWidth);
+        if (!painter.didExceedMaxLines) break;
+        fontSize -= 1;
+      }
+
+      return Text(
+        text,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: base.copyWith(fontSize: fontSize),
+      );
+    },
+  );
 }
 
 class _StageRow extends StatelessWidget {
@@ -964,9 +1002,7 @@ class _WriteUsButton extends StatelessWidget {
         if (sent > 0) ...[
           const SizedBox(height: Gap.sm),
           Text(
-            exhausted
-                ? S.cashierSeesThem
-                : S.sentOf(sent, limit),
+            exhausted ? S.cashierSeesThem : S.sentOf(sent, limit),
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 12,
@@ -1028,7 +1064,8 @@ class _MessageSheetState extends State<_MessageSheet> {
   Widget build(BuildContext context) {
     final c = context.colors;
     // «Другое» без пояснения — пустое сообщение, разбирать в нём нечего
-    final ready = _topic != null && (_topic != 'OTHER' || _text.text.trim().isNotEmpty);
+    final ready =
+        _topic != null && (_topic != 'OTHER' || _text.text.trim().isNotEmpty);
 
     return Container(
       padding: EdgeInsets.fromLTRB(
