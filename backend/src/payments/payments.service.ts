@@ -4,21 +4,22 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-} from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+} from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import {
   Prisma,
   PaymentAttemptStatus,
   PaymentChannel,
   PaymentRefundStatus,
-} from '@prisma/client';
-import { AvailabilityService } from '../availability/availability.service';
-import { PrismaService } from '../prisma/prisma.service';
+} from "@prisma/client";
+import { AvailabilityService } from "../availability/availability.service";
+import { PrismaService } from "../prisma/prisma.service";
 import {
   KASPI_PAYMENT_PROVIDER,
   PaymentProvider,
   ProviderPaymentState,
-} from './payment-provider';
+} from "./payment-provider";
+import { KaspiApiError } from "./kaspi.provider";
 
 /** Тот же технический буфер, что у отправки обычного заказа в Poster. */
 export const PAYMENT_DISPATCH_BUFFER_MS = 10_000;
@@ -35,7 +36,7 @@ export function refundRetryDelayMs(attemptCount: number) {
   return Math.min(60, 2 ** exponent) * 60_000;
 }
 
-type RefundActor = 'CUSTOMER' | 'ADMIN' | 'SYSTEM';
+type RefundActor = "CUSTOMER" | "ADMIN" | "SYSTEM";
 
 @Injectable()
 export class PaymentsService {
@@ -66,20 +67,20 @@ export class PaymentsService {
         paymentStatus: true,
       },
     });
-    if (!order) throw new NotFoundException('Заказ не найден');
-    if (order.paymentMethod !== 'KASPI_ONLINE') {
-      throw new BadRequestException('Для заказа не выбрана оплата Kaspi');
+    if (!order) throw new NotFoundException("Заказ не найден");
+    if (order.paymentMethod !== "KASPI_ONLINE") {
+      throw new BadRequestException("Для заказа не выбрана оплата Kaspi");
     }
-    if (order.paymentStatus === 'PAID') {
-      throw new BadRequestException('Заказ уже оплачен');
+    if (order.paymentStatus === "PAID") {
+      throw new BadRequestException("Заказ уже оплачен");
     }
 
     const active = await this.prisma.paymentAttempt.findFirst({
       where: {
         orderId,
-        status: { in: ['CREATED', 'QR_TOKEN_CREATED', 'WAIT'] },
+        status: { in: ["CREATED", "QR_TOKEN_CREATED", "WAIT"] },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
     if (active) return this.paymentSummary(active.id);
 
@@ -88,13 +89,13 @@ export class PaymentsService {
       data: {
         tenantId: order.tenantId,
         orderId: order.id,
-        provider: 'KASPI',
+        provider: "KASPI",
         channel,
         amount: order.total,
         externalId,
       },
     });
-    await this.event(attempt.id, 'PAYMENT_CREATED');
+    await this.event(attempt.id, "PAYMENT_CREATED");
 
     const requestId = randomUUID();
     try {
@@ -107,7 +108,7 @@ export class PaymentsService {
       await this.prisma.paymentAttempt.update({
         where: { id: attempt.id },
         data: {
-          status: 'QR_TOKEN_CREATED',
+          status: "QR_TOKEN_CREATED",
           providerPaymentId: created.providerPaymentId,
           expiresAt: created.expiresAt,
           paymentMethods: created.paymentMethods,
@@ -117,7 +118,7 @@ export class PaymentsService {
           lastStatusAt: new Date(),
         },
       });
-      await this.event(attempt.id, 'PROVIDER_PAYMENT_CREATED', {
+      await this.event(attempt.id, "PROVIDER_PAYMENT_CREATED", {
         requestId,
         providerStatus: created.status,
       });
@@ -130,11 +131,15 @@ export class PaymentsService {
       const message = this.errorMessage(error);
       await this.prisma.paymentAttempt.update({
         where: { id: attempt.id },
-        data: { status: 'ERROR', errorMessage: message, lastStatusAt: new Date() },
+        data: {
+          status: "ERROR",
+          errorMessage: message,
+          lastStatusAt: new Date(),
+        },
       });
-      await this.event(attempt.id, 'PROVIDER_CREATE_FAILED', {
+      await this.event(attempt.id, "PROVIDER_CREATE_FAILED", {
         requestId,
-        providerStatus: 'ERROR',
+        providerStatus: "ERROR",
         metadata: { message },
       });
       throw error;
@@ -145,11 +150,11 @@ export class PaymentsService {
     const attempt = await this.prisma.paymentAttempt.findUnique({
       where: { id: attemptId },
     });
-    if (!attempt) throw new NotFoundException('Попытка оплаты не найдена');
+    if (!attempt) throw new NotFoundException("Попытка оплаты не найдена");
     if (!attempt.providerPaymentId) {
-      throw new BadRequestException('Kaspi ещё не вернул идентификатор оплаты');
+      throw new BadRequestException("Kaspi ещё не вернул идентификатор оплаты");
     }
-    if (['PROCESSED', 'ERROR', 'EXPIRED'].includes(attempt.status)) {
+    if (["PROCESSED", "ERROR", "EXPIRED"].includes(attempt.status)) {
       return this.paymentSummary(attempt.id);
     }
 
@@ -160,6 +165,17 @@ export class PaymentsService {
     );
     await this.applyProviderState(attempt.id, state, requestId);
     return this.paymentSummary(attempt.id);
+  }
+
+  /** Последняя активная попытка конкретного заказа для мобильного клиента. */
+  async syncOrderPayment(orderId: string) {
+    const attempt = await this.prisma.paymentAttempt.findFirst({
+      where: { orderId },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+    if (!attempt) throw new NotFoundException("Оплата для заказа не найдена");
+    return this.syncPayment(attempt.id);
   }
 
   /**
@@ -178,20 +194,23 @@ export class PaymentsService {
         cancelReason: true,
       },
     });
-    if (!order || order.paymentMethod !== 'KASPI_ONLINE') return null;
-    if (order.paymentStatus === 'PENDING' || order.paymentStatus === 'REFUNDED') {
+    if (!order || order.paymentMethod !== "KASPI_ONLINE") return null;
+    if (
+      order.paymentStatus === "PENDING" ||
+      order.paymentStatus === "REFUNDED"
+    ) {
       return null;
     }
     return this.requestRefund({
       orderId,
       tenantId: order.tenantId,
       requestedBy:
-        order.cancelledBy === 'CUSTOMER'
-          ? 'CUSTOMER'
-          : order.cancelledBy === 'ADMIN'
-            ? 'ADMIN'
-            : 'SYSTEM',
-      reason: order.cancelReason ?? 'Отмена заказа',
+        order.cancelledBy === "CUSTOMER"
+          ? "CUSTOMER"
+          : order.cancelledBy === "ADMIN"
+            ? "ADMIN"
+            : "SYSTEM",
+      reason: order.cancelReason ?? "Отмена заказа",
       idempotencyKey: `order-cancel:${order.id}`,
       // Клиент не должен ждать сетевой таймаут Kaspi, чтобы увидеть саму
       // отмену. PENDING уже сохранён, вызов стартует сразу и подхватится
@@ -213,13 +232,13 @@ export class PaymentsService {
     if (!reservation.created) {
       // Процесс мог упасть между записью PENDING и сетевым вызовом.
       // Повтор того же HTTP-запроса безопасно продолжает ровно эту запись.
-      if (reservation.refund.status !== 'PENDING') return reservation.refund;
+      if (reservation.refund.status !== "PENDING") return reservation.refund;
       return this.processOrQueue(
         reservation.refund,
         input.processImmediately !== false,
       );
     }
-    await this.event(reservation.paymentAttemptId, 'REFUND_REQUESTED', {
+    await this.event(reservation.paymentAttemptId, "REFUND_REQUESTED", {
       refundId: reservation.refund.id,
       metadata: {
         amount: reservation.refund.amount,
@@ -237,16 +256,16 @@ export class PaymentsService {
     const refund = await this.prisma.paymentRefund.findFirst({
       where: { id: refundId, tenantId },
     });
-    if (!refund) throw new NotFoundException('Возврат не найден');
-    if (refund.status === 'SUCCEEDED') return refund;
-    if (refund.status !== 'FAILED') {
+    if (!refund) throw new NotFoundException("Возврат не найден");
+    if (refund.status === "SUCCEEDED") return refund;
+    if (refund.status !== "FAILED") {
       throw new BadRequestException(
-        'Ручной повтор доступен только после остановки автоматических попыток',
+        "Ручной повтор доступен только после остановки автоматических попыток",
       );
     }
     await this.prisma.paymentRefund.update({
       where: { id: refund.id },
-      data: { status: 'PENDING', nextRetryAt: null, lastError: null },
+      data: { status: "PENDING", nextRetryAt: null, lastError: null },
     });
     return this.processRefund(refund.id);
   }
@@ -256,16 +275,16 @@ export class PaymentsService {
       where: { id: refundId },
       include: { paymentAttempt: true },
     });
-    if (!refund) throw new NotFoundException('Возврат не найден');
-    if (refund.status === 'SUCCEEDED') return refund;
-    if (refund.status === 'PROCESSING') return refund;
+    if (!refund) throw new NotFoundException("Возврат не найден");
+    if (refund.status === "SUCCEEDED") return refund;
+    if (refund.status === "PROCESSING") return refund;
 
     if (!refund.paymentAttempt.providerPaymentId) {
       const failed = await this.prisma.paymentRefund.update({
         where: { id: refund.id },
         data: {
-          status: 'FAILED',
-          lastError: 'У оплаты отсутствует идентификатор Kaspi',
+          status: "FAILED",
+          lastError: "У оплаты отсутствует идентификатор Kaspi",
           nextRetryAt: null,
         },
       });
@@ -280,10 +299,10 @@ export class PaymentsService {
     const claimed = await this.prisma.paymentRefund.updateMany({
       where: {
         id: refund.id,
-        status: { in: ['PENDING', 'RETRY_PENDING'] },
+        status: { in: ["PENDING", "RETRY_PENDING"] },
       },
       data: {
-        status: 'PROCESSING',
+        status: "PROCESSING",
         attemptCount: { increment: 1 },
         nextRetryAt: null,
         lastError: null,
@@ -311,14 +330,14 @@ export class PaymentsService {
       const succeeded = await this.prisma.paymentRefund.update({
         where: { id: processing.id },
         data: {
-          status: 'SUCCEEDED',
+          status: "SUCCEEDED",
           providerRefundId: result.providerRefundId,
           completedAt: new Date(),
           nextRetryAt: null,
           lastError: null,
         },
       });
-      await this.event(processing.paymentAttemptId, 'REFUND_SUCCEEDED', {
+      await this.event(processing.paymentAttemptId, "REFUND_SUCCEEDED", {
         refundId: processing.id,
         requestId,
         metadata: { amount: processing.amount },
@@ -327,22 +346,27 @@ export class PaymentsService {
       return succeeded;
     } catch (error) {
       const message = this.errorMessage(error);
+      const retryable = !(error instanceof KaspiApiError) || error.retryable;
       const automaticRetriesExhausted =
-        attemptCount >= MAX_AUTOMATIC_REFUND_ATTEMPTS;
+        !retryable || attemptCount >= MAX_AUTOMATIC_REFUND_ATTEMPTS;
       const failed = await this.prisma.paymentRefund.update({
         where: { id: processing.id },
         data: {
-          status: automaticRetriesExhausted ? 'FAILED' : 'RETRY_PENDING',
+          status: automaticRetriesExhausted ? "FAILED" : "RETRY_PENDING",
           lastError: message,
           nextRetryAt: automaticRetriesExhausted
             ? null
             : new Date(Date.now() + refundRetryDelayMs(attemptCount)),
         },
       });
-      await this.event(processing.paymentAttemptId, 'REFUND_FAILED', {
+      await this.event(processing.paymentAttemptId, "REFUND_FAILED", {
         refundId: processing.id,
         requestId,
-        metadata: { attemptCount, willRetry: !automaticRetriesExhausted },
+        metadata: {
+          attemptCount,
+          willRetry: !automaticRetriesExhausted,
+          errorCode: error instanceof KaspiApiError ? error.code : undefined,
+        },
       });
       await this.refreshOrderRefundStatus(processing.orderId);
       this.logger.warn(
@@ -363,15 +387,15 @@ export class PaymentsService {
         paidAt: true,
         cancelUntil: true,
         paymentAttempts: {
-          orderBy: { createdAt: 'desc' },
+          orderBy: { createdAt: "desc" },
           include: {
-            refunds: { orderBy: { createdAt: 'desc' } },
-            events: { orderBy: { createdAt: 'desc' }, take: 30 },
+            refunds: { orderBy: { createdAt: "desc" } },
+            events: { orderBy: { createdAt: "desc" }, take: 30 },
           },
         },
       },
     });
-    if (!order) throw new NotFoundException('Заказ не найден');
+    if (!order) throw new NotFoundException("Заказ не найден");
     return order;
   }
 
@@ -380,13 +404,13 @@ export class PaymentsService {
       where: {
         OR: [
           // PENDING остаётся после рестарта между записью и вызовом API.
-          { status: 'PENDING' },
-          { status: 'RETRY_PENDING', nextRetryAt: { lte: now } },
+          { status: "PENDING" },
+          { status: "RETRY_PENDING", nextRetryAt: { lte: now } },
         ],
       },
       select: { id: true },
       take: 50,
-      orderBy: { nextRetryAt: 'asc' },
+      orderBy: { nextRetryAt: "asc" },
     });
     for (const refund of due) await this.processRefund(refund.id);
     return due.length;
@@ -398,24 +422,36 @@ export class PaymentsService {
     requestId: string,
   ) {
     const status = state.status as PaymentAttemptStatus;
-    const attempt = await this.prisma.paymentAttempt.update({
-      where: { id: attemptId },
+    // Телефон и серверный poller могут получить Processed одновременно.
+    // Терминальный статус забирает только первый: иначе второй запрос
+    // повторно сдвинул бы минуту отмены и срок отправки в Poster.
+    const claimed = await this.prisma.paymentAttempt.updateMany({
+      where: {
+        id: attemptId,
+        status: { in: ["CREATED", "QR_TOKEN_CREATED", "WAIT"] },
+      },
       data: {
         status,
         providerTransactionId: state.transactionId,
         errorCode: state.errorCode,
         errorMessage: state.errorMessage,
         lastStatusAt: new Date(),
-        ...(status === 'PROCESSED' ? { processedAt: new Date() } : {}),
+        ...(status === "PROCESSED" ? { processedAt: new Date() } : {}),
       },
-      include: { order: { include: { tenant: { select: { settings: true } } } } },
     });
-    await this.event(attemptId, 'PAYMENT_STATUS_CHANGED', {
+    if (claimed.count === 0) return;
+    const attempt = await this.prisma.paymentAttempt.findUniqueOrThrow({
+      where: { id: attemptId },
+      include: {
+        order: { include: { tenant: { select: { settings: true } } } },
+      },
+    });
+    await this.event(attemptId, "PAYMENT_STATUS_CHANGED", {
       requestId,
       providerStatus: state.status,
     });
 
-    if (status === 'PROCESSED') {
+    if (status === "PROCESSED") {
       const now = new Date();
       const windowMinutes = this.availability.getState(
         attempt.order.tenant.settings,
@@ -425,11 +461,11 @@ export class PaymentsService {
         windowMinutes > 0
           ? new Date(now.getTime() + windowMinutes * 60_000)
           : null;
-      const cancelled = attempt.order.status === 'CANCELLED';
+      const cancelled = attempt.order.status === "CANCELLED";
       await this.prisma.order.update({
         where: { id: attempt.orderId },
         data: {
-          paymentStatus: 'PAID',
+          paymentStatus: "PAID",
           paidAt: now,
           cancelUntil: cancelled ? null : cancelUntil,
           dispatchAfter: cancelled
@@ -453,24 +489,24 @@ export class PaymentsService {
     });
     if (!order) return;
     const succeeded = order.paymentRefunds
-      .filter((refund) => refund.status === 'SUCCEEDED')
+      .filter((refund) => refund.status === "SUCCEEDED")
       .reduce((sum, refund) => sum + refund.amount, 0);
     const pending = order.paymentRefunds.some((refund) =>
-      ['PENDING', 'PROCESSING', 'RETRY_PENDING'].includes(refund.status),
+      ["PENDING", "PROCESSING", "RETRY_PENDING"].includes(refund.status),
     );
     const failed = order.paymentRefunds.some(
-      (refund) => refund.status === 'FAILED',
+      (refund) => refund.status === "FAILED",
     );
     const paymentStatus =
       succeeded >= order.total
-        ? 'REFUNDED'
+        ? "REFUNDED"
         : pending
-          ? 'REFUND_PENDING'
+          ? "REFUND_PENDING"
           : failed
-            ? 'REFUND_FAILED'
+            ? "REFUND_FAILED"
             : succeeded > 0
-              ? 'PARTIALLY_REFUNDED'
-              : 'PAID';
+              ? "PARTIALLY_REFUNDED"
+              : "PAID";
     await this.prisma.order.update({
       where: { id: orderId },
       data: { paymentStatus },
@@ -491,7 +527,11 @@ export class PaymentsService {
     idempotencyKey: string;
     processImmediately?: boolean;
   }) {
-    for (let transactionAttempt = 1; transactionAttempt <= 3; transactionAttempt++) {
+    for (
+      let transactionAttempt = 1;
+      transactionAttempt <= 3;
+      transactionAttempt++
+    ) {
       try {
         return await this.prisma.$transaction(
           async (tx) => {
@@ -499,26 +539,26 @@ export class PaymentsService {
               where: { id: input.orderId, tenantId: input.tenantId },
               include: {
                 paymentAttempts: {
-                  where: { status: 'PROCESSED' },
-                  orderBy: { processedAt: 'desc' },
+                  where: { status: "PROCESSED" },
+                  orderBy: { processedAt: "desc" },
                   take: 1,
                 },
                 paymentRefunds: true,
               },
             });
-            if (!order) throw new NotFoundException('Заказ не найден');
+            if (!order) throw new NotFoundException("Заказ не найден");
             if (
-              order.paymentMethod !== 'KASPI_ONLINE' ||
-              order.paymentStatus === 'PENDING'
+              order.paymentMethod !== "KASPI_ONLINE" ||
+              order.paymentStatus === "PENDING"
             ) {
               throw new BadRequestException(
-                'У заказа нет подтверждённой оплаты Kaspi',
+                "У заказа нет подтверждённой оплаты Kaspi",
               );
             }
             const payment = order.paymentAttempts[0];
             if (!payment) {
               throw new BadRequestException(
-                'Не найдена подтверждённая операция Kaspi',
+                "Не найдена подтверждённая операция Kaspi",
               );
             }
 
@@ -541,11 +581,11 @@ export class PaymentsService {
                 // случиться после фактического возврата у Kaspi. Пока
                 // оператор не сверил операцию, второй возврат опасен.
                 [
-                  'PENDING',
-                  'PROCESSING',
-                  'RETRY_PENDING',
-                  'SUCCEEDED',
-                  'FAILED',
+                  "PENDING",
+                  "PROCESSING",
+                  "RETRY_PENDING",
+                  "SUCCEEDED",
+                  "FAILED",
                 ].includes(refund.status),
               )
               .reduce((sum, refund) => sum + refund.amount, 0);
@@ -553,7 +593,7 @@ export class PaymentsService {
             const amount = input.amount ?? available;
             if (!Number.isInteger(amount) || amount <= 0) {
               throw new BadRequestException(
-                'Сумма возврата должна быть больше нуля',
+                "Сумма возврата должна быть больше нуля",
               );
             }
             if (amount > available) {
@@ -584,14 +624,17 @@ export class PaymentsService {
       } catch (error) {
         const retryable =
           error instanceof Prisma.PrismaClientKnownRequestError &&
-          ['P2002', 'P2034'].includes(error.code);
+          ["P2002", "P2034"].includes(error.code);
         if (!retryable || transactionAttempt === 3) throw error;
       }
     }
-    throw new Error('Не удалось зарезервировать сумму возврата');
+    throw new Error("Не удалось зарезервировать сумму возврата");
   }
 
-  private processOrQueue<T extends { id: string }>(refund: T, immediate: boolean) {
+  private processOrQueue<T extends { id: string }>(
+    refund: T,
+    immediate: boolean,
+  ) {
     if (immediate) return this.processRefund(refund.id);
     void this.processRefund(refund.id).catch((error) =>
       this.logger.error(
@@ -646,6 +689,8 @@ export class PaymentsService {
   }
 
   private errorMessage(error: unknown) {
-    return error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500);
+    return error instanceof Error
+      ? error.message.slice(0, 500)
+      : String(error).slice(0, 500);
   }
 }

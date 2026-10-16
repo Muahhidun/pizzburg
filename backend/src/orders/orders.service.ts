@@ -51,14 +51,14 @@ function orderFingerprint(order: {
 }) {
   const address = order.address
     ? [order.address.street, order.address.house, order.address.flat]
-        .map((part) => String(part ?? ''))
-        .join('|')
-    : '';
+        .map((part) => String(part ?? ""))
+        .join("|")
+    : "";
   const items = order.items
     .map((i) => `${i.productId}x${i.qty}`)
     .sort()
-    .join(',');
-  return [order.type, order.paymentMethod, address, items].join('#');
+    .join(",");
+  return [order.type, order.paymentMethod, address, items].join("#");
 }
 
 /**
@@ -122,13 +122,9 @@ export class OrdersService {
       where: { slug: tenantSlug },
       include: { venues: { where: { isActive: true }, take: 1 } },
     });
-    if (!tenant) throw new NotFoundException('Unknown tenant');
+    if (!tenant) throw new NotFoundException("Unknown tenant");
     const venue = tenant.venues[0];
-    if (!venue) throw new BadRequestException('Нет активной точки');
-
-    if (dto.paymentMethod === 'KASPI_ONLINE') {
-      throw new BadRequestException('Kaspi онлайн ещё не подключён');
-    }
+    if (!venue) throw new BadRequestException("Нет активной точки");
 
     // Режим приёма, расписание, предзаказ и включённые способы оплаты.
     // Клиент прячет недоступные варианты, но решает сервер.
@@ -138,17 +134,19 @@ export class OrdersService {
       scheduledAt: dto.scheduledAt,
     });
 
-    if (dto.type === 'DELIVERY' && !dto.address) {
-      throw new BadRequestException('Для доставки нужен адрес');
+    if (dto.type === "DELIVERY" && !dto.address) {
+      throw new BadRequestException("Для доставки нужен адрес");
     }
 
     // «Сдача с» имеет смысл только для наличных
     if (dto.changeFrom != null) {
-      if (dto.paymentMethod !== 'CASH') {
-        throw new BadRequestException('Сдача указывается только при оплате наличными');
+      if (dto.paymentMethod !== "CASH") {
+        throw new BadRequestException(
+          "Сдача указывается только при оплате наличными",
+        );
       }
       if (!availability.payments.askChangeFrom) {
-        throw new BadRequestException('Уточнение сдачи отключено');
+        throw new BadRequestException("Уточнение сдачи отключено");
       }
     }
 
@@ -196,8 +194,7 @@ export class OrdersService {
     }
 
     const settings = (tenant.settings as any)?.delivery as
-      | DeliverySettings
-      | undefined;
+      DeliverySettings | undefined;
     const delivery: DeliverySettings = {
       minOrder: settings?.minOrder ?? 0,
       fee: settings?.fee ?? 0,
@@ -205,7 +202,7 @@ export class OrdersService {
     };
 
     let deliveryFee = 0;
-    if (dto.type === 'DELIVERY') {
+    if (dto.type === "DELIVERY") {
       if (subtotal < delivery.minOrder) {
         throw new BadRequestException(
           `Минимальная сумма для доставки — ${delivery.minOrder} ₸ (доступен самовывоз)`,
@@ -213,7 +210,6 @@ export class OrdersService {
       }
       deliveryFee = subtotal >= delivery.freeFrom ? 0 : delivery.fee;
     }
-
 
     const legalVersions = await this.legal.currentVersions(tenant.id);
 
@@ -230,7 +226,7 @@ export class OrdersService {
         authCustomer.phone !== normalizedPhone)
     ) {
       throw new BadRequestException(
-        'Чтобы использовать баллы, войдите по номеру из заказа',
+        "Чтобы использовать баллы, войдите по номеру из заказа",
       );
     }
     let customer = authCustomer
@@ -253,7 +249,7 @@ export class OrdersService {
           update: dto.name ? { name: dto.name } : {},
         });
     if (!customer) {
-      throw new BadRequestException('Номер заказа не совпадает с профилем');
+      throw new BadRequestException("Номер заказа не совпадает с профилем");
     }
     if (authCustomer && dto.name && customer.name !== dto.name) {
       customer = await this.prisma.customer.update({
@@ -286,7 +282,7 @@ export class OrdersService {
     const pending = await this.prisma.order.findFirst({
       where: {
         customerId: customer.id,
-        shortageState: 'AWAITING_CUSTOMER',
+        shortageState: "AWAITING_CUSTOMER",
         shortageDeadline: { gt: new Date() },
       },
       select: { number: true, shortageDeadline: true },
@@ -294,9 +290,7 @@ export class OrdersService {
     if (pending) {
       const leftMinutes = Math.max(
         1,
-        Math.ceil(
-          (pending.shortageDeadline!.getTime() - Date.now()) / 60_000,
-        ),
+        Math.ceil((pending.shortageDeadline!.getTime() - Date.now()) / 60_000),
       );
       throw new BadRequestException(
         `Сначала ответьте по заказу №${pending.number}: там не оказалось одной ` +
@@ -314,7 +308,7 @@ export class OrdersService {
     if (duplicate) {
       this.logger.warn(
         `Повтор заказа №${duplicate.number} от клиента ${customer.id} — ` +
-          'возвращаем существующий вместо нового',
+          "возвращаем существующий вместо нового",
       );
       return {
         id: duplicate.id,
@@ -354,7 +348,7 @@ export class OrdersService {
     ) {
       if (!dto.skipPromotions) {
         throw new BadRequestException(
-          'Баллы нельзя использовать вместе с акцией. Выберите акцию или баллы',
+          "Баллы нельзя использовать вместе с акцией. Выберите акцию или баллы",
         );
       }
       promo = {
@@ -411,7 +405,7 @@ export class OrdersService {
           type: dto.type,
           address: dto.address ? { ...dto.address } : undefined,
           scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : null,
-          comment: dto.comment ?? '',
+          comment: dto.comment ?? "",
           subtotal,
           deliveryFee,
           // Вся выгода клиента одной строкой: подарки, денежная скидка
@@ -427,7 +421,7 @@ export class OrdersService {
           legalVersions: legalVersions as object,
           paymentMethod: dto.paymentMethod,
           paymentStatus:
-            dto.paymentMethod === 'KASPI_ONLINE' ? 'PENDING' : 'NOT_REQUIRED',
+            dto.paymentMethod === "KASPI_ONLINE" ? "PENDING" : "NOT_REQUIRED",
           items: {
             create: [
               ...dto.items.map((i) => {
@@ -493,7 +487,7 @@ export class OrdersService {
 
     // Адрес запоминаем вне транзакции: справочник для следующего заказа —
     // удобство, и его сбой не должен отменять уже принятый заказ.
-    if (dto.type === 'DELIVERY' && dto.address && customer.id) {
+    if (dto.type === "DELIVERY" && dto.address && customer.id) {
       try {
         await this.addresses.remember(tenant.id, customer.id, dto.address);
       } catch (error) {
@@ -539,8 +533,8 @@ export class OrdersService {
         await this.telegram.notifyCashier(
           tenant.id,
           `♻️ <b>Похоже на перезаказ</b>\nКлиент ${customer.phone} оформил ` +
-            `№${order.number}, а у него уже ${others.length === 1 ? 'есть заказ' : 'есть заказы'} ` +
-            `№${others.join(', №')}.\nУточните, что готовить, лишний отмените.`,
+            `№${order.number}, а у него уже ${others.length === 1 ? "есть заказ" : "есть заказы"} ` +
+            `№${others.join(", №")}.\nУточните, что готовить, лишний отмените.`,
         );
       }
     } catch (e) {
@@ -602,23 +596,26 @@ export class OrdersService {
         },
       });
       if (!order) return;
-      const who = order.cancelledBy === 'CUSTOMER' ? 'клиентом' : 'оператором';
+      const who = order.cancelledBy === "CUSTOMER" ? "клиентом" : "оператором";
 
       // Дошёл ли заказ до кухни вообще. Отменённый в бесплатное окно не
       // уходил на планшеты, никто ничего не готовил и не терял.
       const reachedKitchen = (order.dispatches ?? []).some(
-        (d) => d.status === 'SENT' && d.posterOrderId && d.posterOrderId !== 'dry-run',
+        (d) =>
+          d.status === "SENT" &&
+          d.posterOrderId &&
+          d.posterOrderId !== "dry-run",
       );
 
       // Руководству — только то, что стоило денег или требует разговора.
       // Клиент передумал за полминуты, кухня об этом не узнала — сообщать
       // не о чем, а поток таких сообщений и есть то замыливание, из-за
       // которого перестают замечать важное (DECISIONS §12.11).
-      if (reachedKitchen || order.cancelledBy !== 'CUSTOMER') {
+      if (reachedKitchen || order.cancelledBy !== "CUSTOMER") {
         await this.telegram.notify(
           order.tenantId,
           `🚫 <b>Заказ №${order.number} отменён ${who}</b>` +
-            (order.cancelReason ? `\nПричина: ${order.cancelReason}` : '') +
+            (order.cancelReason ? `\nПричина: ${order.cancelReason}` : "") +
             `\nСумма: ${order.total} ₸`,
         );
       }
@@ -627,20 +624,20 @@ export class OrdersService {
       // учит не читать этот канал.
       const live = (order.dispatches ?? []).filter(
         (d) =>
-          d.status === 'SENT' &&
-          d.posterStatus !== 'REJECTED' &&
+          d.status === "SENT" &&
+          d.posterStatus !== "REJECTED" &&
           d.posterOrderId &&
-          d.posterOrderId !== 'dry-run',
+          d.posterOrderId !== "dry-run",
       );
       if (live.length === 0) return;
       await this.telegram.notifyCashier(
         order.tenantId,
         `🚫 <b>Заказ №${order.number} отменён ${who}</b>` +
-          (order.cancelReason ? `\n${order.cancelReason}` : '') +
+          (order.cancelReason ? `\n${order.cancelReason}` : "") +
           `\n\nОтклоните на планшете:\n` +
           live
             .map((d) => `• ${d.posterAccount.name} — чек №${d.posterOrderId}`)
-            .join('\n'),
+            .join("\n"),
       );
 
       // И тем же сообщением — на сам планшет. Телеграм кассир может не
@@ -651,8 +648,8 @@ export class OrdersService {
           d.posterAccountId,
           `ЗАКАЗ №${order.number} ОТМЕНЁН ${who.toUpperCase()}. ` +
             `ОТКЛОНИТЕ ЧЕК №${d.posterOrderId}, НЕ ГОТОВЬТЕ.` +
-            (order.cancelReason ? ` Причина: ${order.cancelReason}.` : ''),
-          order.customer?.phone ?? '',
+            (order.cancelReason ? ` Причина: ${order.cancelReason}.` : ""),
+          order.customer?.phone ?? "",
         );
       }
     } catch (e) {
@@ -679,10 +676,10 @@ export class OrdersService {
       where: {
         tenantId,
         customerId: { in: ids },
-        status: { in: ['NEW', 'ACCEPTED', 'COOKING', 'READY', 'ON_WAY'] },
+        status: { in: ["NEW", "ACCEPTED", "COOKING", "READY", "ON_WAY"] },
       },
       select: { id: true, number: true, customerId: true },
-      orderBy: { number: 'asc' },
+      orderBy: { number: "asc" },
     });
 
     const byCustomer = new Map<string, number[]>();
@@ -715,14 +712,14 @@ export class OrdersService {
     const recent = await this.prisma.order.findMany({
       where: {
         customerId,
-        status: { not: 'CANCELLED' },
+        status: { not: "CANCELLED" },
         createdAt: { gt: new Date(now.getTime() - DUPLICATE_WINDOW_MS) },
       },
       include: {
         items: true,
         dispatches: { include: { posterAccount: { select: { name: true } } } },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
     if (recent.length === 0) return null;
 
@@ -742,7 +739,7 @@ export class OrdersService {
             address: order.address as Record<string, unknown> | null,
             items: order.items
               .filter((i) => !i.isGift)
-              .map((i) => ({ productId: i.productId ?? '', qty: i.qty })),
+              .map((i) => ({ productId: i.productId ?? "", qty: i.qty })),
           }) === wanted,
       ) ?? null
     );
@@ -766,7 +763,7 @@ export class OrdersService {
         items: { include: { product: true } },
         dispatches: {
           include: { posterAccount: true },
-          orderBy: { posterAccount: { sortOrder: 'asc' } },
+          orderBy: { posterAccount: { sortOrder: "asc" } },
         },
         customer: true,
         tenant: { select: { settings: true } },
@@ -776,8 +773,8 @@ export class OrdersService {
     // Онлайн-заказ не должен попасть на кухню по одному факту создания.
     // Только подтверждённый Kaspi Processed открывает отправку в Poster.
     if (
-      order.paymentMethod === 'KASPI_ONLINE' &&
-      !['PAID', 'PARTIALLY_REFUNDED'].includes(order.paymentStatus)
+      order.paymentMethod === "KASPI_ONLINE" &&
+      !["PAID", "PARTIALLY_REFUNDED"].includes(order.paymentStatus)
     ) {
       throw new BadRequestException(
         `Заказ №${order.number}: оплата Kaspi ещё не подтверждена`,
@@ -788,7 +785,7 @@ export class OrdersService {
     // Часть, в которой не осталось ни одной позиции, из нумерации выпадает:
     // иначе «часть 1/2» ссылалась бы на планшет, который ничего не готовит,
     // а стоимость доставки повисла бы на несуществующем чеке.
-    const parts = order.dispatches.filter((d) => d.status !== 'VOID');
+    const parts = order.dispatches.filter((d) => d.status !== "VOID");
     // Отсутствующие позиции в кассу не уходят — ни в состав, ни в суммы.
     const liveItems = order.items.filter((it) => !it.isUnavailable);
     // Предоплата «Личной интеграцией» — это баллы И денежная скидка по
@@ -805,7 +802,8 @@ export class OrdersService {
         .reduce((sum, it) => {
           const modifierTotal = ((it.modifiers as any[]) ?? []).reduce(
             (modifierSum, modifier) =>
-              modifierSum + Number(modifier.price ?? 0) * Number(modifier.qty ?? 1),
+              modifierSum +
+              Number(modifier.price ?? 0) * Number(modifier.qty ?? 1),
             0,
           );
           return sum + (it.price + modifierTotal) * it.qty;
@@ -824,13 +822,13 @@ export class OrdersService {
     for (let i = 0; i < parts.length; i++) {
       const d = parts[i];
       const resending = resendIds.has(d.id);
-      if (d.status === 'SENT' && !resending) continue;
+      if (d.status === "SENT" && !resending) continue;
 
       // Кассира просили не принимать заказ, пока идёт разбирательство, но
       // если чек всё же приняли, второй такой же — это две готовки и два
       // чека. Тогда отправку отменяем и оставляем ошибку в ленте: править
       // состав придётся на планшете руками.
-      if (resending && d.posterOrderId && d.posterOrderId !== 'dry-run') {
+      if (resending && d.posterOrderId && d.posterOrderId !== "dry-run") {
         let accepted = false;
         try {
           const live = await this.poster.getIncomingOrder(
@@ -844,14 +842,14 @@ export class OrdersService {
         if (accepted) {
           this.logger.error(
             `Заказ №${order.number}: чек №${d.posterOrderId} (${d.posterAccount.name}) ` +
-              'уже принят — исправленный состав не отправлен',
+              "уже принят — исправленный состав не отправлен",
           );
           await this.prisma.orderDispatch.update({
             where: { id: d.id },
             data: {
               error:
                 `Чек №${d.posterOrderId} приняли до ответа клиента — ` +
-                'исправьте состав на планшете вручную',
+                "исправьте состав на планшете вручную",
             },
           });
           continue;
@@ -864,38 +862,38 @@ export class OrdersService {
       // Кассир должен понять с чека, что старый заказ надо отклонить, —
       // отдельного канала связи с планшетом у нас нет.
       const replaceNote = resending
-        ? ` | СОСТАВ ИЗМЕНЁН — ЧЕК №${d.posterOrderId ?? '—'} ОТКЛОНИТЬ, готовить этот`
-        : '';
+        ? ` | СОСТАВ ИЗМЕНЁН — ЧЕК №${d.posterOrderId ?? "—"} ОТКЛОНИТЬ, готовить этот`
+        : "";
       const partNote =
         parts.length > 1
           ? ` | ОБЩИЙ ЗАКАЗ №${order.number}: часть ${i + 1}/${parts.length} (${parts
               .filter((p) => p.id !== d.id)
               .map((p) => p.posterAccount.name)
-              .join(', ')})`
-          : '';
+              .join(", ")})`
+          : "";
       // Сдачу показываем только на первой части: разменивает один кассир,
       // а видеть строку на обоих планшетах — путаница.
       const changeNote =
-        i === 0 && order.paymentMethod === 'CASH' && order.changeFrom
+        i === 0 && order.paymentMethod === "CASH" && order.changeFrom
           ? ` (готовить сдачу с ${order.changeFrom} ₸)`
-          : '';
+          : "";
       const payNote =
         {
-          CASH: 'Оплата: наличные курьеру',
-          CARD_ON_DELIVERY: 'Оплата: карта курьеру (взять терминал)',
-          KASPI_ONLINE: 'ОПЛАЧЕНО ОНЛАЙН (Kaspi)',
+          CASH: "Оплата: наличные курьеру",
+          CARD_ON_DELIVERY: "Оплата: карта курьеру (взять терминал)",
+          KASPI_ONLINE: "ОПЛАЧЕНО ОНЛАЙН (Kaspi)",
         }[order.paymentMethod] + changeNote;
 
       const scheduledNote = order.scheduledAt
-        ? ` | ПРЕДЗАКАЗ на ${new Intl.DateTimeFormat('ru-RU', {
+        ? ` | ПРЕДЗАКАЗ на ${new Intl.DateTimeFormat("ru-RU", {
             timeZone:
-              (order.tenant?.settings as any)?.timezone ?? 'Asia/Almaty',
-            day: '2-digit',
-            month: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
+              (order.tenant?.settings as any)?.timezone ?? "Asia/Almaty",
+            day: "2-digit",
+            month: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
           }).format(order.scheduledAt)}`
-        : '';
+        : "";
 
       // «Личная интеграция» этой части: подарки + списанные баллы.
       const giftIntegrationSum = items
@@ -905,37 +903,40 @@ export class OrdersService {
       const integrationSum = giftIntegrationSum + prepaidIntegrationSum;
       const giftNote = items
         .filter((it) => it.isGift)
-        .map((it) => ` | ПОДАРОК ПО АКЦИИ: ${it.name} ×${it.qty} (оплачен интеграцией)`)
-        .join('');
+        .map(
+          (it) =>
+            ` | ПОДАРОК ПО АКЦИИ: ${it.name} ×${it.qty} (оплачен интеграцией)`,
+        )
+        .join("");
       // Кассиру важно видеть, чем закрыта разница: баллами клиента или
       // скидкой по акции — это разные разговоры при спорах.
       const pointsNote =
         prepaidIntegrationSum > 0
           ? ` | ${
               order.promoDiscount > 0 && order.pointsSpent > 0
-                ? 'БАЛЛЫ И СКИДКА'
+                ? "БАЛЛЫ И СКИДКА"
                 : order.promoDiscount > 0
-                  ? 'СКИДКА ПО АКЦИИ'
-                  : 'БАЛЛЫ ПРИЛОЖЕНИЯ'
+                  ? "СКИДКА ПО АКЦИИ"
+                  : "БАЛЛЫ ПРИЛОЖЕНИЯ"
             }: ${prepaidIntegrationSum} ₸ (оплачено интеграцией)`
-          : '';
+          : "";
 
       const addr = order.address as any;
 
       // Дев-режим: не слать на боевые планшеты
-      if (process.env.POSTER_DRY_RUN === '1') {
+      if (process.env.POSTER_DRY_RUN === "1") {
         this.logger.warn(
           `DRY RUN: заказ №${order.number} часть ${i + 1}/${parts.length} → ` +
-            `${d.posterAccount.name}: ${items.map((x) => `${x.name}×${x.qty}`).join(', ')}${partNote}` +
+            `${d.posterAccount.name}: ${items.map((x) => `${x.name}×${x.qty}`).join(", ")}${partNote}` +
             // Комментарий кассира целиком: по нему проверяем сдачу,
             // предзаказ и пометки подарков перед боевым тестом
-            `\n  комментарий в Poster: №${order.number}.${order.comment ? ` ПОЖЕЛАНИЕ: ${order.comment}.` : ''} — КАССЕ: ${payNote}.${replaceNote}${scheduledNote}${giftNote}${pointsNote}`,
+            `\n  комментарий в Poster: №${order.number}.${order.comment ? ` ПОЖЕЛАНИЕ: ${order.comment}.` : ""} — КАССЕ: ${payNote}.${replaceNote}${scheduledNote}${giftNote}${pointsNote}`,
         );
         await this.prisma.orderDispatch.update({
           where: { id: d.id },
           data: {
-            status: 'SENT',
-            posterOrderId: 'dry-run',
+            status: "SENT",
+            posterOrderId: "dry-run",
             ...(resending ? { replacedOrders: this.withReplaced(d) } : {}),
           },
         });
@@ -948,8 +949,8 @@ export class OrdersService {
           d.posterAccount.token,
           {
             spot_id: 1,
-            phone: order.customer?.phone ?? '',
-            service_mode: order.type === 'DELIVERY' ? 3 : 2,
+            phone: order.customer?.phone ?? "",
+            service_mode: order.type === "DELIVERY" ? 3 : 2,
             // Порядок частей — не косметика. Poster отдаёт один-единственный
             // текст комментария и на кассовый чек, и на бегунок повару,
             // разделить их на стороне API нельзя. Поэтому первым идёт то,
@@ -958,7 +959,7 @@ export class OrdersService {
             // разбирает способ оплаты.
             comment:
               `№${order.number}.` +
-              (order.comment ? ` ПОЖЕЛАНИЕ: ${order.comment}.` : '') +
+              (order.comment ? ` ПОЖЕЛАНИЕ: ${order.comment}.` : "") +
               ` — КАССЕ: ${payNote}.` +
               replaceNote +
               scheduledNote +
@@ -966,7 +967,7 @@ export class OrdersService {
               pointsNote +
               partNote,
             client_address:
-              order.type === 'DELIVERY' && addr
+              order.type === "DELIVERY" && addr
                 ? {
                     address1: `${addr.street}, ${addr.house}`,
                     address2: [
@@ -975,7 +976,7 @@ export class OrdersService {
                       addr.flat && `кв. ${addr.flat}`,
                     ]
                       .filter(Boolean)
-                      .join(', '),
+                      .join(", "),
                     comment: addr.comment,
                   }
                 : undefined,
@@ -1002,14 +1003,14 @@ export class OrdersService {
                 : undefined,
             payment:
               integrationSum > 0
-                ? { type: 1, sum: integrationSum * 100, currency: 'KZT' }
+                ? { type: 1, sum: integrationSum * 100, currency: "KZT" }
                 : undefined,
           },
         );
         await this.prisma.orderDispatch.update({
           where: { id: d.id },
           data: {
-            status: 'SENT',
+            status: "SENT",
             posterOrderId: String(res.incoming_order_id),
             // Новый чек — новая жизнь: старый статус с планшета относится
             // к отклонённому заказу и сбил бы агрегацию.
@@ -1023,7 +1024,7 @@ export class OrdersService {
         this.logger.error(`Dispatch ${d.id} failed: ${e}`);
         await this.prisma.orderDispatch.update({
           where: { id: d.id },
-          data: { status: 'FAILED', error: String(e) },
+          data: { status: "FAILED", error: String(e) },
         });
       }
     }
@@ -1051,7 +1052,10 @@ export class OrdersService {
     if (!dispatch.posterOrderId) return previous;
     return [
       ...previous,
-      { posterOrderId: dispatch.posterOrderId, replacedAt: new Date().toISOString() },
+      {
+        posterOrderId: dispatch.posterOrderId,
+        replacedAt: new Date().toISOString(),
+      },
     ];
   }
 
@@ -1074,9 +1078,17 @@ export class OrdersService {
       },
     });
 
-    const map: Record<number, string> = { 0: 'NEW', 1: 'ACCEPTED', 7: 'REJECTED' };
+    const map: Record<number, string> = {
+      0: "NEW",
+      1: "ACCEPTED",
+      7: "REJECTED",
+    };
     for (const d of order.dispatches) {
-      if (d.status !== 'SENT' || !d.posterOrderId || d.posterOrderId === 'dry-run')
+      if (
+        d.status !== "SENT" ||
+        !d.posterOrderId ||
+        d.posterOrderId === "dry-run"
+      )
         continue;
       try {
         const res = await this.poster.getIncomingOrder(
@@ -1095,7 +1107,7 @@ export class OrdersService {
     const fresh = await this.prisma.orderDispatch.findMany({
       where: { orderId },
       include: { posterAccount: { select: { name: true, sortOrder: true } } },
-      orderBy: { posterAccount: { sortOrder: 'asc' } },
+      orderBy: { posterAccount: { sortOrder: "asc" } },
     });
 
     // Пока клиент выбирает, судьба отдела с нехваткой ещё не решена: его
@@ -1105,14 +1117,14 @@ export class OrdersService {
     // Погашенные части (VOID) не считаются по той же причине: готовить в
     // них уже нечего.
     const undecided = new Set(
-      order.shortageState === 'AWAITING_CUSTOMER'
+      order.shortageState === "AWAITING_CUSTOMER"
         ? order.items
             .filter((i) => i.isUnavailable)
             .map((i) => i.product?.posterAccountId)
         : [],
     );
     const counted = fresh.filter(
-      (d) => d.status !== 'VOID' && !undecided.has(d.posterAccountId),
+      (d) => d.status !== "VOID" && !undecided.has(d.posterAccountId),
     );
 
     // Главный отдел = первый по sortOrder среди частей заказа
@@ -1129,14 +1141,15 @@ export class OrdersService {
     // отдельный отказ отдела остаётся сигналом кассиру, а не отменой.
     if (
       counted.length > 0 &&
-      (main?.posterStatus === 'REJECTED' ||
-        counted.every((d) => d.posterStatus === 'REJECTED'))
+      (main?.posterStatus === "REJECTED" ||
+        counted.every((d) => d.posterStatus === "REJECTED"))
     ) {
-      orderStatus = 'CANCELLED';
-    } else if (main?.posterStatus === 'ACCEPTED' && order.status === 'NEW') {
-      orderStatus = 'ACCEPTED';
+      orderStatus = "CANCELLED";
+    } else if (main?.posterStatus === "ACCEPTED" && order.status === "NEW") {
+      orderStatus = "ACCEPTED";
     }
-    if (orderStatus !== order.status) await this.setStatus(orderId, orderStatus as OrderStatus);
+    if (orderStatus !== order.status)
+      await this.setStatus(orderId, orderStatus as OrderStatus);
 
     return {
       orderId,
@@ -1168,24 +1181,27 @@ export class OrdersService {
       where: { id: orderId, customerId },
       include: { tenant: { select: { settings: true } } },
     });
-    if (!order) throw new NotFoundException('Заказ не найден');
+    if (!order) throw new NotFoundException("Заказ не найден");
 
-    if (order.status === 'CANCELLED') {
+    if (order.status === "CANCELLED") {
       return this.prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     }
 
-    const { cancellation } = this.availability.getState(order.tenant.settings, now);
+    const { cancellation } = this.availability.getState(
+      order.tenant.settings,
+      now,
+    );
     if (cancellation.customerWindowMinutes <= 0) {
       throw new BadRequestException(
-        'Отмена из приложения недоступна — позвоните нам, пожалуйста',
+        "Отмена из приложения недоступна — позвоните нам, пожалуйста",
       );
     }
 
     // Принятый кассиром заказ клиент уже не отменяет сам: еда могла
     // уйти в работу, и списание должен разбирать оператор.
-    if (order.status !== 'NEW') {
+    if (order.status !== "NEW") {
       throw new BadRequestException(
-        'Заказ уже принят — отмену нужно согласовать с оператором',
+        "Заказ уже принят — отмену нужно согласовать с оператором",
       );
     }
 
@@ -1199,7 +1215,7 @@ export class OrdersService {
     if (now > deadline) {
       throw new BadRequestException(
         `Отменить можно в течение ${cancellation.customerWindowMinutes} ` +
-          `${plural(cancellation.customerWindowMinutes, 'минуты', 'минут', 'минут')} после оформления`,
+          `${plural(cancellation.customerWindowMinutes, "минуты", "минут", "минут")} после оформления`,
       );
     }
 
@@ -1212,12 +1228,12 @@ export class OrdersService {
       where: { id: order.id },
       data: {
         cancelReasonId: reasonId ?? null,
-        cancelReason: reason?.slice(0, 300) || label || 'Отменён клиентом',
-        cancelledBy: 'CUSTOMER',
+        cancelReason: reason?.slice(0, 300) || label || "Отменён клиентом",
+        cancelledBy: "CUSTOMER",
         cancelledAt: now,
       },
     });
-    return this.setStatus(order.id, 'CANCELLED', order.tenantId);
+    return this.setStatus(order.id, "CANCELLED", order.tenantId);
   }
 
   /**
@@ -1238,8 +1254,8 @@ export class OrdersService {
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, tenantId },
     });
-    if (!order) throw new NotFoundException('Заказ не найден');
-    if (order.status === 'CANCELLED') {
+    if (!order) throw new NotFoundException("Заказ не найден");
+    if (order.status === "CANCELLED") {
       return this.prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     }
 
@@ -1254,11 +1270,11 @@ export class OrdersService {
         cancelReason: comment?.slice(0, 300) || label,
         // Именно ADMIN, а не OPERATOR: значение уже зафиксировано схемой и
         // отчётом по отменам, второе написание разбило бы разбивку надвое.
-        cancelledBy: 'ADMIN',
+        cancelledBy: "ADMIN",
         cancelledAt: now,
       },
     });
-    return this.setStatus(order.id, 'CANCELLED', tenantId);
+    return this.setStatus(order.id, "CANCELLED", tenantId);
   }
 
   async setStatus(
@@ -1272,20 +1288,20 @@ export class OrdersService {
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, ...(tenantId ? { tenantId } : {}) },
     });
-    if (!order) throw new NotFoundException('Заказ не найден');
+    if (!order) throw new NotFoundException("Заказ не найден");
     if (order.status === next) {
       // Повторный запрос безопасно завершает начисление/возврат после временного
       // сбоя между сохранением статуса и записью операции лояльности.
       await this.loyalty.onStatusChanged(order.id, next);
-      if (next === 'CANCELLED') await this.ensureKaspiRefund(order.id);
+      if (next === "CANCELLED") await this.ensureKaspiRefund(order.id);
       return this.prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     }
     const allowed: Record<OrderStatus, OrderStatus[]> = {
-      NEW: ['ACCEPTED', 'CANCELLED'],
-      ACCEPTED: ['COOKING', 'READY', 'ON_WAY', 'DELIVERED', 'CANCELLED'],
-      COOKING: ['READY', 'ON_WAY', 'DELIVERED', 'CANCELLED'],
-      READY: ['ON_WAY', 'DELIVERED', 'CANCELLED'],
-      ON_WAY: ['DELIVERED', 'CANCELLED'],
+      NEW: ["ACCEPTED", "CANCELLED"],
+      ACCEPTED: ["COOKING", "READY", "ON_WAY", "DELIVERED", "CANCELLED"],
+      COOKING: ["READY", "ON_WAY", "DELIVERED", "CANCELLED"],
+      READY: ["ON_WAY", "DELIVERED", "CANCELLED"],
+      ON_WAY: ["DELIVERED", "CANCELLED"],
       DELIVERED: [],
       CANCELLED: [],
     };
@@ -1310,12 +1326,12 @@ export class OrdersService {
     // Условие по AWAITING_CUSTOMER обязательно: отмена, которую выбрал сам
     // клиент из-за нехватки, уже проставила CANCELLED_BY_CUSTOMER, и
     // затирать её здесь значило бы потерять причину отмены.
-    if (next === 'CANCELLED') {
+    if (next === "CANCELLED") {
       await this.prisma.order.updateMany({
-        where: { id: order.id, shortageState: 'AWAITING_CUSTOMER' },
+        where: { id: order.id, shortageState: "AWAITING_CUSTOMER" },
         // Пометки `isUnavailable` намеренно остаются: чего именно не
         // хватало, видно и в отменённом заказе.
-        data: { shortageState: 'NONE', shortageDeadline: null },
+        data: { shortageState: "NONE", shortageDeadline: null },
       });
       // Заказ, отменённый в своё окно, в кассу не уезжает вовсе — ради
       // этого задержка и вводилась (DECISIONS §12.12).
@@ -1325,11 +1341,11 @@ export class OrdersService {
       });
     }
     await this.loyalty.onStatusChanged(order.id, next);
-    if (next === 'CANCELLED') await this.ensureKaspiRefund(order.id);
+    if (next === "CANCELLED") await this.ensureKaspiRefund(order.id);
     if (options?.notify !== false) {
       await this.notifications.sendOrderStatus(order.id, next);
     }
-    if (next === 'CANCELLED') await this.announceCancellation(order.id);
+    if (next === "CANCELLED") await this.announceCancellation(order.id);
     return this.prisma.order.findUniqueOrThrow({ where: { id: updated.id } });
   }
 
@@ -1357,8 +1373,8 @@ export class OrdersService {
    */
   async lastOrder(tenantId: string, customerId: string) {
     const order = await this.prisma.order.findFirst({
-      where: { tenantId, customerId, status: { not: 'CANCELLED' } },
-      orderBy: { createdAt: 'desc' },
+      where: { tenantId, customerId, status: { not: "CANCELLED" } },
+      orderBy: { createdAt: "desc" },
       include: {
         items: {
           where: { isGift: false },
@@ -1381,9 +1397,11 @@ export class OrdersService {
       type: order.type,
       positions: items.reduce((sum, i) => sum + i.qty, 0),
       // Состав одной строкой — как в хендоффе: «Маргарита, Комбо Хот-Дог»
-      summary: items.map((i) => i.name).join(', '),
+      summary: items.map((i) => i.name).join(", "),
       photoUrl:
-        items[0]?.product?.displayPhotoUrl ?? items[0]?.product?.photoUrl ?? null,
+        items[0]?.product?.displayPhotoUrl ??
+        items[0]?.product?.photoUrl ??
+        null,
     };
   }
 
@@ -1400,7 +1418,7 @@ export class OrdersService {
       where: { id: orderId, tenantId, customerId },
       include: { items: { where: { isGift: false } } },
     });
-    if (!order) throw new NotFoundException('Заказ не найден');
+    if (!order) throw new NotFoundException("Заказ не найден");
 
     const ids = order.items
       .map((i) => i.productId)
@@ -1421,15 +1439,15 @@ export class OrdersService {
     for (const item of order.items) {
       const product = item.productId ? byId.get(item.productId) : undefined;
       if (!product || !product.isVisible) {
-        unavailable.push({ name: item.name, reason: 'больше нет в меню' });
+        unavailable.push({ name: item.name, reason: "больше нет в меню" });
         continue;
       }
       if (!product.isActive || !product.category.isActive) {
-        unavailable.push({ name: item.name, reason: 'сегодня закончилось' });
+        unavailable.push({ name: item.name, reason: "сегодня закончилось" });
         continue;
       }
       if (!product.posterAccount.isActive) {
-        unavailable.push({ name: item.name, reason: 'отдел не работает' });
+        unavailable.push({ name: item.name, reason: "отдел не работает" });
         continue;
       }
       items.push({
@@ -1450,7 +1468,7 @@ export class OrdersService {
         dispatches: { include: { posterAccount: { select: { name: true } } } },
       },
     });
-    if (!o) throw new NotFoundException('Заказ не найден');
+    if (!o) throw new NotFoundException("Заказ не найден");
     // Лимит обращений отдаём вместе со статусом: экран заказа его и так
     // опрашивает, а кнопка «Написать нам» должна знать своё состояние
     // до нажатия, а не после отказа (DECISIONS §12.21).
