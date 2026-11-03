@@ -20,6 +20,7 @@ import { TelegramService } from '../telegram/telegram.service';
 import { ServiceReceiptService } from './service-receipt.service';
 import { OrderMessagesService } from './order-messages.service';
 import { PaymentsService } from '../payments/payments.service';
+import { posterModifications } from './poster-modifications';
 
 /**
  * Окно, в котором повторный такой же заказ считается сорвавшимся
@@ -972,16 +973,17 @@ export class OrdersService {
                 : undefined,
             products: items.map((it) => {
               const selected = (it.modifiers as any[]) ?? [];
-              const posterMods = selected.filter((m) => m.posterId);
+              const posterMods = posterModifications(
+                it.product?.modifiers,
+                selected,
+              );
               return {
                 product_id: Number(it.product!.posterId),
                 count: it.qty,
                 // выбор в наборах тех.карты: [{m: dish_modification_id, a: кол-во}]
                 modification:
                   posterMods.length > 0
-                    ? JSON.stringify(
-                        posterMods.map((m) => ({ m: Number(m.posterId), a: m.qty ?? 1 })),
-                      )
+                    ? JSON.stringify(posterMods)
                     : undefined,
               };
             }),
