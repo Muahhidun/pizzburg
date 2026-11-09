@@ -814,6 +814,13 @@ export class OrdersService {
       prepaidByDispatch.set(part.id, allocated);
       remainingPrepaid -= allocated;
     }
+    // Первая отправка заказа на кухню — момент, когда о нём пишем в
+    // телеграм кассы. Не при создании: в окно отмены клиент мог передумать,
+    // и кассир увидел бы заказ, которого нет. Исправленный состав и
+    // повторы после сбоя второго сообщения не дают.
+    const firstSend =
+      resendIds.size === 0 && parts.every((d) => d.status !== 'SENT');
+    let sentNow = 0;
     for (let i = 0; i < parts.length; i++) {
       const d = parts[i];
       const resending = resendIds.has(d.id);
@@ -932,6 +939,7 @@ export class OrdersService {
             ...(resending ? { replacedOrders: this.withReplaced(d) } : {}),
           },
         });
+        sentNow++;
         continue;
       }
 
@@ -1010,12 +1018,24 @@ export class OrdersService {
             ...(resending ? { replacedOrders: this.withReplaced(d) } : {}),
           },
         });
+        sentNow++;
       } catch (e) {
         this.logger.error(`Dispatch ${d.id} failed: ${e}`);
         await this.prisma.orderDispatch.update({
           where: { id: d.id },
           data: { status: 'FAILED', error: String(e) },
         });
+      }
+    }
+
+    if (firstSend && sentNow > 0) {
+      try {
+        await this.telegram.notifyCashier(
+          order.tenantId,
+          newOrderMessage(order, liveItems),
+        );
+      } catch (e) {
+        this.logger.warn(`Сообщение о заказе №${order.number} не ушло: ${e}`);
       }
     }
   }
@@ -1436,4 +1456,100 @@ export class OrdersService {
     // до нажатия, а не после отказа (DECISIONS §12.21).
     return { ...o, messages: await this.messages.state(orderId) };
   }
+}
+
+const esc = (v: unknown) =>
+  String(v ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+/**
+ * Сообщение кассе о новом заказе из приложения. Временная мера на время
+ * переезда: кассиры следят за заказами старого приложения в телеграме, и
+ * новый должен приходить туда же, а не только на планшет.
+ */
+export function newOrderMessage(
+  order: {
+    number: number;
+    type: string;
+    address: unknown;
+    scheduledAt: Date | null;
+    comment: string;
+    total: number;
+    deliveryFee: number;
+    pointsSpent: number;
+    promoDiscount: number;
+    paymentMethod: string;
+    changeFrom: number | null;
+    customer?: { phone: string; name?: string | null } | null;
+    tenant?: { settings: unknown } | null;
+  },
+  items: Array<{ name: string; qty: number; price: number; isGift: boolean; modifiers: unknown }>,
+): string {
+  const lines: string[] = [];
+  const delivery = order.type === 'DELIVERY';
+  lines.push(
+    `🆕 <b>Новое приложение · заказ №${order.number}</b>`,
+    delivery ? '🚗 Доставка' : '🏃 Самовывоз',
+  );
+  if (order.scheduledAt) {
+    const tz = (order.tenant?.settings as any)?.timezone ?? 'Asia/Almaty';
+    lines.push(
+      `⏰ Предзаказ на ${new Intl.DateTimeFormat('ru-RU', {
+        timeZone: tz,
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(order.scheduledAt)}`,
+    );
+  }
+  const a = order.address as any;
+  if (delivery && a) {
+    const extra = [
+      a.entrance && `подъезд ${a.entrance}`,
+      a.floor && `этаж ${a.floor}`,
+      a.flat && `кв. ${a.flat}`,
+    ].filter(Boolean);
+    lines.push(
+      `📍 ${esc([a.street, a.house].filter(Boolean).join(', '))}` +
+        (extra.length ? `, ${esc(extra.join(', '))}` : ''),
+    );
+    if (a.comment) lines.push(`   ${esc(a.comment)}`);
+  }
+  const who = [order.customer?.name, order.customer?.phone]
+    .filter(Boolean)
+    .join(', ');
+  if (who) lines.push(`📞 ${esc(who)}`);
+  lines.push('');
+  for (const it of items) {
+    const mods = ((it.modifiers as any[]) ?? [])
+      .map((m) => (m?.qty && m.qty > 1 ? `${m.name} ×${m.qty}` : m?.name))
+      .filter(Boolean);
+    lines.push(
+      `• ${esc(it.name)} ×${it.qty}` +
+        (it.isGift ? ' (подарок)' : '') +
+        (mods.length ? `
+   ${esc(mods.join(', '))}` : ''),
+    );
+  }
+  lines.push('');
+  if (order.deliveryFee > 0) lines.push(`Доставка: ${order.deliveryFee} ₸`);
+  if (order.pointsSpent > 0) lines.push(`Баллами: ${order.pointsSpent} ₸`);
+  if (order.promoDiscount > 0) lines.push(`Скидка: ${order.promoDiscount} ₸`);
+  const pay =
+    {
+      CASH: 'наличные',
+      CARD_ON_DELIVERY: 'карта (терминал)',
+      KASPI_ONLINE: 'Kaspi, оплачено',
+    }[order.paymentMethod] ?? order.paymentMethod;
+  lines.push(
+    `💰 <b>К оплате: ${order.total} ₸</b> · ${pay}` +
+      (order.paymentMethod === 'CASH' && order.changeFrom
+        ? `, сдача с ${order.changeFrom} ₸`
+        : ''),
+  );
+  if (order.comment) lines.push(`💬 ${esc(order.comment)}`);
+  return lines.join('\n');
 }
