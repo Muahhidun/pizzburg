@@ -63,8 +63,10 @@ class AuthState extends ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>> requestOtp(String phone) =>
-      api.requestOtp(phone);
+  Future<Map<String, dynamic>> requestOtp(
+    String phone, {
+    String channel = 'auto',
+  }) => api.requestOtp(phone, channel: channel);
 
   Future<void> verifyOtp(String phone, String code) async {
     final result = await api.verifyOtp(phone, code);

@@ -214,11 +214,16 @@ class ApiClient {
     _ensureOk(res);
   }
 
-  Future<Map<String, dynamic>> requestOtp(String phone) async {
+  /// [channel] `auto` — сервер сам выберет Telegram или SMS; `sms` — только
+  /// SMS (кнопка «Отправить по SMS»). Ответ: `channel` = telegram | sms.
+  Future<Map<String, dynamic>> requestOtp(
+    String phone, {
+    String channel = 'auto',
+  }) async {
     final res = await http.post(
       Uri.parse('$baseUrl/auth/$tenant/request-otp'),
       headers: _headers,
-      body: jsonEncode({'phone': phone}),
+      body: jsonEncode({'phone': phone, 'channel': channel}),
     );
     _ensureOk(res);
     return jsonDecode(utf8.decode(res.bodyBytes));

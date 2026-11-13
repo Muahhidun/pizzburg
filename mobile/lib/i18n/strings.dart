@@ -45,12 +45,23 @@ class S {
   static String get tryAgainShort =>
       t('Не получилось. Попробуйте ещё раз', 'Болмады. Тағы бір рет көріңіз');
   static String get smsCodeTitle => t('Код из смс', 'СМС-тегі код');
+  static String get telegramCodeTitle =>
+      t('Код в Telegram', 'Код Telegram-да');
+  static String telegramSentTo(String phone) => t(
+    'Отправили в Telegram на $phone. Не дойдёт за 15 секунд — пришлём смс',
+    '$phone нөміріне Telegram-ға жібердік. 15 секундта келмесе — СМС жібереміз',
+  );
+  static String get sendBySms => t('Отправить по смс', 'СМС-пен жіберу');
+  static String sendBySmsIn(int seconds) =>
+      t('Отправить по смс через $seconds с', 'СМС-пен жіберу: $seconds с');
+  static String pasteCode(String code) =>
+      t('Вставить код $code', '$code кодын қою');
   static String get yourPhone => t('Ваш номер', 'Сіздің нөміріңіз');
   static String sentTo(String phone) =>
       t('Отправили на $phone', 'Жіберілді: $phone');
   static String get smsInsteadOfPassword => t(
-    'Пришлём код в смс — он заменяет пароль',
-    'СМС-пен код жібереміз — ол құпиясөзді алмастырады',
+    'Пришлём код в Telegram или смс — он заменяет пароль',
+    'Кодты Telegram-ға немесе СМС-пен жібереміз — ол құпиясөзді алмастырады',
   );
   static String get codeHint => t('Код', 'Код');
   static String get pleaseWait => t('Подождите…', 'Күте тұрыңыз…');

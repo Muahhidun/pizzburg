@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -29,16 +31,29 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   late final TextEditingController _phone;
   final _code = TextEditingController();
   bool _codeSent = false;
   bool _busy = false;
   String? _error;
 
+  /// Куда ушёл код: `telegram` или `sms`. От этого зависит заголовок —
+  /// человек должен знать, где искать код (DECISIONS §12.40).
+  String _channel = 'sms';
+
+  /// Секунд до кнопки «Отправить по смс» после Telegram-кода.
+  int _smsIn = 0;
+  Timer? _smsTimer;
+
+  /// Код из буфера обмена — после того как человек скопировал его в
+  /// Telegram и вернулся. Предлагаем вставить, но не вставляем сами.
+  String? _clipboardCode;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _phone = TextEditingController(
       text: formatKzPhone(widget.initialPhone ?? ''),
     );
@@ -46,15 +61,35 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _smsTimer?.cancel();
     _phone.dispose();
     _code.dispose();
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _checkClipboard();
+  }
+
+  /// Вернулись из Telegram — вдруг код уже в буфере.
+  ///
+  /// `hasStrings` не показывает системный запрос на вставку, поэтому сам
+  /// буфер читаем, только если там что-то есть.
+  Future<void> _checkClipboard() async {
+    if (!_codeSent || _channel != 'telegram' || _code.text.isNotEmpty) return;
+    if (!await Clipboard.hasStrings()) return;
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final match = RegExp(r'\b(\d{6})\b').firstMatch(data?.text ?? '');
+    if (!mounted || match == null) return;
+    setState(() => _clipboardCode = match.group(1));
+  }
+
   /// Форматтер держит маску, серверу нужны только цифры.
   String get _digits => _phone.text.replaceAll(RegExp(r'\D'), '');
 
-  Future<void> _send() async {
+  Future<void> _send({String channel = 'auto'}) async {
     if (_digits.length < 11) {
       setState(() => _error = S.enterFullPhone);
       return;
@@ -64,12 +99,28 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
     try {
-      await context.read<AuthState>().requestOtp(_digits);
+      final res = await context.read<AuthState>().requestOtp(
+        _digits,
+        channel: channel,
+      );
       Haptics.success();
+      final viaTelegram = res['channel'] == 'telegram';
+      _smsTimer?.cancel();
       setState(() {
         _codeSent = true;
         _busy = false;
+        _channel = viaTelegram ? 'telegram' : 'sms';
+        _clipboardCode = null;
+        _smsIn = viaTelegram
+            ? ((res['smsFallbackAfterMs'] as num?) ?? 25000) ~/ 1000
+            : 0;
       });
+      if (viaTelegram) {
+        _smsTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+          if (!mounted || _smsIn <= 0) return t.cancel();
+          setState(() => _smsIn--);
+        });
+      }
     } catch (e) {
       setState(() {
         _error = _message(e);
@@ -126,12 +177,20 @@ class _LoginScreenState extends State<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                _codeSent ? S.smsCodeTitle : S.yourPhone,
+                !_codeSent
+                    ? S.yourPhone
+                    : (_channel == 'telegram'
+                          ? S.telegramCodeTitle
+                          : S.smsCodeTitle),
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
               const SizedBox(height: Gap.sm),
               Text(
-                _codeSent ? S.sentTo(_phone.text) : S.smsInsteadOfPassword,
+                !_codeSent
+                    ? S.smsInsteadOfPassword
+                    : (_channel == 'telegram'
+                          ? S.telegramSentTo(_phone.text)
+                          : S.sentTo(_phone.text)),
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: Gap.block),
@@ -156,7 +215,22 @@ class _LoginScreenState extends State<LoginScreen> {
                   ],
                   autofocus: true,
                   onSubmit: _verify,
+                  // iOS подсказывает код из смс над клавиатурой, Android
+                  // предлагает его через автозаполнение
+                  autofillHints: const [AutofillHints.oneTimeCode],
                 ),
+
+              if (_codeSent && _clipboardCode != null) ...[
+                const SizedBox(height: Gap.sm),
+                _LinkButton(
+                  text: S.pasteCode(_clipboardCode!),
+                  onTap: () {
+                    _code.text = _clipboardCode!;
+                    setState(() => _clipboardCode = null);
+                    _verify();
+                  },
+                ),
+              ],
 
               if (_error != null) ...[
                 const SizedBox(height: Gap.md),
@@ -190,30 +264,62 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
 
-              if (_codeSent) ...[
+              if (_codeSent && _channel == 'telegram') ...[
                 const SizedBox(height: Gap.md),
-                PressScale(
-                  onTap: _busy
-                      ? null
-                      : () => setState(() {
-                          _codeSent = false;
-                          _code.clear();
-                          _error = null;
-                        }),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: Gap.sm),
-                    child: Text(
-                      S.changePhone,
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w600,
-                        color: c.accent,
-                      ),
-                    ),
-                  ),
+                _LinkButton(
+                  text: _smsIn > 0 ? S.sendBySmsIn(_smsIn) : S.sendBySms,
+                  enabled: !_busy && _smsIn <= 0,
+                  onTap: () => _send(channel: 'sms'),
                 ),
               ],
+
+              if (_codeSent)
+                _LinkButton(
+                  text: S.changePhone,
+                  enabled: !_busy,
+                  onTap: () {
+                    _smsTimer?.cancel();
+                    setState(() {
+                      _codeSent = false;
+                      _code.clear();
+                      _error = null;
+                      _clipboardCode = null;
+                    });
+                  },
+                ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Текстовая кнопка под основной: «Изменить номер», «Отправить по смс».
+class _LinkButton extends StatelessWidget {
+  final String text;
+  final VoidCallback onTap;
+  final bool enabled;
+
+  const _LinkButton({
+    required this.text,
+    required this.onTap,
+    this.enabled = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return PressScale(
+      onTap: enabled ? onTap : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: Gap.sm),
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: 13.5,
+            fontWeight: FontWeight.w600,
+            color: enabled ? c.accent : c.muted,
           ),
         ),
       ),
@@ -228,6 +334,7 @@ class _Field extends StatelessWidget {
   final List<TextInputFormatter> formatters;
   final bool autofocus;
   final VoidCallback onSubmit;
+  final Iterable<String>? autofillHints;
 
   const _Field({
     required this.controller,
@@ -236,6 +343,7 @@ class _Field extends StatelessWidget {
     required this.formatters,
     required this.autofocus,
     required this.onSubmit,
+    this.autofillHints,
   });
 
   @override
@@ -246,6 +354,7 @@ class _Field extends StatelessWidget {
       keyboardType: keyboard,
       inputFormatters: formatters,
       autofocus: autofocus,
+      autofillHints: autofillHints,
       onSubmitted: (_) => onSubmit(),
       style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
       decoration: InputDecoration(
