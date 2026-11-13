@@ -41,6 +41,7 @@ dependencies:
   firebase_messaging: ^16.5.0
   liquid_glass_renderer: ^0.2.0-dev.4
   url_launcher: ^6.3.2
+  flutter_svg: ^2.3.4
 
 dev_dependencies:
   flutter_test:

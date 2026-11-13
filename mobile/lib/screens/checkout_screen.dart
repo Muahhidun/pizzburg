@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
@@ -544,6 +545,27 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       label: S.kaspiOnline,
                       selected: _payment == 'KASPI_ONLINE',
                       onTap: () => setState(() => _payment = 'KASPI_ONLINE'),
+                      // Гайд Kaspi: если название написано текстом —
+                      // сокращённый логотип, рядом Gold и Red. Только
+                      // официальные SVG, размеры не меньше макета.
+                      leading: SvgPicture.asset(
+                        'assets/kaspi/logo-kaspi-circle.svg',
+                        height: 28,
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SvgPicture.asset(
+                            'assets/kaspi/logo-gold.svg',
+                            height: 28,
+                          ),
+                          const SizedBox(width: 6),
+                          SvgPicture.asset(
+                            'assets/kaspi/logo-red.svg',
+                            height: 28,
+                          ),
+                        ],
+                      ),
                     ),
                 ],
               ),
@@ -734,11 +756,15 @@ class _Chip extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  final Widget? leading;
+  final Widget? trailing;
 
   const _Chip({
     required this.label,
     required this.selected,
     required this.onTap,
+    this.leading,
+    this.trailing,
   });
 
   @override
@@ -755,13 +781,20 @@ class _Chip extends StatelessWidget {
           borderRadius: R.pill,
           border: selected ? null : Border.all(color: c.border, width: 1.5),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13.5,
-            fontWeight: FontWeight.w600,
-            color: selected ? c.surface : c.ink,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (leading != null) ...[leading!, const SizedBox(width: 8)],
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+                color: selected ? c.surface : c.ink,
+              ),
+            ),
+            if (trailing != null) ...[const SizedBox(width: 8), trailing!],
+          ],
         ),
       ),
     );

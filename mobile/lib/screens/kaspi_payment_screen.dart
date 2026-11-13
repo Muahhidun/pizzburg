@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -267,16 +268,21 @@ class _KaspiPaymentScreenState extends State<KaspiPaymentScreen>
                   child: Semantics(
                     button: true,
                     label: S.kaspiOpen,
+                    // Кнопка — официальный SVG из Figma Kaspi без правок.
+                    // Фон под ней того же красного (#F14635), чтобы на
+                    // широком экране она тянулась на всю ширину, не меняя
+                    // ни цвета, ни содержимого. Высота 52 ≥ 48 dp по гайду.
                     child: Container(
-                      height: 56,
-                      padding: const EdgeInsets.all(4),
+                      width: double.infinity,
+                      height: 52,
                       decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: R.pill,
+                        color: const Color(0xFFF14635),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Image.asset(
-                        'assets/kaspi/pay-button-red.png',
-                        fit: BoxFit.contain,
+                      alignment: Alignment.center,
+                      child: SvgPicture.asset(
+                        'assets/kaspi/pay-button-red.svg',
+                        height: 52,
                       ),
                     ),
                   ),
