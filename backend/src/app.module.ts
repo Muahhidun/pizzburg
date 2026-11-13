@@ -14,6 +14,7 @@ import { FavoritesModule } from './favorites/favorites.module';
 import { MessagesModule } from './messages/messages.module';
 import { GeoModule } from './geo/geo.module';
 import { LegalModule } from './legal/legal.module';
+import { AppLinkModule } from './app-link/app-link.module';
 import { StopListModule } from './stoplist/stoplist.module';
 import { UpsellModule } from './upsell/upsell.module';
 import { EventsModule } from './events/events.module';
@@ -50,6 +51,7 @@ class RootController {
     PrismaModule,
     AvailabilityModule,
     LegalModule,
+    AppLinkModule,
     StopListModule,
     UpsellModule,
     EventsModule,
