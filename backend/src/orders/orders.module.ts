@@ -1,3 +1,4 @@
+import { DailySummaryService } from './daily-summary.service';
 import { UnpaidOrdersService } from './unpaid-orders.service';
 import { Module } from '@nestjs/common';
 import { PosterModule } from '../poster/poster.module';
@@ -27,6 +28,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     OrdersService,
     StatusPollerService,
     UnpaidOrdersService,
+    DailySummaryService,
     CancelReasonsService,
     ShortageService,
     ServiceReceiptService,

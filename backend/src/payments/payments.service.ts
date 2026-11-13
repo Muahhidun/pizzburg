@@ -347,7 +347,13 @@ export class PaymentsService {
         metadata: { amount: processing.amount },
       });
       await this.refreshOrderRefundStatus(processing.orderId);
-      await this.announceRefund(processing.orderId, processing.amount, "SUCCEEDED");
+      await this.announceRefund(
+        processing.orderId,
+        processing.amount,
+        "SUCCEEDED",
+        undefined,
+        processing.requestedBy,
+      );
       return succeeded;
     } catch (error) {
       const message = this.errorMessage(error);
@@ -401,6 +407,7 @@ export class PaymentsService {
     amount: number,
     outcome: "SUCCEEDED" | "RETRYING" | "STOPPED",
     error?: string,
+    requestedBy?: string,
   ) {
     try {
       const order = await this.prisma.order.findUnique({
@@ -423,6 +430,14 @@ export class PaymentsService {
                 },
           { type: "order_refund", outcome },
         );
+        // Руководству — о возвратах, которые сделал кассир. Отмена клиентом
+        // в свою минуту ничего не стоила и попадёт в вечернюю сводку.
+        if (requestedBy === "ADMIN") {
+          await this.telegram?.notify(
+            order.tenantId,
+            `✅ Деньги вернули: ${amount} ₸ по заказу №${order.number} зачислены клиенту на Kaspi.`,
+          );
+        }
         return;
       }
       if (outcome === "RETRYING") {

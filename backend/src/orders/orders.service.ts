@@ -589,6 +589,11 @@ export class OrdersService {
           total: true,
           cancelReason: true,
           cancelledBy: true,
+          paymentMethod: true,
+          paidAt: true,
+          paymentRefunds: {
+            select: { amount: true, idempotencyKey: true },
+          },
           customer: { select: { phone: true } },
           dispatches: {
             select: {
@@ -626,7 +631,8 @@ export class OrdersService {
           order.tenantId,
           `🚫 <b>Заказ №${order.number} отменён ${who}</b>` +
             (order.cancelReason ? `\nПричина: ${order.cancelReason}` : "") +
-            `\nСумма: ${order.total} ₸`,
+            `\nСумма: ${order.total} ₸` +
+            moneyLine(order),
         );
       }
 
@@ -1640,4 +1646,27 @@ export function newOrderMessage(
   );
   if (order.comment) lines.push(`💬 ${esc(order.comment)}`);
   return lines.join('\n');
+}
+
+/**
+ * Что сделали с деньгами Kaspi при отмене — строка для руководства.
+ *
+ * Возврат к этому моменту только поставлен в очередь, поэтому пишем
+ * «оформлен»; о зачислении придёт отдельное сообщение.
+ */
+export function moneyLine(order: {
+  paymentMethod?: string | null;
+  paidAt?: Date | null;
+  paymentRefunds?: { amount: number; idempotencyKey: string }[];
+  total: number;
+}) {
+  if (order.paymentMethod !== "KASPI_ONLINE") return "";
+  if (!order.paidAt) return "\nДеньги: не оплачен, возвращать нечего";
+  const onCancel = (order.paymentRefunds ?? []).find((r) =>
+    r.idempotencyKey.startsWith("order-cancel:"),
+  );
+  if (!onCancel) return "\nДеньги: оплачено Kaspi, <b>не возвращали</b>";
+  return onCancel.amount >= order.total
+    ? `\nДеньги: возврат ${onCancel.amount} ₸ на Kaspi оформлен (полностью)`
+    : `\nДеньги: возврат ${onCancel.amount} ₸ из ${order.total} ₸ на Kaspi оформлен (частично)`;
 }
