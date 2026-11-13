@@ -15,7 +15,7 @@ import { Throttle } from '@nestjs/throttler';
 import { IsIn, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import { Prisma, PushPlatform } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { AuthService } from './auth.service';
+import { AuthService, OtpChannel } from './auth.service';
 import { CustomerAuthGuard } from './customer-auth.guard';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { LegalService } from '../legal/legal.service';
@@ -27,6 +27,15 @@ class RequestOtpDto {
   @MaxLength(24)
   @Matches(/^\+?[\d\s()-]{10,24}$/, { message: 'Неверный формат номера' })
   phone: string;
+
+  /**
+   * `auto` — сборка умеет показывать Telegram-код: пробуем Telegram, при
+   * неудаче SMS. Без поля (старые сборки, сайт) — только SMS, иначе
+   * человек ждал бы SMS, а код лежал бы в Telegram.
+   */
+  @IsOptional()
+  @IsIn(['auto', 'sms'])
+  channel?: OtpChannel;
 }
 
 class VerifyOtpDto {
@@ -116,7 +125,7 @@ export class AuthController {
   @Throttle({ short: { ttl: 60_000, limit: 3 }, long: { ttl: 3_600_000, limit: 10 } })
   @Post(':tenantSlug/request-otp')
   requestOtp(@Body() dto: RequestOtpDto) {
-    return this.auth.requestOtp(dto.phone);
+    return this.auth.requestOtp(dto.phone, dto.channel ?? 'sms');
   }
 
   @Post('push-token')

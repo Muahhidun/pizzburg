@@ -9,6 +9,7 @@ import { randomInt } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { SmsService } from '../sms/sms.service';
+import { TelegramGatewayService } from '../sms/telegram-gateway.service';
 import { normalizeKzPhone } from '../common/phone';
 
 const OTP_TTL_MS = 5 * 60 * 1000;
@@ -22,6 +23,27 @@ const RESEND_COOLDOWN_MS = 60 * 1000;
  */
 const MAX_PER_DAY = 10;
 const CODE_DIGITS = 6;
+
+/**
+ * Telegram-код: сколько ждать подтверждения доставки, прежде чем молча
+ * отправить тот же код SMS. Обычно Telegram доставляет за 1–2 секунды;
+ * 15 — запас на слабую сеть, но не столько, чтобы человек заскучал.
+ */
+export const TELEGRAM_AUTO_FALLBACK_MS = 15_000;
+/** Через сколько после Telegram-кода приложение даёт кнопку «по SMS». */
+export const TELEGRAM_MANUAL_FALLBACK_MS = 25_000;
+/** Срок Telegram-сообщения: не доставлено за это время — деньги вернут. */
+const TELEGRAM_TTL_SECONDS = 60;
+
+/** Канал, который понимает клиент. Старые сборки не шлют ничего — им SMS. */
+export type OtpChannel = 'auto' | 'sms';
+
+type TelegramPending = {
+  code: string;
+  requestId: string;
+  sentAt: number;
+  smsSent: boolean;
+};
 
 /**
  * Номера, которым dev-режим отдаёт код прямо в ответе. Список задаётся
@@ -66,14 +88,35 @@ function testCode(): string {
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
+  /**
+   * Коды, ушедшие в Telegram, по номеру. В памяти, а не в базе: живут
+   * минуту, и после перезапуска сервера худшее, что случится, — человек
+   * подождёт обычную минуту до повторного кода.
+   */
+  private readonly telegramPending = new Map<string, TelegramPending>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly sms: SmsService,
+    private readonly telegram: TelegramGatewayService,
   ) {}
 
-  async requestOtp(phone: string) {
+  /**
+   * Запросить код входа.
+   *
+   * `auto` — новые сборки приложения: сначала Telegram, при неудаче SMS.
+   * `sms` — старые сборки и сайт, а также кнопка «Отправить по SMS»: если
+   * минуту назад код ушёл в Telegram, тот же код уходит SMS без новой
+   * минуты ожидания (DECISIONS §12.40).
+   */
+  async requestOtp(phone: string, channel: OtpChannel = 'sms') {
     const normalized = normalizeKzPhone(phone);
+
+    if (channel === 'sms') {
+      const fallback = await this.smsAfterTelegram(normalized);
+      if (fallback) return fallback;
+    }
 
     const recent = await this.prisma.otpCode.findFirst({
       where: {
@@ -125,34 +168,107 @@ export class AuthService {
     // проверять вход десять раз подряд за деньги незачем.
     if (isTestPhone) {
       this.logger.warn(`Вход по тестовому номеру ${normalized}`);
-      return { sent: true };
+      return { sent: true, channel: 'sms' as const };
+    }
+
+    if (channel === 'auto' && this.telegram.configured) {
+      const requestId = await this.telegram.sendCode(
+        normalized,
+        code,
+        TELEGRAM_TTL_SECONDS,
+      );
+      if (requestId) {
+        this.rememberTelegram(normalized, { code, requestId });
+        return {
+          sent: true,
+          channel: 'telegram' as const,
+          smsFallbackAfterMs: TELEGRAM_MANUAL_FALLBACK_MS,
+        };
+      }
     }
 
     if (this.sms.configured) {
-      try {
-        await this.sms.sendOtp(normalized, code);
-      } catch (error) {
-        // Причину пишем в лог, клиенту не показываем: в тексте ошибки
-        // провайдера бывает и остаток баланса, и номер счёта.
-        this.logger.error(
-          `SMS с кодом не отправлена на ${normalized}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-        throw new BadRequestException(
-          'Не удалось отправить SMS. Попробуйте ещё раз через минуту',
-        );
-      }
-      return { sent: true };
+      await this.sendSms(normalized, code);
+      return { sent: true, channel: 'sms' as const };
     }
 
     // Провайдер не настроен — только для локальной разработки
     if (process.env.OTP_DEV_MODE === '1') {
       this.logger.warn(`OTP для ${normalized}: ${code}`);
-      return { sent: true };
+      return { sent: true, channel: 'sms' as const };
     }
     this.logger.error('SMS-провайдер не настроен, а OTP_DEV_MODE выключен');
     throw new BadRequestException('Отправка SMS временно недоступна');
+  }
+
+  private async sendSms(phone: string, code: string) {
+    try {
+      await this.sms.sendOtp(phone, code);
+    } catch (error) {
+      // Причину пишем в лог, клиенту не показываем: в тексте ошибки
+      // провайдера бывает и остаток баланса, и номер счёта.
+      this.logger.error(
+        `SMS с кодом не отправлена на ${phone}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      throw new BadRequestException(
+        'Не удалось отправить SMS. Попробуйте ещё раз через минуту',
+      );
+    }
+  }
+
+  /**
+   * Запомнить Telegram-код и через 15 секунд проверить доставку: не дошёл —
+   * тот же код уходит SMS сам, человек ничего не нажимает.
+   */
+  private rememberTelegram(
+    phone: string,
+    sent: { code: string; requestId: string },
+  ) {
+    const now = Date.now();
+    for (const [key, value] of this.telegramPending) {
+      if (now - value.sentAt > OTP_TTL_MS) this.telegramPending.delete(key);
+    }
+    const entry: TelegramPending = { ...sent, sentAt: now, smsSent: false };
+    this.telegramPending.set(phone, entry);
+
+    const timer = setTimeout(async () => {
+      // Код уже введён, или поверх ушёл новый — проверять нечего
+      if (this.telegramPending.get(phone) !== entry || entry.smsSent) return;
+      if (await this.telegram.delivered(entry.requestId)) return;
+      if (this.telegramPending.get(phone) !== entry || entry.smsSent) return;
+      entry.smsSent = true;
+      this.logger.warn(`Telegram не доставил код на ${phone} — отправляем SMS`);
+      if (!this.sms.configured) return;
+      await this.sendSms(phone, entry.code).catch(() => undefined);
+    }, TELEGRAM_AUTO_FALLBACK_MS);
+    timer.unref?.();
+  }
+
+  /**
+   * Кнопка «Отправить по SMS» после Telegram-кода. Тот же код, а не новый:
+   * иначе в Telegram и в SMS лежали бы два разных кода, и верный был бы
+   * только один из них.
+   *
+   * @returns ответ, если кнопка относилась к Telegram-коду; null — обычный
+   * запрос SMS, пусть идёт общей дорогой с минутным кулдауном
+   */
+  private async smsAfterTelegram(phone: string) {
+    const entry = this.telegramPending.get(phone);
+    if (!entry) return null;
+    const age = Date.now() - entry.sentAt;
+    if (age > OTP_TTL_MS) return null;
+    if (entry.smsSent) return { sent: true, channel: 'sms' as const };
+    if (age < TELEGRAM_MANUAL_FALLBACK_MS) {
+      const seconds = Math.ceil((TELEGRAM_MANUAL_FALLBACK_MS - age) / 1000);
+      throw new BadRequestException(
+        `Код уже в Telegram. SMS можно запросить через ${seconds} с`,
+      );
+    }
+    if (this.sms.configured) await this.sendSms(phone, entry.code);
+    entry.smsSent = true;
+    return { sent: true, channel: 'sms' as const };
   }
 
   async verifyOtp(tenantSlug: string, phone: string, code: string) {
@@ -177,6 +293,14 @@ export class AuthService {
       throw new BadRequestException('Неверный код');
     }
     await this.prisma.otpCode.deleteMany({ where: { phone: normalized } });
+
+    // Код введён — запасная SMS больше не нужна, а Telegram узнаёт о
+    // входе для своей статистики конверсии
+    const pending = this.telegramPending.get(normalized);
+    if (pending) {
+      this.telegramPending.delete(normalized);
+      if (pending.code === code) this.telegram.reportValid(pending.requestId, code);
+    }
 
     const customer = await this.prisma.customer.upsert({
       where: { tenantId_phone: { tenantId: tenant.id, phone: normalized } },
