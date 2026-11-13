@@ -272,6 +272,10 @@ export class AuthController {
           total: true,
           pointsSpent: true,
           pointsEarned: true,
+          // Приложению нужно отличить неоплаченный Kaspi-заказ от ждущего
+          // подтверждения кассы: иначе человек ждёт заказ, который не оплатил.
+          paymentMethod: true,
+          paymentStatus: true,
           createdAt: true,
           items: { select: { name: true, qty: true, price: true, isGift: true } },
         },

@@ -1,5 +1,6 @@
 'use client';
 
+import { RefundChoice, isPaidOnline, refundPayload, type RefundMode } from '@/lib/refund-choice';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AvailabilityNow,
@@ -539,13 +540,18 @@ function CashierCancelDialog({ order, onClose, onDone }: { order: CashierOrder; 
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const paid = isPaidOnline(order);
+  const [refundMode, setRefundMode] = useState<RefundMode>('FULL');
+  const [refundAmount, setRefundAmount] = useState('');
   useEffect(() => { api.get<AdminCancelReason[]>('/admin/cancel-reasons').then((list) => setReasons(list.filter((r) => r.isActive))).catch((e) => setError((e as Error).message)); }, []);
   async function submit() {
+    const refund = refundPayload(paid, refundMode, refundAmount, order.total);
+    if ('error' in refund) { setError(refund.error); return; }
     setBusy(true); setError('');
-    try { await api.patch(`/admin/orders/${order.id}/cancel`, { reasonId, ...(comment.trim() ? { comment: comment.trim() } : {}) }); onDone(); }
+    try { await api.patch(`/admin/orders/${order.id}/cancel`, { reasonId, ...(comment.trim() ? { comment: comment.trim() } : {}), ...refund.body }); onDone(); }
     catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
-  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><div className="w-full max-w-md rounded-2xl bg-white p-5 dark:bg-neutral-900"><h3 className="text-lg font-semibold">Отмена заказа №{order.number}</h3><p className="mt-1 text-sm text-neutral-500">При онлайн-оплате сервер создаст возврат автоматически.</p>{error && <p className="mt-2 text-sm text-red-600">{error}</p>}<div className="mt-3 max-h-56 space-y-1 overflow-auto">{reasons?.map((reason) => <label key={reason.id} className="flex cursor-pointer gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-black/5 dark:hover:bg-white/10"><input type="radio" checked={reasonId === reason.id} onChange={() => setReasonId(reason.id)} /><span>{reason.label}</span></label>) ?? <p className="text-sm text-neutral-500">Загрузка…</p>}</div><textarea value={comment} onChange={(e) => setComment(e.target.value)} maxLength={300} rows={2} placeholder="Комментарий (необязательно)" className="mt-3 w-full rounded-lg border border-black/10 bg-transparent px-3 py-2 text-sm dark:border-white/15" /><div className="mt-4 flex justify-end gap-2"><button onClick={onClose} disabled={busy} className="rounded-lg border border-black/10 px-3 py-1.5 text-sm dark:border-white/15">Не отменять</button><button onClick={submit} disabled={busy || !reasonId} className="rounded-lg bg-red-600 px-3 py-1.5 text-sm text-white disabled:opacity-40">{busy ? 'Отменяем…' : 'Отменить'}</button></div></div></div>;
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><div className="w-full max-w-md rounded-2xl bg-white p-5 dark:bg-neutral-900"><h3 className="text-lg font-semibold">Отмена заказа №{order.number}</h3><p className="mt-1 text-sm text-neutral-500">{paid ? 'Заказ оплачен через Kaspi — выберите, что сделать с деньгами.' : 'Заказ без онлайн-оплаты, возвращать нечего.'}</p>{error && <p className="mt-2 text-sm text-red-600">{error}</p>}<div className="mt-3 max-h-56 space-y-1 overflow-auto">{reasons?.map((reason) => <label key={reason.id} className="flex cursor-pointer gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-black/5 dark:hover:bg-white/10"><input type="radio" checked={reasonId === reason.id} onChange={() => setReasonId(reason.id)} /><span>{reason.label}</span></label>) ?? <p className="text-sm text-neutral-500">Загрузка…</p>}</div><textarea value={comment} onChange={(e) => setComment(e.target.value)} maxLength={300} rows={2} placeholder="Комментарий (необязательно)" className="mt-3 w-full rounded-lg border border-black/10 bg-transparent px-3 py-2 text-sm dark:border-white/15" />{paid && <RefundChoice total={order.total} mode={refundMode} onMode={setRefundMode} amount={refundAmount} onAmount={setRefundAmount} />}<div className="mt-4 flex justify-end gap-2"><button onClick={onClose} disabled={busy} className="rounded-lg border border-black/10 px-3 py-1.5 text-sm dark:border-white/15">Не отменять</button><button onClick={submit} disabled={busy || !reasonId} className="rounded-lg bg-red-600 px-3 py-1.5 text-sm text-white disabled:opacity-40">{busy ? 'Отменяем…' : 'Отменить'}</button></div></div></div>;
 }
 
 /** Что происходит с заказом прямо сейчас — крупно и словами кассира */

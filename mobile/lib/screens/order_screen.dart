@@ -11,6 +11,7 @@ import '../theme/tokens.dart';
 import '../utils/haptics.dart';
 import '../widgets/motion.dart';
 import '../i18n/strings.dart';
+import 'kaspi_payment_screen.dart';
 
 /// Статус заказа. Экран целиком тёмный — по прототипу «Сигнал».
 ///
@@ -92,7 +93,24 @@ class _OrderScreenState extends State<OrderScreen> {
   /// отменить ровно в момент печати чека». Показывать клиенту 69 секунд,
   /// когда кнопка умирает на 60-й, — обманывать: человек жмёт на 65-й и
   /// получает отказ, глядя на живой отсчёт.
+  /// Заказ с Kaspi, который так и не оплатили. На кухню он не ушёл, и
+  /// «Ждём подтверждения» здесь было бы неправдой: человек ждал бы заказ,
+  /// за который не заплатил.
+  bool get _unpaid =>
+      _data?['paymentMethod'] == 'KASPI_ONLINE' &&
+      _data?['paymentStatus'] == 'PENDING' &&
+      (_data?['status'] ?? 'NEW') == 'NEW';
+
+  Future<void> _pay() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => KaspiPaymentScreen(order: widget.order)),
+    );
+    if (mounted) await _load();
+  }
+
   Duration? get _cancelLeft {
+    if (_unpaid) return null;
     final window = _availability?.cancelWindowMinutes ?? 0;
     if (window <= 0) return null;
     // Отсчёт живёт, только пока заказ ещё можно отменить. Раньше он
@@ -233,9 +251,11 @@ class _OrderScreenState extends State<OrderScreen> {
   bool get _messagesExhausted => _messagesSent >= _messagesLimit;
 
   bool get _canCancel {
+    if (!context.read<AuthState>().isAuthenticated) return false;
+    // Неоплаченный заказ отменяется в любой момент: денег не списано.
+    if (_unpaid) return true;
     final window = _availability?.cancelWindowMinutes ?? 0;
     if (window <= 0) return false;
-    if (!context.read<AuthState>().isAuthenticated) return false;
     if ((_data?['status'] ?? 'NEW') != 'NEW') return false;
     final explicit = DateTime.tryParse(_data?['cancelUntil']?.toString() ?? '');
     final created = DateTime.tryParse(_data?['createdAt']?.toString() ?? '');
@@ -378,7 +398,9 @@ class _OrderScreenState extends State<OrderScreen> {
               const SizedBox(height: Gap.sm),
               _ResponsiveHeadline(
                 loaded
-                    ? (_awaitingShortage
+                    ? (_unpaid
+                          ? S.orderUnpaid
+                          : _awaitingShortage
                           ? S.onePositionMissing
                           : _cancelLeft != null
                           ? S.canStillCancel
@@ -429,6 +451,62 @@ class _OrderScreenState extends State<OrderScreen> {
               ],
 
               if (_awaitingShortage) _shortageChoice(),
+
+              if (_unpaid) ...[
+                Padding(
+                  padding: const EdgeInsets.only(top: Gap.md),
+                  child: Text(
+                    S.orderUnpaidHint,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      height: 1.45,
+                      color: c.surface.withValues(alpha: 0.75),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: Gap.md),
+                PressScale(
+                  onTap: _pay,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      borderRadius: R.pill,
+                      color: c.surface,
+                    ),
+                    child: Text(
+                      S.payOrder,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        color: c.panel,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: Gap.sm),
+                PressScale(
+                  onTap: _cancelling ? null : _cancel,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      borderRadius: R.pill,
+                      border: Border.all(
+                        color: c.surface.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Text(
+                      _cancelling ? S.cancelling : S.cancelOrder,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: c.surface,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
 
               // Пока заказ не ушёл на кухню, говорим об этом прямо.
               // «Заказ отправлен» в эти секунды было бы неправдой, а
@@ -648,7 +726,7 @@ class _OrderScreenState extends State<OrderScreen> {
                 ),
               ],
 
-              if (_canCancel && _cancelLeft == null) ...[
+              if (_canCancel && _cancelLeft == null && !_unpaid) ...[
                 const SizedBox(height: Gap.lg),
                 PressScale(
                   onTap: _cancelling ? null : _cancel,

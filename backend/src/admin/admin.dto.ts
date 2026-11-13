@@ -250,6 +250,10 @@ export class UpdateCancelReasonDto {
 export class CancelOrderByAdminDto {
   @IsString() reasonId: string;
   @IsOptional() @IsString() @MaxLength(300) comment?: string;
+  /// Деньги Kaspi при отмене: вернуть всё, часть или ничего. Без поля —
+  /// полный возврат, как было до появления выбора.
+  @IsOptional() @IsIn(['FULL', 'PARTIAL', 'NONE']) refundMode?: 'FULL' | 'PARTIAL' | 'NONE';
+  @IsOptional() @IsInt() @Min(1) @Max(100_000_000) refundAmount?: number;
 }
 
 /** Полный или частичный возврат подтверждённой онлайн-оплаты. */

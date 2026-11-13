@@ -6,6 +6,7 @@ import { PaymentsService } from "./payments.service";
 import { RefundRetryService } from "./refund-retry.service";
 import { PaymentsController } from "./payments.controller";
 import { PaymentStatusPollerService } from "./payment-status-poller.service";
+import { NotificationsModule } from "../notifications/notifications.module";
 
 /**
  * Глобальный финансовый модуль: отмены происходят из заказов, нехватки и
@@ -13,6 +14,7 @@ import { PaymentStatusPollerService } from "./payment-status-poller.service";
  */
 @Global()
 @Module({
+  imports: [NotificationsModule],
   controllers: [PaymentsController],
   providers: [
     DisabledKaspiProvider,

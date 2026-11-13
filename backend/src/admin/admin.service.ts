@@ -581,9 +581,27 @@ export class AdminService {
     return this.orderService.setStatus(id, status, tenant.id);
   }
 
-  async cancelOrder(id: string, reasonId: string, comment?: string) {
+  async cancelOrder(
+    id: string,
+    reasonId: string,
+    comment?: string,
+    refundMode: 'FULL' | 'PARTIAL' | 'NONE' = 'FULL',
+    refundAmount?: number,
+  ) {
     const tenant = await this.tenant();
-    return this.orderService.cancelByOperator(id, tenant.id, reasonId, comment);
+    if (refundMode === 'PARTIAL' && refundAmount === undefined) {
+      throw new BadRequestException('Укажите сумму частичного возврата');
+    }
+    return this.orderService.cancelByOperator(
+      id,
+      tenant.id,
+      reasonId,
+      comment,
+      new Date(),
+      refundMode === 'PARTIAL'
+        ? { mode: 'PARTIAL', amount: refundAmount! }
+        : { mode: refundMode },
+    );
   }
 
   async orderPayment(id: string) {

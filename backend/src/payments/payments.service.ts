@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import {
@@ -14,6 +15,8 @@ import {
 } from "@prisma/client";
 import { AvailabilityService } from "../availability/availability.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { NotificationsService } from "../notifications/notifications.service";
+import { TelegramService } from "../telegram/telegram.service";
 import {
   KASPI_PAYMENT_PROVIDER,
   PaymentProvider,
@@ -47,6 +50,9 @@ export class PaymentsService {
     private readonly availability: AvailabilityService,
     @Inject(KASPI_PAYMENT_PROVIDER)
     private readonly provider: PaymentProvider,
+    // Необязательные: в юнит-тестах сервис собирают без каналов связи.
+    @Optional() private readonly notifications?: NotificationsService,
+    @Optional() private readonly telegram?: TelegramService,
   ) {}
 
   /**
@@ -341,6 +347,7 @@ export class PaymentsService {
         metadata: { amount: processing.amount },
       });
       await this.refreshOrderRefundStatus(processing.orderId);
+      await this.announceRefund(processing.orderId, processing.amount, "SUCCEEDED");
       return succeeded;
     } catch (error) {
       const message = this.errorMessage(error);
@@ -370,7 +377,77 @@ export class PaymentsService {
       this.logger.warn(
         `Возврат ${processing.id} не выполнен, попытка ${attemptCount}: ${message}`,
       );
+      // Сообщаем не на каждую попытку, а на первую и на остановку повторов:
+      // восемь сообщений подряд про один возврат в группе только мешают.
+      if (automaticRetriesExhausted) {
+        await this.announceRefund(processing.orderId, processing.amount, "STOPPED", message);
+      } else if (attemptCount === 1) {
+        await this.announceRefund(processing.orderId, processing.amount, "RETRYING", message);
+      }
       return failed;
+    }
+  }
+
+  /**
+   * Сообщает о судьбе возврата: клиенту — пушем, руководству — в Telegram.
+   *
+   * Kaspi зачисляет возврат моментально после успешного payment/return,
+   * поэтому «деньги вернулись» шлём сразу по успеху. При сбое клиенту
+   * говорим, что возврат оформлен (деньги не потеряны), а владельцу —
+   * что нужно проследить: в админке постоянно никто не сидит.
+   */
+  private async announceRefund(
+    orderId: string,
+    amount: number,
+    outcome: "SUCCEEDED" | "RETRYING" | "STOPPED",
+    error?: string,
+  ) {
+    try {
+      const order = await this.prisma.order.findUnique({
+        where: { id: orderId },
+        select: { number: true, tenantId: true },
+      });
+      if (!order) return;
+      if (outcome === "SUCCEEDED") {
+        await this.notifications?.sendOrderEvent(
+          orderId,
+          (lang) =>
+            lang === "kk"
+              ? {
+                  title: `№${order.number} тапсырыс`,
+                  body: `${amount} ₸ Kaspi.kz-ке қайтарылды. Қосымшадан тексеріңіз.`,
+                }
+              : {
+                  title: `Заказ №${order.number}`,
+                  body: `${amount} ₸ вернулись на Kaspi.kz. Можно проверить в приложении Kaspi.`,
+                },
+          { type: "order_refund", outcome },
+        );
+        return;
+      }
+      if (outcome === "RETRYING") {
+        await this.notifications?.sendOrderEvent(
+          orderId,
+          (lang) =>
+            lang === "kk"
+              ? {
+                  title: `№${order.number} тапсырыс`,
+                  body: `${amount} ₸ қайтару рәсімделді, ақша Kaspi.kz-ке жақын арада түседі.`,
+                }
+              : {
+                  title: `Заказ №${order.number}`,
+                  body: `Возврат ${amount} ₸ оформлен, деньги придут на Kaspi.kz в ближайшее время.`,
+                },
+          { type: "order_refund", outcome },
+        );
+      }
+      const text =
+        outcome === "STOPPED"
+          ? `❗️ Возврат по заказу №${order.number} на ${amount} ₸ не прошёл, автоматические повторы остановлены. Админка → Заказы → заказ №${order.number} → «Повторить». Ошибка: ${error ?? "—"}`
+          : `⚠️ Возврат по заказу №${order.number} на ${amount} ₸ не прошёл с первого раза. Повторяем автоматически, напишем, если не получится. Ошибка: ${error ?? "—"}`;
+      await this.telegram?.notify(order.tenantId, text);
+    } catch (e) {
+      this.logger.warn(`Уведомление о возврате ${orderId} не отправлено: ${this.errorMessage(e)}`);
     }
   }
 

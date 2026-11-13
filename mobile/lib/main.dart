@@ -100,7 +100,9 @@ Future<void> main() async {
       );
       return;
     }
-    if (data['type'] != 'order_status') return;
+    // Любой пуш о заказе (статус, неоплата, возврат, нехватка) ведёт на
+    // экран заказа: там и ответ, и нужные кнопки.
+    if (!(data['type']?.toString() ?? '').startsWith('order_')) return;
     final id = data['orderId']?.toString();
     final number = int.tryParse(data['orderNumber']?.toString() ?? '');
     final total = int.tryParse(data['total']?.toString() ?? '');

@@ -1,5 +1,6 @@
 'use client';
 
+import { RefundChoice, isPaidOnline, refundPayload, type RefundMode } from '@/lib/refund-choice';
 import { useCallback, useEffect, useState } from 'react';
 import {
   AdminCancelReason,
@@ -522,6 +523,9 @@ function CancelDialog({
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const paid = isPaidOnline(order);
+  const [refundMode, setRefundMode] = useState<RefundMode>('FULL');
+  const [refundAmount, setRefundAmount] = useState('');
 
   useEffect(() => {
     api
@@ -532,12 +536,18 @@ function CancelDialog({
   }, []);
 
   async function submit() {
+    const refund = refundPayload(paid, refundMode, refundAmount, order.total);
+    if ('error' in refund) {
+      setError(refund.error);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       await api.patch(`/admin/orders/${order.id}/cancel`, {
         reasonId,
         ...(comment.trim() ? { comment: comment.trim() } : {}),
+        ...refund.body,
       });
       onDone();
     } catch (e) {
@@ -589,6 +599,15 @@ function CancelDialog({
           placeholder="Комментарий (необязательно)"
           className="mt-3 w-full rounded-lg border border-black/10 px-3 py-2 text-sm dark:border-white/15 dark:bg-neutral-800"
         />
+        {paid && (
+          <RefundChoice
+            total={order.total}
+            mode={refundMode}
+            onMode={setRefundMode}
+            amount={refundAmount}
+            onAmount={setRefundAmount}
+          />
+        )}
 
         <div className="mt-4 flex justify-end gap-2">
           <button

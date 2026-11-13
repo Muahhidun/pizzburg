@@ -1,3 +1,4 @@
+import { UnpaidOrdersService } from './unpaid-orders.service';
 import { Module } from '@nestjs/common';
 import { PosterModule } from '../poster/poster.module';
 import { PromotionsModule } from '../promotions/promotions.module';
@@ -25,6 +26,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
   providers: [
     OrdersService,
     StatusPollerService,
+    UnpaidOrdersService,
     CancelReasonsService,
     ShortageService,
     ServiceReceiptService,

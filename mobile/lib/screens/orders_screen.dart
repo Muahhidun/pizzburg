@@ -155,7 +155,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   padding: const EdgeInsets.only(bottom: Gap.md),
                   child: _ActiveCard(
                     order: order,
-                    stage: _stageLabels[order['status']?.toString()] ?? '',
+                    stage:
+                        order['paymentMethod'] == 'KASPI_ONLINE' &&
+                            order['paymentStatus'] == 'PENDING' &&
+                            order['status'] == 'NEW'
+                        ? S.orderUnpaid
+                        : _stageLabels[order['status']?.toString()] ?? '',
                     onTap: () => _open(order),
                   ),
                 ),

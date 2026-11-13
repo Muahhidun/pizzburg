@@ -708,6 +708,9 @@ model Order {
   /// выставляется после Processed: время в приложении Kaspi не должно
   /// съедать минуту на раздумье уже оплаченного заказа.
   cancelUntil        DateTime?
+  /// Когда клиенту напомнили, что заказ с Kaspi не оплачен. Пусто —
+  /// не напоминали; крон по нему не шлёт пуш дважды.
+  unpaidRemindedAt   DateTime?
   promoCode          String?
   /// Купюра для сдачи при оплате наличными; кассир готовит размен
   changeFrom         Int?
@@ -716,7 +719,7 @@ model Order {
   /// Причина из справочника — по ней строится отчёт
   cancelReasonId     String?
   cancelReasonRef    CancelReason? @relation(fields: [cancelReasonId], references: [id])
-  /// Кто отменил: CUSTOMER | ADMIN | POSTER — для отчёта по отменам
+  /// Кто отменил: CUSTOMER | ADMIN | POSTER | SYSTEM — для отчёта по отменам
   cancelledBy        String?
   cancelledAt        DateTime?
   /// Версии документов, действовавшие при оформлении — доказательство

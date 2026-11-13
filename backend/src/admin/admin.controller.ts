@@ -203,11 +203,21 @@ export class AdminController {
     @Param('id') id: string,
     @Body() dto: CancelOrderByAdminDto,
   ) {
-    const result = await this.admin.cancelOrder(id, dto.reasonId, dto.comment);
+    const result = await this.admin.cancelOrder(
+      id,
+      dto.reasonId,
+      dto.comment,
+      dto.refundMode,
+      dto.refundAmount,
+    );
     await this.audit.record(actor, {
       action: 'ORDER_CANCELLED', entityType: 'Order', entityId: id,
       summary: `Заказ отменён${dto.comment ? `: ${dto.comment}` : ''}`,
-      metadata: { reasonId: dto.reasonId },
+      metadata: {
+        reasonId: dto.reasonId,
+        refundMode: dto.refundMode ?? 'FULL',
+        refundAmount: dto.refundAmount,
+      },
       notifyOwner: true,
     });
     return result;

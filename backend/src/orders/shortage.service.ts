@@ -129,6 +129,7 @@ export class ShortageService {
         type: o.type,
         status: o.status,
         paymentMethod: o.paymentMethod,
+        paymentStatus: o.paymentStatus,
         customer: o.customer,
         comment: o.comment,
         total: o.total,

@@ -93,6 +93,12 @@ interface DeliverySettings {
  * входящему заказу в каждый аккаунт Poster, с пометкой «часть X/Y» в
  * комментарии, чтобы отделы знали об общем заказе.
  */
+/// Решение кассира о деньгах при отмене оплаченного онлайн заказа.
+export type OperatorCancelRefund =
+  | { mode: "FULL" }
+  | { mode: "NONE" }
+  | { mode: "PARTIAL"; amount: number };
+
 @Injectable()
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
@@ -611,7 +617,11 @@ export class OrdersService {
       // Клиент передумал за полминуты, кухня об этом не узнала — сообщать
       // не о чем, а поток таких сообщений и есть то замыливание, из-за
       // которого перестают замечать важное (DECISIONS §12.11).
-      if (reachedKitchen || order.cancelledBy !== "CUSTOMER") {
+      // Неоплаченный заказ, снятый системой, тоже ничего не стоил.
+      if (
+        reachedKitchen ||
+        !["CUSTOMER", "SYSTEM"].includes(order.cancelledBy ?? "")
+      ) {
         await this.telegram.notify(
           order.tenantId,
           `🚫 <b>Заказ №${order.number} отменён ${who}</b>` +
@@ -1205,6 +1215,13 @@ export class OrdersService {
       );
     }
 
+    // Неоплаченный Kaspi-заказ клиент отменяет в любой момент: денег не
+    // списано, на кухню он не уходил. Иначе после первой минуты человек
+    // застревал бы с «висящим» заказом и заблокированными баллами.
+    const unpaidKaspi =
+      order.paymentMethod === "KASPI_ONLINE" &&
+      order.paymentStatus === "PENDING";
+
     // Новые заказы получают точный срок. Fallback по createdAt оставлен
     // для заказов, созданных до миграции поля cancelUntil.
     const deadline =
@@ -1212,7 +1229,7 @@ export class OrdersService {
       new Date(
         order.createdAt.getTime() + cancellation.customerWindowMinutes * 60_000,
       );
-    if (now > deadline) {
+    if (!unpaidKaspi && now > deadline) {
       throw new BadRequestException(
         `Отменить можно в течение ${cancellation.customerWindowMinutes} ` +
           `${plural(cancellation.customerWindowMinutes, "минуты", "минут", "минут")} после оформления`,
@@ -1250,6 +1267,9 @@ export class OrdersService {
     reasonId: string,
     comment?: string,
     now = new Date(),
+    /// Что делать с деньгами Kaspi. По умолчанию — вернуть всё: так вела
+    /// себя отмена до появления выбора, и так безопаснее для клиента.
+    refund: OperatorCancelRefund = { mode: "FULL" },
   ) {
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, tenantId },
@@ -1257,6 +1277,19 @@ export class OrdersService {
     if (!order) throw new NotFoundException("Заказ не найден");
     if (order.status === "CANCELLED") {
       return this.prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    }
+
+    // Сумму частичного возврата проверяем ДО отмены: ошибка после неё
+    // оставила бы отменённый заказ без возврата и без понятной причины.
+    if (refund.mode === "PARTIAL") {
+      if (!Number.isInteger(refund.amount) || refund.amount <= 0) {
+        throw new BadRequestException("Сумма возврата должна быть больше нуля");
+      }
+      if (refund.amount > order.total) {
+        throw new BadRequestException(
+          `Вернуть можно не больше суммы заказа — ${order.total} ₸`,
+        );
+      }
     }
 
     // Оператору доступны все причины, включая внутренние
@@ -1274,7 +1307,7 @@ export class OrdersService {
         cancelledAt: now,
       },
     });
-    return this.setStatus(order.id, "CANCELLED", tenantId);
+    return this.setStatus(order.id, "CANCELLED", tenantId, { refund });
   }
 
   async setStatus(
@@ -1283,7 +1316,7 @@ export class OrdersService {
     tenantId?: string,
     /// `notify: false` — молчаливое закрытие: автозакрытие через три часа
     /// не повод писать клиенту, он к этому времени давно поел.
-    options?: { notify?: boolean },
+    options?: { notify?: boolean; refund?: OperatorCancelRefund },
   ) {
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, ...(tenantId ? { tenantId } : {}) },
@@ -1293,7 +1326,7 @@ export class OrdersService {
       // Повторный запрос безопасно завершает начисление/возврат после временного
       // сбоя между сохранением статуса и записью операции лояльности.
       await this.loyalty.onStatusChanged(order.id, next);
-      if (next === "CANCELLED") await this.ensureKaspiRefund(order.id);
+      if (next === "CANCELLED") await this.ensureKaspiRefund(order.id, options?.refund);
       return this.prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     }
     const allowed: Record<OrderStatus, OrderStatus[]> = {
@@ -1341,7 +1374,7 @@ export class OrdersService {
       });
     }
     await this.loyalty.onStatusChanged(order.id, next);
-    if (next === "CANCELLED") await this.ensureKaspiRefund(order.id);
+    if (next === "CANCELLED") await this.ensureKaspiRefund(order.id, options?.refund);
     if (options?.notify !== false) {
       await this.notifications.sendOrderStatus(order.id, next);
     }
@@ -1353,11 +1386,48 @@ export class OrdersService {
    * Отмена заказа не должна откатиться из-за временной ошибки Kaspi.
    * Возврат имеет собственный durable-статус и будет повторён фоном.
    */
-  private async ensureKaspiRefund(orderId: string) {
+  private async ensureKaspiRefund(
+    orderId: string,
+    refund: OperatorCancelRefund = { mode: "FULL" },
+  ) {
     // Часть unit-тестов собирает сервис вручную без Nest-контейнера.
     // В приложении PaymentsService обязателен и всегда присутствует.
     if (!this.payments) return;
+    // «Без возврата» — осознанное решение кассира (например, заказ уже
+    // отдан). Вернуть деньги позже можно кнопкой в карточке заказа.
+    if (refund.mode === "NONE") {
+      this.logger.log(`Заказ ${orderId} отменён без возврата денег`);
+      return;
+    }
     try {
+      if (refund.mode === "PARTIAL") {
+        const order = await this.prisma.order.findUnique({
+          where: { id: orderId },
+          select: {
+            tenantId: true,
+            paymentMethod: true,
+            paymentStatus: true,
+            cancelReason: true,
+          },
+        });
+        if (
+          !order ||
+          order.paymentMethod !== "KASPI_ONLINE" ||
+          !["PAID", "PARTIALLY_REFUNDED"].includes(order.paymentStatus)
+        ) {
+          return;
+        }
+        await this.payments.requestRefund({
+          orderId,
+          tenantId: order.tenantId,
+          requestedBy: "ADMIN",
+          reason: order.cancelReason ?? "Отмена заказа",
+          amount: refund.amount,
+          idempotencyKey: `order-cancel:${orderId}`,
+          processImmediately: false,
+        });
+        return;
+      }
       await this.payments.refundCancelledOrder(orderId);
     } catch (error) {
       this.logger.error(

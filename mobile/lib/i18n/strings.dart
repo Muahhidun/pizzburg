@@ -318,6 +318,12 @@ class S {
   static String get cardOnSite => t('Картой на месте', 'Орнында картамен');
   static String get online => t('Онлайн', 'Онлайн');
   static String get kaspiOnline => t('Kaspi.kz онлайн', 'Kaspi.kz онлайн');
+  static String get orderUnpaid => t('Не оплачен', 'Төленбеді');
+  static String get orderUnpaidHint => t(
+    'Заказ не отправлен на кухню, пока нет оплаты. Оплатите в Kaspi.kz или отмените — списанные баллы вернутся.',
+    'Төлем болмайынша тапсырыс асханаға жіберілмейді. Kaspi.kz арқылы төлеңіз немесе бас тартыңыз — жұмсалған ұпайлар қайтарылады.',
+  );
+  static String get payOrder => t('Оплатить в Kaspi.kz', 'Kaspi.kz арқылы төлеу');
   static String get kaspiPaymentTitle => t('Оплата заказа', 'Тапсырысты төлеу');
   static String get kaspiOpen => t('Открыть Kaspi.kz', 'Kaspi.kz ашу');
   static String get kaspiOpening => t('Открываем Kaspi.kz', 'Kaspi.kz ашылуда');
