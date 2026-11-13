@@ -112,6 +112,8 @@ export class PaymentsService {
           providerPaymentId: created.providerPaymentId,
           expiresAt: created.expiresAt,
           paymentMethods: created.paymentMethods,
+          paymentLink: created.paymentLink ?? null,
+          qrToken: created.qrToken ?? null,
           statusPollingIntervalSec: created.statusPollingIntervalSec,
           activationTimeoutSec: created.activationTimeoutSec,
           confirmationTimeoutSec: created.confirmationTimeoutSec,
@@ -122,11 +124,7 @@ export class PaymentsService {
         requestId,
         providerStatus: created.status,
       });
-      return {
-        ...(await this.paymentSummary(attempt.id)),
-        paymentLink: created.paymentLink,
-        qrToken: created.qrToken,
-      };
+      return this.paymentSummary(attempt.id);
     } catch (error) {
       const message = this.errorMessage(error);
       await this.prisma.paymentAttempt.update({
@@ -644,8 +642,11 @@ export class PaymentsService {
     return Promise.resolve(refund);
   }
 
+  /// Ссылку и QR отдаём, только пока попытку ещё можно оплатить: после
+  /// оплаты или истечения они клиенту не нужны и не должны всплывать.
   private async paymentSummary(attemptId: string) {
-    return this.prisma.paymentAttempt.findUniqueOrThrow({
+    const { paymentLink, qrToken, ...summary } =
+      await this.prisma.paymentAttempt.findUniqueOrThrow({
       where: { id: attemptId },
       select: {
         id: true,
@@ -662,8 +663,18 @@ export class PaymentsService {
         processedAt: true,
         errorCode: true,
         errorMessage: true,
+        paymentLink: true,
+        qrToken: true,
       },
     });
+    const payable = ["CREATED", "QR_TOKEN_CREATED", "WAIT"].includes(
+      summary.status,
+    );
+    return {
+      ...summary,
+      paymentLink: payable ? (paymentLink ?? undefined) : undefined,
+      qrToken: payable ? (qrToken ?? undefined) : undefined,
+    };
   }
 
   private async event(

@@ -868,6 +868,10 @@ model PaymentAttempt {
   activationTimeoutSec     Int?
   confirmationTimeoutSec   Int?
   paymentMethods           Json                 @default("[]")
+  /// Ссылка/токен Kaspi живут до expiresAt. Храним, чтобы клиент мог
+  /// вернуться к неоплаченной попытке и снова открыть Kaspi.kz.
+  paymentLink              String?
+  qrToken                  String?
   processedAt              DateTime?
   lastStatusAt             DateTime?
   errorCode                String?

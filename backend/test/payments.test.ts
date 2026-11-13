@@ -334,3 +334,46 @@ test("два контейнера не отправляют один возвр�
   assert.equal(result.status, "PROCESSING");
   assert.equal(providerCalls, 0);
 });
+
+test("неоплаченная попытка снова отдаёт ссылку Kaspi, оплаченная — нет", async () => {
+  const row = {
+    id: "pa9",
+    orderId: "o9",
+    channel: "MOBILE_LINK",
+    status: "WAIT",
+    amount: 3690,
+    currency: "KZT",
+    paymentLink: "https://pay.kaspi.kz/pay/abc",
+    qrToken: "qr-abc",
+  };
+  const prisma = {
+    order: {
+      findUnique: async () => ({
+        id: "o9",
+        tenantId: "t1",
+        number: 9,
+        total: 3690,
+        paymentMethod: "KASPI_ONLINE",
+        paymentStatus: "PENDING",
+      }),
+    },
+    paymentAttempt: {
+      findFirst: async () => row,
+      findUniqueOrThrow: async () => row,
+    },
+  };
+  const service = new PaymentsService(
+    prisma as never,
+    {} as never,
+    new DisabledKaspiProvider() as never,
+  );
+
+  const resumed = await service.createKaspiPayment("o9", "MOBILE_LINK" as never);
+  assert.equal(resumed.paymentLink, "https://pay.kaspi.kz/pay/abc");
+  assert.equal(resumed.qrToken, "qr-abc");
+
+  row.status = "PROCESSED";
+  const paid = await service.createKaspiPayment("o9", "MOBILE_LINK" as never);
+  assert.equal(paid.paymentLink, undefined);
+  assert.equal(paid.qrToken, undefined);
+});
