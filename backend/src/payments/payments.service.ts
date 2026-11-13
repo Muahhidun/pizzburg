@@ -20,6 +20,7 @@ import { TelegramService } from "../telegram/telegram.service";
 import {
   KASPI_PAYMENT_PROVIDER,
   PaymentProvider,
+  PaymentProviderUnavailableError,
   ProviderPaymentState,
 } from "./payment-provider";
 import { KaspiApiError } from "./kaspi.provider";
@@ -31,6 +32,45 @@ export const PAYMENT_DISPATCH_BUFFER_MS = 10_000;
 export const MAX_AUTOMATIC_REFUND_ATTEMPTS = 8;
 /// Срок, в течение которого Kaspi принимает возврат (ответ Kaspi 13.11.2026).
 export const KASPI_REFUND_MAX_AGE_DAYS = 365;
+/// Сколько дней назад смотрим при ежедневной сверке. Возврат через Kaspi Pay
+/// обычно делают в тот же день или после жалобы — полтора месяца с запасом.
+export const RECONCILE_LOOKBACK_DAYS = 45;
+/// Кто сделал возврат мимо нашей админки — его находит сверка.
+export const KASPI_PAY_ACTOR = "KASPI_PAY";
+
+export interface ReconcileFinding {
+  tenantId: string;
+  orderNumber: number;
+  /// EXTERNAL — вернули в Kaspi Pay; MISMATCH — у нас возвратов больше,
+  /// чем видит Kaspi, данные не трогаем, нужен человек.
+  kind: "EXTERNAL" | "MISMATCH";
+  amount: number;
+}
+
+export interface ReconcileResult {
+  checked: number;
+  failed: number;
+  findings: ReconcileFinding[];
+}
+
+/**
+ * Решение по одной покупке: сравниваем остаток у Kaspi с нашим.
+ * Вынесено отдельно ради тестов — ошибка тут означала бы ложные возвраты.
+ */
+export function reconcileDecision(input: {
+  paid: number;
+  refundedByUs: number;
+  availableAtKaspi: number;
+}): { kind: "OK" } | { kind: "EXTERNAL" | "MISMATCH"; amount: number } {
+  // Kaspi отдаёт Double; тенге у нас целые, копейки не принимаем.
+  const available = Math.round(input.availableAtKaspi);
+  const expected = input.paid - input.refundedByUs;
+  if (available === expected) return { kind: "OK" };
+  if (available < expected) {
+    return { kind: "EXTERNAL", amount: expected - available };
+  }
+  return { kind: "MISMATCH", amount: available - expected };
+}
 
 /**
  * Экспоненциальная пауза: 1, 2, 4… минут, максимум час.
@@ -572,6 +612,128 @@ export class PaymentsService {
       // ставятся на возврат.
       if (cancelled) await this.refundCancelledOrder(attempt.orderId);
     }
+  }
+
+  /**
+   * Ежедневная сверка с Kaspi.
+   *
+   * Kaspi позволяет вернуть деньги мимо нас — кассиром в Kaspi Pay или с
+   * другого устройства точки. Тогда у нас заказ «оплачен», а деньги уже у
+   * клиента. Раз в день спрашиваем у Kaspi остаток к возврату по свежим
+   * покупкам; если он меньше нашего — записываем найденный возврат к заказу
+   * (requestedBy KASPI_PAY) и сообщаем руководству.
+   *
+   * Покупки с возвратом «в работе» пропускаем: остаток у Kaspi в этот
+   * момент законно расходится с нашим.
+   */
+  async reconcileKaspiPayments(
+    now = new Date(),
+    lookbackDays = RECONCILE_LOOKBACK_DAYS,
+  ): Promise<ReconcileResult> {
+    const result: ReconcileResult = { checked: 0, failed: 0, findings: [] };
+    const getDetails = this.provider.getPaymentDetails?.bind(this.provider);
+    if (!getDetails) return result;
+
+    const since = new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
+    const attempts = await this.prisma.paymentAttempt.findMany({
+      where: {
+        provider: "KASPI",
+        status: "PROCESSED",
+        providerPaymentId: { not: null },
+        processedAt: { gte: since },
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        orderId: true,
+        amount: true,
+        providerPaymentId: true,
+        order: { select: { number: true } },
+        refunds: { select: { amount: true, status: true } },
+      },
+      orderBy: { processedAt: "asc" },
+    });
+
+    for (const attempt of attempts) {
+      const inFlight = attempt.refunds.some((refund) =>
+        ["PENDING", "PROCESSING", "RETRY_PENDING"].includes(refund.status),
+      );
+      if (inFlight) continue;
+      const refundedByUs = attempt.refunds
+        .filter((refund) => refund.status === "SUCCEEDED")
+        .reduce((sum, refund) => sum + refund.amount, 0);
+
+      let available: number;
+      try {
+        const details = await getDetails(
+          attempt.providerPaymentId!,
+          randomUUID(),
+        );
+        available = details.availableReturnAmount;
+      } catch (error) {
+        // Kaspi выключен — сверять нечего, это не ошибка.
+        if (error instanceof PaymentProviderUnavailableError) return result;
+        result.failed += 1;
+        this.logger.warn(
+          `Сверка Kaspi: заказ №${attempt.order.number} не проверен: ${this.errorMessage(error)}`,
+        );
+        continue;
+      }
+      result.checked += 1;
+
+      const decision = reconcileDecision({
+        paid: attempt.amount,
+        refundedByUs,
+        availableAtKaspi: available,
+      });
+      if (decision.kind === "OK") continue;
+
+      if (decision.kind === "EXTERNAL") {
+        const remaining = Math.round(available);
+        // Остаток у Kaspi только убывает, поэтому ключ по нему не
+        // повторится, а повторная сверка того же дня ничего не задвоит.
+        const refund = await this.prisma.paymentRefund.upsert({
+          where: {
+            paymentAttemptId_idempotencyKey: {
+              paymentAttemptId: attempt.id,
+              idempotencyKey: `kaspi-pay:${remaining}`,
+            },
+          },
+          update: {},
+          create: {
+            tenantId: attempt.tenantId,
+            orderId: attempt.orderId,
+            paymentAttemptId: attempt.id,
+            amount: decision.amount,
+            status: "SUCCEEDED",
+            requestedBy: KASPI_PAY_ACTOR,
+            reason: "Возврат сделан в Kaspi Pay, мимо админки (найден сверкой)",
+            idempotencyKey: `kaspi-pay:${remaining}`,
+            completedAt: now,
+          },
+        });
+        await this.event(attempt.id, "REFUND_FOUND_BY_RECONCILE", {
+          refundId: refund.id,
+          metadata: { amount: decision.amount, availableAtKaspi: remaining },
+        });
+        await this.refreshOrderRefundStatus(attempt.orderId);
+      } else {
+        await this.event(attempt.id, "RECONCILE_MISMATCH", {
+          metadata: {
+            refundedByUs,
+            availableAtKaspi: Math.round(available),
+            paid: attempt.amount,
+          },
+        });
+      }
+      result.findings.push({
+        tenantId: attempt.tenantId,
+        orderNumber: attempt.order.number,
+        kind: decision.kind,
+        amount: decision.amount,
+      });
+    }
+    return result;
   }
 
   private async refreshOrderRefundStatus(orderId: string) {

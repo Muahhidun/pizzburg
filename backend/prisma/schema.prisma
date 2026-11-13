@@ -903,7 +903,7 @@ model PaymentRefund {
   paymentAttempt   PaymentAttempt      @relation(fields: [paymentAttemptId], references: [id])
   amount           Int
   status           PaymentRefundStatus @default(PENDING)
-  /// CUSTOMER | ADMIN | SYSTEM
+  /// CUSTOMER | ADMIN | SYSTEM | KASPI_PAY (найден сверкой)
   requestedBy      String
   reason           String?
   idempotencyKey   String

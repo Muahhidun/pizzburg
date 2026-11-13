@@ -6,6 +6,7 @@ import {
   CreateProviderPaymentRequest,
   CreatedProviderPayment,
   PaymentProvider,
+  ProviderPaymentDetails,
   ProviderPaymentState,
   RefundedProviderPayment,
   RefundProviderPaymentRequest,
@@ -68,6 +69,12 @@ interface PaymentStatusData {
 
 interface RefundData {
   ReturnOperationId?: string;
+}
+
+interface PaymentDetailsData {
+  QrPaymentId?: string;
+  TotalAmount?: number;
+  AvailableReturnAmount?: number;
 }
 
 const INT64_FIELDS = [
@@ -493,6 +500,37 @@ export class KaspiProviderCore implements PaymentProvider {
     return { providerRefundId };
   }
 
+  /**
+   * Сколько ещё можно вернуть по покупке. Kaspi считает и возвраты,
+   * сделанные мимо нас — кассиром в Kaspi Pay или с другого устройства,
+   * поэтому на этом построена ежедневная сверка.
+   */
+  async getPaymentDetails(
+    providerPaymentId: string,
+    requestId: string,
+  ): Promise<ProviderPaymentDetails> {
+    assertInt64(providerPaymentId, "QrPaymentId");
+    const query = new URLSearchParams({
+      QrPaymentId: providerPaymentId,
+      DeviceToken: this.config.deviceToken,
+    });
+    const envelope = await this.call<PaymentDetailsData>(
+      "GET",
+      `/r3/v01/payment/details?${query.toString()}`,
+      requestId,
+    );
+    const total = Number(envelope.Data?.TotalAmount);
+    const available = Number(envelope.Data?.AvailableReturnAmount);
+    if (!Number.isFinite(total) || !Number.isFinite(available)) {
+      throw new KaspiApiError(
+        "Kaspi не вернул суммы покупки",
+        "INVALID_RESPONSE",
+        false,
+      );
+    }
+    return { totalAmount: total, availableReturnAmount: available };
+  }
+
   private async call<T>(
     method: "GET" | "POST",
     path: string,
@@ -539,5 +577,9 @@ export class KaspiProvider implements PaymentProvider {
 
   refundPayment(request: RefundProviderPaymentRequest) {
     return this.core.refundPayment(request);
+  }
+
+  getPaymentDetails(providerPaymentId: string, requestId: string) {
+    return this.core.getPaymentDetails(providerPaymentId, requestId);
   }
 }

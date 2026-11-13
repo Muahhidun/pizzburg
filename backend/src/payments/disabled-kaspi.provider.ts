@@ -3,6 +3,7 @@ import {
   CreateProviderPaymentRequest,
   CreatedProviderPayment,
   PaymentProvider,
+  ProviderPaymentDetails,
   PaymentProviderUnavailableError,
   ProviderPaymentState,
   RefundedProviderPayment,
@@ -33,6 +34,13 @@ export class DisabledKaspiProvider implements PaymentProvider {
   async refundPayment(
     _request: RefundProviderPaymentRequest,
   ): Promise<RefundedProviderPayment> {
+    throw new PaymentProviderUnavailableError();
+  }
+
+  async getPaymentDetails(
+    _providerPaymentId: string,
+    _requestId: string,
+  ): Promise<ProviderPaymentDetails> {
     throw new PaymentProviderUnavailableError();
   }
 }

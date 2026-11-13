@@ -6,6 +6,7 @@ import { PaymentsService } from "./payments.service";
 import { RefundRetryService } from "./refund-retry.service";
 import { PaymentsController } from "./payments.controller";
 import { PaymentStatusPollerService } from "./payment-status-poller.service";
+import { KaspiReconcileService } from "./kaspi-reconcile.service";
 import { NotificationsModule } from "../notifications/notifications.module";
 
 /**
@@ -27,6 +28,7 @@ import { NotificationsModule } from "../notifications/notifications.module";
     PaymentsService,
     RefundRetryService,
     PaymentStatusPollerService,
+    KaspiReconcileService,
   ],
   exports: [PaymentsService, KASPI_PAYMENT_PROVIDER],
 })

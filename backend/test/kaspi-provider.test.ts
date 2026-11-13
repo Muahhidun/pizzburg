@@ -237,3 +237,22 @@ test("production разрешает только боевой адрес Kaspi",
     "",
   );
 });
+
+test("детали покупки: остаток к возврату для сверки", async () => {
+  const transport = new FakeTransport([
+    {
+      StatusCode: 0,
+      Data: {
+        QrPaymentId: "501020796",
+        TotalAmount: 5000.0,
+        AvailableReturnAmount: 3500.0,
+        TransactionDate: "2026-11-14T11:55:14.166+05:00",
+      },
+    },
+  ]);
+  const provider = new KaspiProviderCore(config, transport);
+  const details = await provider.getPaymentDetails("501020796", "req-d");
+  assert.deepEqual(details, { totalAmount: 5000, availableReturnAmount: 3500 });
+  assert.equal(transport.calls[0].method, "GET");
+  assert.match(transport.calls[0].path, /^\/r3\/v01\/payment\/details\?QrPaymentId=501020796&DeviceToken=/);
+});

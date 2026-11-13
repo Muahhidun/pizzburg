@@ -44,6 +44,12 @@ export interface RefundedProviderPayment {
   providerRefundId: string;
 }
 
+/** Остаток к возврату по покупке — для ежедневной сверки с Kaspi */
+export interface ProviderPaymentDetails {
+  totalAmount: number;
+  availableReturnAmount: number;
+}
+
 /**
  * Граница между бизнес-логикой и Kaspi.
  *
@@ -62,6 +68,11 @@ export interface PaymentProvider {
   refundPayment(
     request: RefundProviderPaymentRequest,
   ): Promise<RefundedProviderPayment>;
+  /** Необязателен: подменные провайдеры тестов его не реализуют */
+  getPaymentDetails?(
+    providerPaymentId: string,
+    requestId: string,
+  ): Promise<ProviderPaymentDetails>;
 }
 
 export class PaymentProviderUnavailableError extends Error {
