@@ -37,7 +37,7 @@ export interface KaspiTransport {
   ): Promise<T>;
 }
 
-interface KaspiEnvelope<T> {
+export interface KaspiEnvelope<T> {
   StatusCode: number | string;
   Message?: string;
   Data?: T;
@@ -70,7 +70,12 @@ interface RefundData {
   ReturnOperationId?: string;
 }
 
-const INT64_FIELDS = ["QrPaymentId", "PaymentId", "ReturnOperationId"];
+const INT64_FIELDS = [
+  "QrPaymentId",
+  "PaymentId",
+  "ReturnOperationId",
+  "TradePointId",
+];
 
 /**
  * Ошибка API Kaspi с признаком, можно ли безопасно повторить запрос.
@@ -120,8 +125,13 @@ function decodeCa(env: NodeJS.ProcessEnv, name: string): Buffer {
   }
 }
 
+/// Боевой адрес схемы 3 (с сертификатом и IP), подтверждён Kaspi 13.11.2026.
+export const KASPI_PRODUCTION_ORIGIN = "https://qrapi-cert-ip.kaspi.kz";
+
 export function loadKaspiConfig(
   env: NodeJS.ProcessEnv = process.env,
+  /// Скрипт регистрации кассы запускается до того, как токен появился.
+  options: { requireDeviceToken?: boolean } = {},
 ): KaspiConfig | null {
   const mode = kaspiMode(env);
   if (mode === "disabled") return null;
@@ -142,6 +152,13 @@ export function loadKaspiConfig(
   if (mode === "production" && isTestHost) {
     throw new Error(
       "KASPI_MODE=production не может использовать тестовый хост",
+    );
+  }
+  // Опечатка в адресе на боевом означала бы отправку сертификата
+  // неизвестному серверу. Разрешаем только адрес, выданный Kaspi.
+  if (mode === "production" && baseUrl.origin !== KASPI_PRODUCTION_ORIGIN) {
+    throw new Error(
+      `KASPI_MODE=production разрешает только ${KASPI_PRODUCTION_ORIGIN}`,
     );
   }
 
@@ -179,7 +196,10 @@ export function loadKaspiConfig(
       decodeCa(env, "KASPI_INTERMEDIATE_CA_BASE64"),
     ],
     organizationId: required(env, "KASPI_ORGANIZATION_ID"),
-    deviceToken: required(env, "KASPI_DEVICE_TOKEN"),
+    deviceToken:
+      options.requireDeviceToken === false
+        ? (env.KASPI_DEVICE_TOKEN?.trim() ?? "")
+        : required(env, "KASPI_DEVICE_TOKEN"),
     timeoutMs: timeoutRaw,
   };
 }
@@ -210,7 +230,7 @@ function assertInt64(value: string, field: string) {
  */
 export function parseKaspiJson(text: string): unknown {
   const safe = text.replace(
-    /"(QrPaymentId|PaymentId|ReturnOperationId)"\s*:\s*(-?\d+)/g,
+    /"(QrPaymentId|PaymentId|ReturnOperationId|TradePointId)"\s*:\s*(-?\d+)/g,
     '"$1":"$2"',
   );
   return JSON.parse(safe);
@@ -228,7 +248,7 @@ export function serializeKaspiBody(body: JsonObject): string {
   return json;
 }
 
-function isRetryableCode(code: string) {
+export function isRetryableCode(code: string) {
   return code === "-999" || code === "-99000006";
 }
 

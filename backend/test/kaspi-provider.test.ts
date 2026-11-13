@@ -205,3 +205,35 @@ test("test mode не позволяет случайно обратиться к
     }),
   );
 });
+
+test("production разрешает только боевой адрес Kaspi", () => {
+  const publicRoot = Buffer.from(rootCertificates[0]).toString("base64");
+  const base = {
+    KASPI_MODE: "production",
+    KASPI_CERT_P12_BASE64: Buffer.from("pfx").toString("base64"),
+    KASPI_CERT_PASSWORD: "secret",
+    KASPI_ROOT_CA_BASE64: publicRoot,
+    KASPI_INTERMEDIATE_CA_BASE64: publicRoot,
+    KASPI_ORGANIZATION_ID: "900908350982",
+    KASPI_DEVICE_TOKEN: "device",
+  } as NodeJS.ProcessEnv;
+  assert.throws(
+    () => loadKaspiConfig({ ...base, KASPI_BASE_URL: "https://mtoken.kaspi.kz:8545" }),
+    /qrapi-cert-ip/,
+  );
+  const ok = loadKaspiConfig({ ...base, KASPI_BASE_URL: "https://qrapi-cert-ip.kaspi.kz" });
+  assert.equal(ok?.baseUrl.origin, "https://qrapi-cert-ip.kaspi.kz");
+  // Скрипт регистрации кассы работает до появления токена
+  const { KASPI_DEVICE_TOKEN: _omit, ...noToken } = base;
+  assert.throws(
+    () => loadKaspiConfig({ ...noToken, KASPI_BASE_URL: "https://qrapi-cert-ip.kaspi.kz" }),
+    /KASPI_DEVICE_TOKEN/,
+  );
+  assert.equal(
+    loadKaspiConfig(
+      { ...noToken, KASPI_BASE_URL: "https://qrapi-cert-ip.kaspi.kz" },
+      { requireDeviceToken: false },
+    )?.deviceToken,
+    "",
+  );
+});

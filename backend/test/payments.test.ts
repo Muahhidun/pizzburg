@@ -377,3 +377,77 @@ test("неоплаченная попытка снова отдаёт ссылк
   assert.equal(paid.paymentLink, undefined);
   assert.equal(paid.qrToken, undefined);
 });
+
+test("возврат по покупке старше 365 дней отклоняется понятной ошибкой", async () => {
+  const old = new Date(Date.now() - 400 * 24 * 60 * 60_000);
+  const tx = {
+    order: {
+      findFirst: async () => ({
+        id: "o1",
+        tenantId: "t1",
+        total: 5000,
+        paymentMethod: "KASPI_ONLINE",
+        paymentStatus: "PAID",
+        paidAt: old,
+        paymentAttempts: [{ id: "pa1", processedAt: old }],
+        paymentRefunds: [],
+      }),
+    },
+  };
+  const prisma = {
+    $transaction: async (fn: (t: unknown) => unknown) => fn(tx),
+  };
+  const service = new PaymentsService(prisma as never, {} as never, {} as never);
+  await assert.rejects(
+    service.requestRefund({
+      orderId: "o1",
+      tenantId: "t1",
+      requestedBy: "ADMIN",
+      idempotencyKey: "manual:1",
+    }),
+    /не старше 365 дней/,
+  );
+});
+
+test("возврат кассира: клиенту пуш, в группу — «деньги вернули»", async () => {
+  const refund: Record<string, any> = {
+    id: "rf1", orderId: "o1", paymentAttemptId: "pa1", amount: 1200,
+    status: "PENDING", attemptCount: 0, requestedBy: "ADMIN",
+    idempotencyKey: "order-cancel:o1", paymentAttempt: { providerPaymentId: "qp1" },
+  };
+  const prisma = {
+    paymentRefund: {
+      findUnique: async () => refund,
+      findUniqueOrThrow: async () => refund,
+      updateMany: async ({ data }: { data: Record<string, any> }) => {
+        refund.status = data.status;
+        refund.attemptCount += data.attemptCount.increment;
+        return { count: 1 };
+      },
+      update: async ({ data }: { data: Record<string, unknown> }) => {
+        Object.assign(refund, data);
+        return { ...refund };
+      },
+    },
+    paymentEvent: { create: async () => ({}) },
+    order: {
+      findUnique: async () => ({ number: 42, tenantId: "t1", total: 5000, paymentRefunds: [refund] }),
+      update: async () => ({}),
+    },
+  };
+  const pushes: string[] = [];
+  const telegram: string[] = [];
+  const service = new PaymentsService(
+    prisma as never,
+    {} as never,
+    { refundPayment: async () => ({ providerRefundId: "r1" }) } as never,
+    {
+      sendOrderEvent: async (_id: string, build: (l: string) => { body: string }) =>
+        pushes.push(build("ru").body),
+    } as never,
+    { notify: async (_t: string, text: string) => telegram.push(text) } as never,
+  );
+  await service.processRefund("rf1");
+  assert.match(pushes[0], /1200 ₸ вернулись на Kaspi/);
+  assert.match(telegram[0], /Деньги вернули: 1200 ₸ по заказу №42/);
+});

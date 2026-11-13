@@ -29,6 +29,8 @@ export const PAYMENT_DISPATCH_BUFFER_MS = 10_000;
 
 /** После этого автоматические попытки останавливаются, но запись не теряется. */
 export const MAX_AUTOMATIC_REFUND_ATTEMPTS = 8;
+/// Срок, в течение которого Kaspi принимает возврат (ответ Kaspi 13.11.2026).
+export const KASPI_REFUND_MAX_AGE_DAYS = 365;
 
 /**
  * Экспоненциальная пауза: 1, 2, 4… минут, максимум час.
@@ -649,6 +651,18 @@ export class PaymentsService {
             if (!payment) {
               throw new BadRequestException(
                 "Не найдена подтверждённая операция Kaspi",
+              );
+            }
+            // Ответ Kaspi 13.11.2026: возврат возможен по покупке не старше
+            // 365 дней. Говорим это сразу, а не ловим непонятный код ошибки.
+            const paidAt = payment.processedAt ?? order.paidAt;
+            if (
+              paidAt &&
+              Date.now() - paidAt.getTime() >
+                KASPI_REFUND_MAX_AGE_DAYS * 24 * 60 * 60_000
+            ) {
+              throw new BadRequestException(
+                `Kaspi принимает возврат только по покупкам не старше ${KASPI_REFUND_MAX_AGE_DAYS} дней`,
               );
             }
 

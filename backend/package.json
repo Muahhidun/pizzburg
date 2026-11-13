@@ -12,7 +12,8 @@
     "loyalty:import": "tsx prisma/import-loyalty-balances.ts",
     "test": "tsx --test test/**/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "foodpicasso:phones": "tsx scripts/export-foodpicasso-phones.ts"
+    "foodpicasso:phones": "tsx scripts/export-foodpicasso-phones.ts",
+    "kaspi:register-device": "node dist/payments/kaspi-register-device.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1101.0",
