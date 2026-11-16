@@ -115,7 +115,11 @@ class _KaspiPaymentScreenState extends State<KaspiPaymentScreen>
     final raw = _payment?.paymentLink;
     final uri = raw == null ? null : Uri.tryParse(raw);
     if (uri == null) {
-      setState(() => _localError = S.kaspiFailedHint);
+      // Ссылки нет — Kaspi не создал её в прошлый раз. Пробуем заново, а не
+      // показываем ту же ошибку: иначе кнопка ничего не делает.
+      await _create();
+      final again = _payment?.paymentLink;
+      if (again != null && mounted) await _openKaspi();
       return;
     }
     setState(() {

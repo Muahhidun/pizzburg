@@ -1,12 +1,13 @@
 import {
   BadRequestException,
   Inject,
+  ServiceUnavailableException,
   Injectable,
   Logger,
   NotFoundException,
   Optional,
 } from "@nestjs/common";
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import {
   Prisma,
   PaymentAttemptStatus,
@@ -81,6 +82,11 @@ export function refundRetryDelayMs(attemptCount: number) {
   return Math.min(60, 2 ** exponent) * 60_000;
 }
 
+/** Идентификатор покупки для Kaspi: 16 цифр, уникален и без данных заказа */
+export function kaspiExternalId(now = Date.now()) {
+  return `${now}${randomInt(100, 1000)}`;
+}
+
 type RefundActor = "CUSTOMER" | "ADMIN" | "SYSTEM";
 
 @Injectable()
@@ -132,7 +138,9 @@ export class PaymentsService {
     });
     if (active) return this.paymentSummary(active.id);
 
-    const externalId = `${order.id}:${randomUUID()}`;
+    // Только цифры и коротко, как в примерах Kaspi: боевой сервер ответил
+    // -999 на длинный идентификатор с буквами и двоеточием (16.11.2026).
+    const externalId = kaspiExternalId();
     const attempt = await this.prisma.paymentAttempt.create({
       data: {
         tenantId: order.tenantId,
@@ -175,10 +183,15 @@ export class PaymentsService {
       return this.paymentSummary(attempt.id);
     } catch (error) {
       const message = this.errorMessage(error);
+      const code = error instanceof KaspiApiError ? error.code : undefined;
+      this.logger.warn(
+        `Заказ №${order.number}: Kaspi не создал оплату, код ${code ?? "—"}: ${message}`,
+      );
       await this.prisma.paymentAttempt.update({
         where: { id: attempt.id },
         data: {
           status: "ERROR",
+          errorCode: code ?? null,
           errorMessage: message,
           lastStatusAt: new Date(),
         },
@@ -186,8 +199,14 @@ export class PaymentsService {
       await this.event(attempt.id, "PROVIDER_CREATE_FAILED", {
         requestId,
         providerStatus: "ERROR",
-        metadata: { message },
+        metadata: { message, code },
       });
+      // Клиенту — понятный текст вместо «Internal server error».
+      if (error instanceof KaspiApiError) {
+        throw new ServiceUnavailableException(
+          "Kaspi сейчас не создал оплату. Деньги не списаны — попробуйте ещё раз",
+        );
+      }
       throw error;
     }
   }

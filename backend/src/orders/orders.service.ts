@@ -520,8 +520,10 @@ export class OrdersService {
         },
       });
       this.logger.log(
-        `Заказ №${order.number}: отправка в кассу через ` +
-          `${Math.round((cancelWindowMs + DISPATCH_BUFFER_MS) / 1000)} с — идёт окно отмены`,
+        order.paymentMethod === "KASPI_ONLINE"
+          ? `Заказ №${order.number}: ждём оплату Kaspi, в кассу — только после неё`
+          : `Заказ №${order.number}: отправка в кассу через ` +
+              `${Math.round((cancelWindowMs + DISPATCH_BUFFER_MS) / 1000)} с — идёт окно отмены`,
       );
     } else {
       await this.dispatchToPoster(order.id);

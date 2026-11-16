@@ -137,3 +137,10 @@ test("сообщение в Telegram перечисляет заказы", () =>
   assert.match(text, /№43 — разница 300 ₸/);
   assert.match(text, /через админку/);
 });
+
+test("идентификатор для Kaspi — 16 цифр", async () => {
+  const { kaspiExternalId } = await import("../src/payments/payments.service");
+  const id = kaspiExternalId(1794813983000);
+  assert.match(id, /^\d{16}$/);
+  assert.ok(id.startsWith("1794813983000"));
+});
