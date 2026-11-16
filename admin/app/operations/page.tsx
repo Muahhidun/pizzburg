@@ -521,7 +521,13 @@ function PaymentsCard({ settings, onSave }: { settings: Settings; onSave: SaveFn
   const toggles: { key: keyof typeof form; label: string; hint?: string }[] = [
     { key: 'cash', label: 'Наличными' },
     { key: 'cardOnDelivery', label: 'Картой курьеру', hint: 'Курьер берёт терминал' },
-    { key: 'kaspiOnline', label: 'Kaspi онлайн', hint: 'Пока не подключён' },
+    {
+      key: 'kaspiOnline',
+      label: 'Kaspi онлайн',
+      // Старые сборки из сторов Kaspi не показывают даже при включённом
+      // флаге: в них нет официальных ассетов (KASPI_BRAND_ASSETS_READY).
+      hint: 'Видят только версии приложения 1.0.1 и новее',
+    },
     {
       key: 'askChangeFrom',
       label: 'Спрашивать сдачу',
@@ -540,7 +546,6 @@ function PaymentsCard({ settings, onSave }: { settings: Settings; onSave: SaveFn
             <input
               type="checkbox"
               checked={Boolean(form[t.key])}
-              disabled={t.key === 'kaspiOnline'}
               onChange={(e) => setForm({ ...form, [t.key]: e.target.checked })}
             />
             <span className="flex-1">
