@@ -529,24 +529,10 @@ export class OrdersService {
       await this.dispatchToPoster(order.id);
     }
 
-    // «Похоже на перезаказ» — кассе, а не только пометкой в консоли.
-    // При обычном заказе она в консоль не заходит вовсе и предупреждение
-    // не увидит, а решать, что готовить, нужно в ближайшие минуты.
-    // Автоматически по-прежнему ничего не отменяется (DECISIONS §12.10).
-    try {
-      const others = (await this.otherActiveOrders(tenant.id, [customer.id]))
-        .get(customer.id)
-        ?.filter((n) => n !== order.number);
-      if (others && others.length > 0) {
-        await this.telegram.notifyCashier(
-          tenant.id,
-          `♻️ <b>Похоже на перезаказ</b>\nКлиент ${customer.phone} оформил ` +
-            `№${order.number}, а у него уже ${others.length === 1 ? "есть заказ" : "есть заказы"} ` +
-            `№${others.join(", №")}.\nУточните, что готовить, лишний отмените.`,
-        );
-      }
-    } catch (e) {
-      this.logger.warn(`Сообщение о перезаказе не ушло: ${e}`);
+    // Неоплаченный заказ Kaspi на кухню ещё не ушёл: тревожить кассира
+    // рано. Для него проверка — при отправке в Poster, после оплаты.
+    if (order.paymentMethod !== "KASPI_ONLINE") {
+      await this.warnPossibleReorder(tenant.id, customer.id, customer.phone, order.number);
     }
 
     const fresh = await this.prisma.order.findUniqueOrThrow({
@@ -686,6 +672,35 @@ export class OrdersService {
    * дороже: не отменили лишний — потеряли немного еды, отменили
    * настоящий — человек остался голодным.
    */
+  /**
+   * «Похоже на перезаказ» — кассе, а не только пометкой в консоли.
+   * При обычном заказе она в консоль не заходит вовсе и предупреждение
+   * не увидит, а решать, что готовить, нужно в ближайшие минуты.
+   * Автоматически по-прежнему ничего не отменяется (DECISIONS §12.10).
+   */
+  private async warnPossibleReorder(
+    tenantId: string,
+    customerId: string,
+    phone: string,
+    orderNumber: number,
+  ) {
+    try {
+      const others = (await this.otherActiveOrders(tenantId, [customerId]))
+        .get(customerId)
+        ?.filter((n) => n !== orderNumber);
+      if (others && others.length > 0) {
+        await this.telegram.notifyCashier(
+          tenantId,
+          `♻️ <b>Похоже на перезаказ</b>\nКлиент ${phone} оформил ` +
+            `№${orderNumber}, а у него уже ${others.length === 1 ? "есть заказ" : "есть заказы"} ` +
+            `№${others.join(", №")}.\nУточните, что готовить, лишний отмените.`,
+        );
+      }
+    } catch (e) {
+      this.logger.warn(`Сообщение о перезаказе не ушло: ${e}`);
+    }
+  }
+
   async otherActiveOrders(tenantId: string, customerIds: string[]) {
     const ids = [...new Set(customerIds.filter(Boolean))];
     if (ids.length === 0) return new Map<string, number[]>();
@@ -695,6 +710,8 @@ export class OrdersService {
         tenantId,
         customerId: { in: ids },
         status: { in: ["NEW", "ACCEPTED", "COOKING", "READY", "ON_WAY"] },
+        // Неоплаченный Kaspi-заказ кухня не видит — это не «второй заказ».
+        NOT: { paymentMethod: "KASPI_ONLINE", paymentStatus: "PENDING" },
       },
       select: { id: true, number: true, customerId: true },
       orderBy: { number: "asc" },
@@ -796,6 +813,22 @@ export class OrdersService {
     ) {
       throw new BadRequestException(
         `Заказ №${order.number}: оплата Kaspi ещё не подтверждена`,
+      );
+    }
+    // Оплаченный Kaspi-заказ впервые уходит на кухню — теперь и время
+    // проверить, нет ли у клиента другого заказа в работе.
+    if (
+      order.paymentMethod === "KASPI_ONLINE" &&
+      !options?.resend &&
+      order.customerId &&
+      order.customer &&
+      order.dispatches.every((d) => d.status === "PENDING")
+    ) {
+      await this.warnPossibleReorder(
+        order.tenantId,
+        order.customerId,
+        order.customer.phone,
+        order.number,
       );
     }
 

@@ -40,6 +40,7 @@ class _KaspiPaymentScreenState extends State<KaspiPaymentScreen>
   Timer? _poller;
   bool _busy = true;
   bool _opening = false;
+  bool _autoOpened = false;
   String? _localError;
 
   @override
@@ -77,6 +78,12 @@ class _KaspiPaymentScreenState extends State<KaspiPaymentScreen>
         _busy = false;
       });
       _startPolling(payment.pollingIntervalSeconds);
+      // Экран обещает «Открываем Kaspi.kz» — открываем сами, без второго
+      // нажатия. Кнопка остаётся на случай, если человек вернулся назад.
+      if (!_autoOpened && payment.paymentLink != null && !payment.isProcessed) {
+        _autoOpened = true;
+        await _openKaspi();
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
