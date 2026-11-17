@@ -472,9 +472,9 @@ class S {
 
   // ── Написать нам: темы ──
   static String get topicWhere => t('Где мой заказ?', 'Тапсырысым қайда?');
-  static String whereAvailableAt(String time) => t(
-    'Можно спросить с $time — заказ ещё в работе',
-    '$time бастап сұрауға болады — тапсырыс әлі дайындалуда',
+  static String whereNotYet(String time) => t(
+    'Заказ в работе — обычно он у вас до $time. Если к этому времени заказа нет, напишите здесь, и кассир ответит.',
+    'Тапсырыс дайындалуда — әдетте ол $time дейін сізде болады. Осы уақытқа дейін болмаса, осында жазыңыз, кассир жауап береді.',
   );
   static String get ourMessages => t('Переписка', 'Хат алмасу');
   static String get waitingReply =>

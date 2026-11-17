@@ -1156,6 +1156,7 @@ class _MessageSheetState extends State<_MessageSheet> {
   ];
 
   String? _topic;
+  bool _whereNote = false;
   final _text = TextEditingController();
 
   @override
@@ -1195,38 +1196,51 @@ class _MessageSheetState extends State<_MessageSheet> {
             style: Theme.of(context).textTheme.labelMedium,
           ),
           const SizedBox(height: Gap.lg),
-          for (final (id, label) in _topics)
+          for (final (id, label) in _topics) ...[
             Padding(
               padding: const EdgeInsets.only(bottom: Gap.sm),
-              child: id == 'WHERE' && widget.whereAllowedAt != null
-                  ? _LockedTopic(
-                      label: label,
-                      hint: S.whereAvailableAt(_hhmm(widget.whereAllowedAt!)),
-                    )
-                  : PressScale.selection(
-                      onTap: () => setState(() => _topic = id),
-                      child: AnimatedContainer(
-                        duration: Motion.base,
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: Gap.lg,
-                          vertical: 14,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _topic == id ? c.panel : c.fillSoft,
-                          borderRadius: R.field,
-                        ),
-                        child: Text(
-                          label,
-                          style: TextStyle(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w600,
-                            color: _topic == id ? c.surface : c.ink,
-                          ),
-                        ),
-                      ),
+              child: PressScale.selection(
+                onTap: () => setState(() {
+                  // «Где мой заказ?» в первый час: отвечаем сразу,
+                  // а кассе не пишем — заказ просто ещё в пути.
+                  if (id == 'WHERE' && widget.whereAllowedAt != null) {
+                    _whereNote = true;
+                    _topic = null;
+                  } else {
+                    _whereNote = false;
+                    _topic = id;
+                  }
+                }),
+                child: AnimatedContainer(
+                  duration: Motion.base,
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Gap.lg,
+                    vertical: 14,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _topic == id ? c.panel : c.fillSoft,
+                    borderRadius: R.field,
+                  ),
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: _topic == id ? c.surface : c.ink,
                     ),
+                  ),
+                ),
+              ),
             ),
+            if (id == 'WHERE' && _whereNote && widget.whereAllowedAt != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: Gap.sm),
+                child: _WhereNote(
+                  text: S.whereNotYet(_hhmm(widget.whereAllowedAt!)),
+                ),
+              ),
+          ],
           const SizedBox(height: Gap.sm),
           TextField(
             controller: _text,
@@ -1283,14 +1297,13 @@ String _hhmm(DateTime at) {
   return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
 }
 
-/// Тема, которую пока нельзя выбрать, — с объяснением, когда станет можно.
+/// Мгновенный ответ на «Где мой заказ?» в первый час.
 ///
-/// Не прячем её совсем: человек ищет «где мой заказ» и должен понять,
-/// что кнопка появится, а не что её убрали.
-class _LockedTopic extends StatelessWidget {
-  final String label;
-  final String hint;
-  const _LockedTopic({required this.label, required this.hint});
+/// Кнопку не прячем: человек ищет именно её. Но и кассе не пишем —
+/// заказ просто ещё в пути, и ответ на это мы знаем сами.
+class _WhereNote extends StatelessWidget {
+  final String text;
+  const _WhereNote({required this.text});
 
   @override
   Widget build(BuildContext context) {
@@ -1298,21 +1311,10 @@ class _LockedTopic extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: Gap.lg, vertical: 12),
-      decoration: BoxDecoration(color: c.fillSoft, borderRadius: R.field),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w600,
-              color: c.muted,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(hint, style: TextStyle(fontSize: 12, color: c.muted)),
-        ],
+      decoration: BoxDecoration(color: c.accentSoft, borderRadius: R.field),
+      child: Text(
+        text,
+        style: TextStyle(fontSize: 13, height: 1.4, color: c.ink),
       ),
     );
   }
