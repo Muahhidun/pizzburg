@@ -183,6 +183,10 @@ export class UpdateCancellationDto {
   @IsInt() @Min(0) @Max(120) customerWindowMinutes: number;
 }
 
+export class UpdateMessagesDto {
+  @IsInt() @Min(0) @Max(240) whereAfterMinutes: number;
+}
+
 export class CreateAddressDto {
   @IsString() @Length(2, 120) street: string;
   @IsString() @Length(1, 20) house: string;

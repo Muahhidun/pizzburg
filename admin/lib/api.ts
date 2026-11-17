@@ -510,6 +510,8 @@ export interface AvailabilityNow {
   preorder: PreorderSettings;
   payments: PaymentSettings;
   cancellation: { customerWindowMinutes: number };
+  /** Нет у сервера старше 17.11.2026 — тогда считаем 60 */
+  messages?: { whereAfterMinutes: number };
   rushExtraMinutes: number;
   rushUntil: string | null;
   rushNotice: string | null;

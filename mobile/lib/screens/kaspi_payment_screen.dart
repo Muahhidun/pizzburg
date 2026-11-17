@@ -43,6 +43,15 @@ class _KaspiPaymentScreenState extends State<KaspiPaymentScreen>
   bool _autoOpened = false;
   String? _localError;
 
+  /// Обратный отсчёт до перехода к заказу после оплаты.
+  ///
+  /// Идёт, только пока экран на виду: человек может ещё быть в Kaspi, и
+  /// переход «за кадром» он бы не увидел — вернулся бы уже не туда,
+  /// откуда ушёл. Свернули приложение — отсчёт сбрасывается.
+  static const _countdownFrom = 3;
+  int? _countdown;
+  Timer? _countdownTimer;
+
   @override
   void initState() {
     super.initState();
@@ -54,12 +63,43 @@ class _KaspiPaymentScreenState extends State<KaspiPaymentScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _poller?.cancel();
+    _countdownTimer?.cancel();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _sync();
+    if (state == AppLifecycleState.resumed) {
+      _sync();
+      _maybeStartCountdown();
+    } else {
+      _stopCountdown();
+    }
+  }
+
+  bool get _onScreen =>
+      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+
+  void _maybeStartCountdown() {
+    if (!(_payment?.isProcessed ?? false) || !_onScreen) return;
+    if (_countdownTimer?.isActive ?? false) return;
+    setState(() => _countdown = _countdownFrom);
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted || !_onScreen) return _stopCountdown();
+      final left = (_countdown ?? _countdownFrom) - 1;
+      if (left <= 0) {
+        timer.cancel();
+        _openOrder();
+        return;
+      }
+      setState(() => _countdown = left);
+    });
+  }
+
+  void _stopCountdown() {
+    _countdownTimer?.cancel();
+    _countdownTimer = null;
+    if (mounted && _countdown != null) setState(() => _countdown = null);
   }
 
   Future<void> _create() async {
@@ -78,6 +118,7 @@ class _KaspiPaymentScreenState extends State<KaspiPaymentScreen>
         _busy = false;
       });
       _startPolling(payment.pollingIntervalSeconds);
+      if (payment.isProcessed) _maybeStartCountdown();
       // Экран обещает «Открываем Kaspi.kz» — открываем сами, без второго
       // нажатия. Кнопка остаётся на случай, если человек вернулся назад.
       if (!_autoOpened && payment.paymentLink != null && !payment.isProcessed) {
@@ -109,7 +150,10 @@ class _KaspiPaymentScreenState extends State<KaspiPaymentScreen>
       if (!mounted) return;
       setState(() => _payment = synced);
       if (synced.isProcessed || synced.isError) _poller?.cancel();
-      if (synced.isProcessed) Haptics.success();
+      if (synced.isProcessed) {
+        Haptics.success();
+        _maybeStartCountdown();
+      }
     } catch (error) {
       // Один сетевой сбой не превращает оплату в ошибку: следующий тик
       // попробует снова. Текст показываем, чтобы ожидание не выглядело
@@ -141,7 +185,12 @@ class _KaspiPaymentScreenState extends State<KaspiPaymentScreen>
     });
   }
 
+  bool _leaving = false;
+
   Future<void> _openOrder() async {
+    if (_leaving) return;
+    _leaving = true;
+    _stopCountdown();
     unawaited(context.read<PushNotificationsService>().requestPermission());
     final auth = context.read<AuthState>();
     if (auth.isAuthenticated) await auth.refresh();
@@ -252,7 +301,12 @@ class _KaspiPaymentScreenState extends State<KaspiPaymentScreen>
               ],
               const Spacer(),
               if (success)
-                _ActionButton(label: S.openOrder, onTap: _openOrder)
+                _ActionButton(
+                  label: _countdown == null
+                      ? S.openOrder
+                      : S.openOrderIn(_countdown!),
+                  onTap: _openOrder,
+                )
               else if (failed)
                 _ActionButton(label: S.retry, onTap: _create)
               else if (!kKaspiBrandAssetsReady)

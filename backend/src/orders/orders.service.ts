@@ -529,11 +529,9 @@ export class OrdersService {
       await this.dispatchToPoster(order.id);
     }
 
-    // Неоплаченный заказ Kaspi на кухню ещё не ушёл: тревожить кассира
-    // рано. Для него проверка — при отправке в Poster, после оплаты.
-    if (order.paymentMethod !== "KASPI_ONLINE") {
-      await this.warnPossibleReorder(tenant.id, customer.id, customer.phone, order.number);
-    }
+    // «Похоже на перезаказ» проверяем не здесь, а при отправке на кухню:
+    // в минутное окно отмены первый заказ ещё может исчезнуть, и тогда
+    // никакого «второго заказа» нет.
 
     const fresh = await this.prisma.order.findUniqueOrThrow({
       where: { id: order.id },
@@ -710,8 +708,10 @@ export class OrdersService {
         tenantId,
         customerId: { in: ids },
         status: { in: ["NEW", "ACCEPTED", "COOKING", "READY", "ON_WAY"] },
-        // Неоплаченный Kaspi-заказ кухня не видит — это не «второй заказ».
-        NOT: { paymentMethod: "KASPI_ONLINE", paymentStatus: "PENDING" },
+        // Считаем только заказы, которые кухня уже получила. Заказ в окне
+        // отмены и неоплаченный Kaspi до кассы не дошли — это не «второй
+        // заказ», и предупреждать о нём рано.
+        dispatches: { some: { status: "SENT", posterOrderId: { not: null } } },
       },
       select: { id: true, number: true, customerId: true },
       orderBy: { number: "asc" },
@@ -815,10 +815,11 @@ export class OrdersService {
         `Заказ №${order.number}: оплата Kaspi ещё не подтверждена`,
       );
     }
-    // Оплаченный Kaspi-заказ впервые уходит на кухню — теперь и время
-    // проверить, нет ли у клиента другого заказа в работе.
+    // Заказ впервые уходит на кухню — теперь и время проверить, нет ли у
+    // клиента другого заказа, который кухня уже получила. Раньше любой
+    // заказ проверялся сразу при оформлении, и отменённый за минуту
+    // первый заказ давал ложное «похоже на перезаказ».
     if (
-      order.paymentMethod === "KASPI_ONLINE" &&
       !options?.resend &&
       order.customerId &&
       order.customer &&

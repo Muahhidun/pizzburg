@@ -60,6 +60,7 @@ export default function OperationsPage() {
       <PreorderCard settings={data} onSave={save} />
       <PaymentsCard settings={data} onSave={save} />
       <CancellationCard settings={data} onSave={save} />
+      <MessagesCard settings={data} onSave={save} />
 
       {toast && (
         <div className="fixed bottom-4 left-1/2 z-30 -translate-x-1/2 rounded-xl bg-black px-4 py-2 text-sm text-white shadow-lg dark:bg-white dark:text-black">
@@ -636,5 +637,33 @@ function SaveButton({ onClick }: { onClick: () => void }) {
     >
       Сохранить
     </button>
+  );
+}
+
+function MessagesCard({ settings, onSave }: { settings: Settings; onSave: SaveFn }) {
+  const [minutes, setMinutes] = useState(
+    settings.availabilityNow.messages?.whereAfterMinutes ?? 60,
+  );
+
+  return (
+    <Card
+      title="Сообщения клиентов"
+      hint="Через сколько минут после заказа клиент может нажать «Где мой заказ?». Остальные темы (адрес, отмена, забыли позицию) доступны сразу. У предзаказа — со времени, на которое заказали. Не чаще одного сообщения в 10 минут и не больше трёх на заказ."
+    >
+      <label className="block max-w-[220px]">
+        <span className="mb-1 block text-sm font-medium">«Где мой заказ?» через, минут</span>
+        <input
+          type="number"
+          min={0}
+          max={240}
+          value={String(minutes)}
+          onChange={(e) => setMinutes(Number(e.target.value))}
+          className={inputClass}
+        />
+      </label>
+      <SaveButton
+        onClick={() => onSave('/admin/settings/messages', { whereAfterMinutes: minutes })}
+      />
+    </Card>
   );
 }

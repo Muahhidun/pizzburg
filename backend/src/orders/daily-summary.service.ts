@@ -54,6 +54,14 @@ const WHO: Record<string, string> = {
   SYSTEM: "не оплачен",
 };
 
+function plural(n: number) {
+  const d = n % 10;
+  const h = n % 100;
+  if (d === 1 && h !== 11) return "заказ";
+  if (d >= 2 && d <= 4 && (h < 12 || h > 14)) return "заказа";
+  return "заказов";
+}
+
 /** Текст сводки. Отдельно от крона — чтобы проверять без базы и часов. */
 export function buildDailySummary(
   orders: SummaryOrder[],
@@ -63,13 +71,27 @@ export function buildDailySummary(
   const done = orders.filter((o) => o.status !== "CANCELLED");
   const cancelled = orders.filter((o) => o.status === "CANCELLED");
   const revenue = done.reduce((sum, o) => sum + o.total, 0);
-  const kaspi = done.filter((o) => o.paymentMethod === "KASPI_ONLINE" && o.paidAt);
+  // Все оплаченные через Kaspi, включая отменённые потом: деньги
+  // поступили, и с выпиской Kaspi Pay сверяется именно эта сумма.
+  const kaspiPaid = orders.filter(
+    (o) => o.paymentMethod === "KASPI_ONLINE" && o.paidAt,
+  );
+  const kaspiIn = kaspiPaid.reduce((sum, o) => sum + o.total, 0);
+  const kaspiBack = refunds
+    .filter((r) => r.status === "SUCCEEDED")
+    .reduce((sum, r) => sum + r.amount, 0);
 
   const lines = [
     `📊 <b>Итоги дня — ${dateLabel}</b>`,
-    `Заказов: ${done.length} на ${revenue} ₸` +
-      (kaspi.length ? ` (Kaspi онлайн: ${kaspi.length})` : ""),
+    `Заказов: ${done.length} на ${revenue} ₸`,
   ];
+  if (kaspiPaid.length || kaspiBack) {
+    lines.push(
+      `Kaspi онлайн (приложение): ${kaspiPaid.length} ${plural(kaspiPaid.length)} на ${kaspiIn} ₸, ` +
+        `возвращено ${kaspiBack} ₸` +
+        (kaspiBack ? `, итого ${kaspiIn - kaspiBack} ₸` : ""),
+    );
+  }
 
   if (cancelled.length === 0) {
     lines.push("Отмен не было");

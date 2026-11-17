@@ -1151,7 +1151,17 @@ model OrderMessage {
   answeredBy String?
   answerText String?
 
+  /// Где вопрос лежит в группе кассиров: по этим id ловим нажатие
+  /// кнопки и ответ текстом, а потом переписываем сообщение с ответом.
+  telegramChatId    String?
+  telegramMessageId Int?
+  /// Подсказка «напишите ответ» после кнопки «Свой ответ»: ответ на неё
+  /// тоже засчитываем как ответ клиенту.
+  replyPromptMessageId Int?
+
   @@index([orderId, createdAt])
+  @@index([telegramChatId, telegramMessageId])
+  @@index([telegramChatId, replyPromptMessageId])
 }
 
 /// Впечатление о заказе (DECISIONS §12.23).

@@ -10,6 +10,11 @@ import { CancelReasonsService } from './cancel-reasons.service';
 import { ShortageService } from './shortage.service';
 import { ServiceReceiptService } from './service-receipt.service';
 import { OrderMessagesService } from './order-messages.service';
+import {
+  TelegramRepliesController,
+  TelegramRepliesService,
+  TelegramWebhookBootstrap,
+} from './telegram-replies.controller';
 import { ReviewsService } from './reviews.service';
 import { AuthModule } from '../auth/auth.module';
 import { LoyaltyModule } from '../loyalty/loyalty.module';
@@ -23,7 +28,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     LoyaltyModule,
     NotificationsModule,
   ],
-  controllers: [OrdersController],
+  controllers: [OrdersController, TelegramRepliesController],
   providers: [
     OrdersService,
     StatusPollerService,
@@ -34,6 +39,8 @@ import { NotificationsModule } from '../notifications/notifications.module';
     ServiceReceiptService,
     OrderMessagesService,
     ReviewsService,
+    TelegramRepliesService,
+    TelegramWebhookBootstrap,
   ],
   exports: [
     OrdersService,

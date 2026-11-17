@@ -104,7 +104,9 @@ class _OrderScreenState extends State<OrderScreen> {
   Future<void> _pay() async {
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => KaspiPaymentScreen(order: widget.order)),
+      MaterialPageRoute(
+        builder: (_) => KaspiPaymentScreen(order: widget.order),
+      ),
     );
     if (mounted) await _load();
   }
@@ -250,6 +252,20 @@ class _OrderScreenState extends State<OrderScreen> {
 
   bool get _messagesExhausted => _messagesSent >= _messagesLimit;
 
+  /// До какого момента «Где мой заказ?» ещё рано; null — уже можно
+  DateTime? get _whereAllowedAt {
+    final at = DateTime.tryParse(
+      _messageState?['whereAllowedAt']?.toString() ?? '',
+    )?.toLocal();
+    return at != null && at.isAfter(DateTime.now()) ? at : null;
+  }
+
+  /// Вопросы клиента и ответы кассира по этому заказу
+  List<Map<String, dynamic>> get _thread =>
+      ((_messageState?['thread'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .toList();
+
   bool get _canCancel {
     if (!context.read<AuthState>().isAuthenticated) return false;
     // Неоплаченный заказ отменяется в любой момент: денег не списано.
@@ -283,7 +299,7 @@ class _OrderScreenState extends State<OrderScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const _MessageSheet(),
+      builder: (_) => _MessageSheet(whereAllowedAt: _whereAllowedAt),
     );
     if (choice == null || !mounted) return;
 
@@ -714,6 +730,13 @@ class _OrderScreenState extends State<OrderScreen> {
               // экране заказа и видна, пока заказ живой. Это единственный
               // канал, по которому человек может сказать «не тот адрес»
               // или «забыли соус», пока это ещё можно исправить.
+              // Переписка видна и после закрытия заказа: ответ кассира
+              // мог прийти последним, и человек открыл экран по пушу.
+              if (_thread.isNotEmpty) ...[
+                const SizedBox(height: Gap.lg),
+                _Thread(messages: _thread),
+              ],
+
               if (_isLive) ...[
                 const SizedBox(height: Gap.lg),
                 _WriteUsButton(
@@ -1114,7 +1137,10 @@ class _MessageChoice {
 /// помеченный запрос она разбирает за секунду. Поле для текста
 /// необязательное — «где мой заказ» сказано уже самой темой.
 class _MessageSheet extends StatefulWidget {
-  const _MessageSheet();
+  /// Раньше этого времени тема «Где мой заказ?» недоступна
+  final DateTime? whereAllowedAt;
+
+  const _MessageSheet({this.whereAllowedAt});
 
   @override
   State<_MessageSheet> createState() => _MessageSheetState();
@@ -1172,29 +1198,34 @@ class _MessageSheetState extends State<_MessageSheet> {
           for (final (id, label) in _topics)
             Padding(
               padding: const EdgeInsets.only(bottom: Gap.sm),
-              child: PressScale.selection(
-                onTap: () => setState(() => _topic = id),
-                child: AnimatedContainer(
-                  duration: Motion.base,
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: Gap.lg,
-                    vertical: 14,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _topic == id ? c.panel : c.fillSoft,
-                    borderRadius: R.field,
-                  ),
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w600,
-                      color: _topic == id ? c.surface : c.ink,
+              child: id == 'WHERE' && widget.whereAllowedAt != null
+                  ? _LockedTopic(
+                      label: label,
+                      hint: S.whereAvailableAt(_hhmm(widget.whereAllowedAt!)),
+                    )
+                  : PressScale.selection(
+                      onTap: () => setState(() => _topic = id),
+                      child: AnimatedContainer(
+                        duration: Motion.base,
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: Gap.lg,
+                          vertical: 14,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _topic == id ? c.panel : c.fillSoft,
+                          borderRadius: R.field,
+                        ),
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: _topic == id ? c.surface : c.ink,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ),
             ),
           const SizedBox(height: Gap.sm),
           TextField(
@@ -1241,6 +1272,147 @@ class _MessageSheetState extends State<_MessageSheet> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+String _hhmm(DateTime at) {
+  final l = at.toLocal();
+  return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
+}
+
+/// Тема, которую пока нельзя выбрать, — с объяснением, когда станет можно.
+///
+/// Не прячем её совсем: человек ищет «где мой заказ» и должен понять,
+/// что кнопка появится, а не что её убрали.
+class _LockedTopic extends StatelessWidget {
+  final String label;
+  final String hint;
+  const _LockedTopic({required this.label, required this.hint});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: Gap.lg, vertical: 12),
+      decoration: BoxDecoration(color: c.fillSoft, borderRadius: R.field),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w600,
+              color: c.muted,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(hint, style: TextStyle(fontSize: 12, color: c.muted)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Вопросы клиента и ответы заведения на экране заказа.
+class _Thread extends StatelessWidget {
+  final List<Map<String, dynamic>> messages;
+  const _Thread({required this.messages});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final dim = c.surface.withValues(alpha: 0.55);
+
+    Widget time(String? iso) {
+      final at = DateTime.tryParse(iso ?? '');
+      return Text(
+        at == null ? '' : _hhmm(at),
+        style: TextStyle(fontSize: 11.5, color: dim),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(Gap.lg),
+      decoration: BoxDecoration(
+        borderRadius: R.block,
+        color: c.surface.withValues(alpha: 0.06),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(S.ourMessages, style: TextStyle(fontSize: 12.5, color: dim)),
+          for (final m in messages) ...[
+            const SizedBox(height: Gap.md),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    [
+                      m['label']?.toString() ?? '',
+                      if ((m['text']?.toString() ?? '').isNotEmpty)
+                        '«${m['text']}»',
+                    ].join(' '),
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: c.surface,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: Gap.sm),
+                time(m['createdAt']?.toString()),
+              ],
+            ),
+            const SizedBox(height: Gap.xs),
+            if ((m['answerText']?.toString() ?? '').isNotEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(Gap.md),
+                decoration: BoxDecoration(
+                  borderRadius: R.field,
+                  color: c.benefit.withValues(alpha: 0.14),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            S.cafeReply,
+                            style: TextStyle(fontSize: 11.5, color: dim),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            m['answerText'].toString(),
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              height: 1.35,
+                              color: c.surface,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: Gap.sm),
+                    time(m['answeredAt']?.toString()),
+                  ],
+                ),
+              )
+            else
+              Text(
+                S.waitingReply,
+                style: TextStyle(fontSize: 12.5, color: dim),
+              ),
+          ],
         ],
       ),
     );

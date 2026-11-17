@@ -307,7 +307,16 @@ function PaymentPanel({
   const [error, setError] = useState<string | null>(null);
 
   if (order.paymentMethod !== 'KASPI_ONLINE') return null;
-  const canRefund = ['PAID', 'PARTIALLY_REFUNDED'].includes(order.paymentStatus);
+  // Остаток к возврату: оплачено минус всё, что уже вернули или
+  // возвращаем. Подсказка «пусто = полная сумма» врала после частичного
+  // возврата — сервер всё равно вернул бы только остаток.
+  const paid = order.payment?.amount ?? order.total;
+  const refunded = (order.payment?.refunds ?? [])
+    .filter((r) => r.status !== 'FAILED')
+    .reduce((sum, r) => sum + r.amount, 0);
+  const remaining = Math.max(paid - refunded, 0);
+  const canRefund =
+    ['PAID', 'PARTIALLY_REFUNDED'].includes(order.paymentStatus) && remaining > 0;
 
   async function refund() {
     const parsed = amount.trim() ? Number(amount) : undefined;
@@ -315,7 +324,14 @@ function PaymentPanel({
       setError('Укажите целую сумму больше нуля');
       return;
     }
-    const label = parsed == null ? 'полный возврат' : `возврат ${formatTenge(parsed)}`;
+    if (parsed != null && parsed > remaining) {
+      setError(`Вернуть можно не больше ${formatTenge(remaining)}`);
+      return;
+    }
+    const label =
+      parsed == null
+        ? `возврат остатка ${formatTenge(remaining)}`
+        : `возврат ${formatTenge(parsed)}`;
     if (!window.confirm(`Подтвердить ${label} по заказу №${order.number}?`)) return;
     setBusy('refund');
     setError(null);
@@ -395,11 +411,11 @@ function PaymentPanel({
             <input
               type="number"
               min="1"
-              max={order.total}
+              max={remaining}
               step="1"
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
-              placeholder={`Сумма; пусто = ${order.total}`}
+              placeholder={`Сумма; пусто = ${remaining}`}
               className="rounded-lg border border-black/10 bg-transparent px-2 py-1.5 text-xs dark:border-white/15"
             />
             <input

@@ -45,8 +45,7 @@ class S {
   static String get tryAgainShort =>
       t('Не получилось. Попробуйте ещё раз', 'Болмады. Тағы бір рет көріңіз');
   static String get smsCodeTitle => t('Код из смс', 'СМС-тегі код');
-  static String get telegramCodeTitle =>
-      t('Код в Telegram', 'Код Telegram-да');
+  static String get telegramCodeTitle => t('Код в Telegram', 'Код Telegram-да');
   static String telegramSentTo(String phone) => t(
     'Отправили в Telegram на $phone. Не дойдёт за 15 секунд — пришлём смс',
     '$phone нөміріне Telegram-ға жібердік. 15 секундта келмесе — СМС жібереміз',
@@ -334,7 +333,8 @@ class S {
     'Заказ не отправлен на кухню, пока нет оплаты. Оплатите в Kaspi.kz или отмените — списанные баллы вернутся.',
     'Төлем болмайынша тапсырыс асханаға жіберілмейді. Kaspi.kz арқылы төлеңіз немесе бас тартыңыз — жұмсалған ұпайлар қайтарылады.',
   );
-  static String get payOrder => t('Оплатить в Kaspi.kz', 'Kaspi.kz арқылы төлеу');
+  static String get payOrder =>
+      t('Оплатить в Kaspi.kz', 'Kaspi.kz арқылы төлеу');
   static String get kaspiPaymentTitle => t('Оплата заказа', 'Тапсырысты төлеу');
   static String get kaspiOpen => t('Открыть Kaspi.kz', 'Kaspi.kz ашу');
   static String get kaspiOpening => t('Открываем Kaspi.kz', 'Kaspi.kz ашылуда');
@@ -359,6 +359,8 @@ class S {
     'Kaspi.kz ресми түймесін күтіп отырмыз. Дизайн келісілгенге дейін онлайн төлем жасырын болады.',
   );
   static String get openOrder => t('Перейти к заказу', 'Тапсырысқа өту');
+  static String openOrderIn(int seconds) =>
+      t('Перейти к заказу · $seconds', 'Тапсырысқа өту · $seconds');
   static String get prepareChangeFrom =>
       t('Подготовить сдачу с', 'Қайырымды дайындау');
   static String get bigBillHint => t(
@@ -470,6 +472,14 @@ class S {
 
   // ── Написать нам: темы ──
   static String get topicWhere => t('Где мой заказ?', 'Тапсырысым қайда?');
+  static String whereAvailableAt(String time) => t(
+    'Можно спросить с $time — заказ ещё в работе',
+    '$time бастап сұрауға болады — тапсырыс әлі дайындалуда',
+  );
+  static String get ourMessages => t('Переписка', 'Хат алмасу');
+  static String get waitingReply =>
+      t('Кассир скоро ответит', 'Кассир жақында жауап береді');
+  static String get cafeReply => t('Ответ заведения', 'Мекеменің жауабы');
   static String get topicAddress => t('Поменять адрес', 'Мекенжайды өзгерту');
   static String get topicMissing =>
       t('Забыли позицию', 'Позицияны ұмытыпсыздар');

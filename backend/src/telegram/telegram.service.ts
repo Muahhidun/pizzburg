@@ -108,6 +108,11 @@ export class TelegramService {
     const { botToken } = await this.settings(tenantId);
     if (!botToken) throw new BadRequestException('Сначала сохраните токен бота');
 
+    // При подключённом вебхуке getUpdates Телеграм не отдаёт — тогда
+    // берём чат, из которого боту писали последним (его запомнил вебхук).
+    const seen = this.lastChats.get(tenantId);
+    if (seen) return seen;
+
     const res = await fetch(`${API}/bot${botToken}/getUpdates?limit=10`);
     const json = (await res.json()) as {
       ok: boolean;
@@ -131,13 +136,23 @@ export class TelegramService {
     return { chatId: String(chat.id), title: chat.title ?? chat.username ?? '' };
   }
 
+  private readonly lastChats = new Map<string, { chatId: string; title: string }>();
+
+  /** Чат, из которого пришло последнее сообщение боту (для detectChat) */
+  rememberChat(tenantId: string, chat: { id: number; title?: string; username?: string }) {
+    this.lastChats.set(tenantId, {
+      chatId: String(chat.id),
+      title: chat.title ?? chat.username ?? '',
+    });
+  }
+
   /** Проверка связи из админки — здесь ошибку показываем, а не глотаем */
   async sendTest(tenantId: string, target: 'OWNER' | 'CASHIER' = 'OWNER') {
     const s = await this.settings(tenantId);
     if (!s.botToken) throw new BadRequestException('Не задан токен бота');
     const chatId = target === 'CASHIER' ? s.cashierChatId : s.chatId;
     if (!chatId) throw new BadRequestException('Не задан чат');
-    const error = await this.deliver(
+    const { error } = await this.deliver(
       { ...s, chatId },
       target === 'CASHIER'
         ? 'Проверка связи: сюда будут приходить сообщения для кассы.'
@@ -154,7 +169,7 @@ export class TelegramService {
   async notify(tenantId: string, text: string) {
     const s = await this.settings(tenantId);
     if (!s.enabled || !s.botToken || !s.chatId) return { sent: false };
-    const error = await this.deliver(s, text);
+    const { error } = await this.deliver(s, text);
     if (error) {
       this.logger.warn(`Телеграм не принял сообщение: ${error}`);
       return { sent: false };
@@ -168,34 +183,139 @@ export class TelegramService {
    * исправленном составе он печатает сам, а вот о смерти заказа у Poster
    * механизма нет. Всё остальное сюда не идёт — иначе вернём привычку
    * жить в телеграме, от которой ушли (DECISIONS §12.1).
+   *
+   * `keyboard` — кнопки под сообщением (быстрые ответы клиенту).
+   * Возвращаем id сообщения: по нему потом ловим нажатие и ответ.
    */
-  async notifyCashier(tenantId: string, text: string) {
+  async notifyCashier(
+    tenantId: string,
+    text: string,
+    keyboard?: InlineButton[][],
+  ): Promise<{ sent: boolean; chatId?: string; messageId?: number }> {
     const s = await this.settings(tenantId);
     if (!s.enabled || !s.botToken || !s.cashierChatId) return { sent: false };
-    const error = await this.deliver({ ...s, chatId: s.cashierChatId }, text);
+    const { error, messageId } = await this.deliver(
+      { ...s, chatId: s.cashierChatId },
+      text,
+      keyboard ? { reply_markup: { inline_keyboard: keyboard } } : undefined,
+    );
     if (error) {
       this.logger.warn(`Телеграм кассы не принял сообщение: ${error}`);
+      // Касса не узнала — пусть узнает руководство. №103 так и потерялся:
+      // один сбой сети, и о заказе в группе кассиров не было ни слова.
+      if (s.chatId && s.chatId !== s.cashierChatId) {
+        await this.deliver(
+          s,
+          `⚠️ <b>Не дошло до группы кассиров</b> (${esc(error)}):\n\n${text}`,
+        );
+      }
       return { sent: false };
     }
-    return { sent: true };
+    return { sent: true, chatId: s.cashierChatId, messageId };
   }
 
-  private async deliver(s: TelegramSettings, text: string): Promise<string | null> {
-    try {
-      const res = await fetch(`${API}/bot${s.botToken}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: s.chatId,
-          text,
-          parse_mode: 'HTML',
-          disable_web_page_preview: true,
-        }),
-      });
-      const json = (await res.json()) as { ok: boolean; description?: string };
-      return json.ok ? null : (json.description ?? `HTTP ${res.status}`);
-    } catch (e) {
-      return e instanceof Error ? e.message : String(e);
-    }
+  /** Вызов Bot API от имени бота заведения; ошибку возвращаем строкой */
+  async call(
+    tenantId: string,
+    method: string,
+    payload: Record<string, unknown>,
+  ): Promise<{ error: string | null; result?: any }> {
+    const s = await this.settings(tenantId);
+    if (!s.botToken) return { error: 'Не задан токен бота' };
+    return this.request(s.botToken, method, payload);
   }
+
+  /**
+   * Подключить приём нажатий кнопок и ответов кассира.
+   *
+   * Вебхук, а не опрос getUpdates: один бот у боевого сервера и у теста,
+   * и опрос с двух мест крал бы нажатия друг у друга. Секрет в заголовке
+   * отличает настоящий Телеграм от любого, кто узнал адрес.
+   */
+  async connectWebhook(tenantId: string, url: string, secret: string) {
+    return this.call(tenantId, 'setWebhook', {
+      url,
+      secret_token: secret,
+      allowed_updates: ['callback_query', 'message'],
+      drop_pending_updates: false,
+    });
+  }
+
+  private async deliver(
+    s: TelegramSettings,
+    text: string,
+    extra?: Record<string, unknown>,
+  ): Promise<{ error: string | null; messageId?: number }> {
+    const { error, result } = await this.request(s.botToken, 'sendMessage', {
+      chat_id: s.chatId,
+      text,
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+      ...extra,
+    });
+    return { error, messageId: result?.message_id };
+  }
+
+  /**
+   * Запрос к Bot API с повтором.
+   *
+   * Сеть между Railway и Телеграмом иногда рвётся на секунду («fetch
+   * failed»), и без повтора сообщение просто терялось. Повторяем только
+   * то, что могло пройти со второго раза: сбой сети, 429 и 5xx. Ошибку
+   * в самом сообщении (неверный чат, разметка) повтор не исправит.
+   */
+  private async request(
+    token: string,
+    method: string,
+    payload: Record<string, unknown>,
+  ): Promise<{ error: string | null; result?: any }> {
+    let last = '';
+    let retryAfterSec: number | undefined;
+    for (let attempt = 0; attempt < this.retryDelaysMs.length + 1; attempt++) {
+      if (attempt > 0) await sleep(this.retryDelay(attempt, retryAfterSec));
+      try {
+        const res = await this.fetchImpl(`${API}/bot${token}/${method}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const json = (await res.json()) as {
+          ok: boolean;
+          description?: string;
+          result?: unknown;
+          parameters?: { retry_after?: number };
+        };
+        if (json.ok) return { error: null, result: json.result };
+        last = json.description ?? `HTTP ${res.status}`;
+        retryAfterSec = json.parameters?.retry_after;
+        if (res.status !== 429 && res.status < 500) return { error: last };
+      } catch (e) {
+        last = e instanceof Error ? e.message : String(e);
+        retryAfterSec = undefined;
+      }
+    }
+    return { error: last };
+  }
+
+  private retryDelay(attempt: number, retryAfterSec?: number) {
+    const fromTelegram = retryAfterSec ? retryAfterSec * 1000 : 0;
+    return Math.min(Math.max(this.retryDelaysMs[attempt - 1], fromTelegram), 30_000);
+  }
+
+  /** Подменяются в тестах */
+  retryDelaysMs = RETRY_DELAYS_MS;
+  fetchImpl: typeof fetch = (...args) => fetch(...args);
 }
+
+export interface InlineButton {
+  text: string;
+  callback_data: string;
+}
+
+/** Паузы перед повторами: сбой сети обычно проходит за секунды */
+export const RETRY_DELAYS_MS = [2_000, 5_000];
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+export const esc = (v: string) =>
+  v.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');

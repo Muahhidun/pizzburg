@@ -42,6 +42,7 @@ import {
   UpdateMessageDto,
   UpdateAddressDto,
   UpdateCancellationDto,
+  UpdateMessagesDto,
   UpdateRushDto,
   AddUpsellDto,
   LifetimeImportDto,
@@ -624,6 +625,11 @@ export class AdminController {
   @Patch('settings/cancellation')
   updateCancellation(@Body() dto: UpdateCancellationDto) {
     return this.admin.updateCancellation(dto);
+  }
+
+  @Patch('settings/messages')
+  updateMessages(@Body() dto: UpdateMessagesDto) {
+    return this.admin.updateMessages(dto);
   }
 
   // ─── Юридические документы ───────────────────────────────────

@@ -12,6 +12,7 @@ import {
   CreateAddressDto,
   UpdateAddressDto,
   UpdateCancellationDto,
+  UpdateMessagesDto,
   UpdateLoyaltyLevelsDto,
   UpdateCategoryDto,
   UpdateOrderingDto,
@@ -1343,6 +1344,10 @@ export class AdminService {
 
   async updateCancellation(dto: UpdateCancellationDto) {
     return this.patchSettings('cancellation', { ...dto });
+  }
+
+  async updateMessages(dto: UpdateMessagesDto) {
+    return this.patchSettings('messages', { ...dto });
   }
 
   // ─── Юридические документы и причины отмены ───────────────────

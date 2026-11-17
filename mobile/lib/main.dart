@@ -107,6 +107,11 @@ Future<void> main() async {
     final number = int.tryParse(data['orderNumber']?.toString() ?? '');
     final total = int.tryParse(data['total']?.toString() ?? '');
     if (id == null || number == null || total == null) return;
+    // Пуш «оплачен» нажимают прямо из Kaspi, а под ним в приложении ещё
+    // висит экран оплаты. Убираем его, чтобы «назад» не вёл на оплату.
+    if (data['type'] == 'order_paid') {
+      _navigatorKey.currentState?.popUntil((route) => route.isFirst);
+    }
     _navigatorKey.currentState?.push(
       MaterialPageRoute(
         builder: (_) => OrderScreen(
@@ -176,77 +181,77 @@ class PizzBurgApp extends StatelessWidget {
 
   Widget _app(BuildContext context, AppThemeVariant variant) {
     return MaterialApp(
-        navigatorKey: _navigatorKey,
-        scaffoldMessengerKey: _messengerKey,
-        title: 'PizzBurg',
-        debugShowCheckedModeBanner: false,
-        // Направление «Сигнал» из design_handoff_pizzburg_app.
-        // accent и benefit — параметры темы: платформа мультитенантная,
-        // следующее заведение придёт со своими цветами.
-        theme: AppTheme.build(
-          ink: variant.ink,
-          accent: variant.accent,
-          benefit: variant.benefit,
-          surface: variant.surface,
-          page: variant.page,
-          panel: variant.panel,
-          onSurface: variant.onSurface,
-          danger: variant.danger ?? const Color(0xFFD92D20),
-          brightness: variant.brightness,
-        ),
-        // Макет мобильный (390 pt по хендоффу). «Адаптивный» не означает
-        // «растянуть телефонный экран на 1600 px»: миниатюра 76 px рядом
-        // со строкой во всю ширину монитора выглядит сломанной. На широком
-        // экране прижимаем контент к телефонной колонке по центру.
-        builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
-          // Значения по умолчанию — тёмные иконки статус-бара: в светлых
-          // темах почти все экраны белые. Без этой аннотации система просто
-          // оставляет последний применённый стиль, и светлые иконки чёрного
-          // хедера каталога уезжают на белые экраны, где их не видно.
-          //
-          // В тёмной теме всё наоборот: там страница тёмная, и умолчанием
-          // должны быть светлые иконки.
-          value: variant.brightness == Brightness.dark
-              ? const SystemUiOverlayStyle(
-                  statusBarBrightness: Brightness.dark,
-                  statusBarIconBrightness: Brightness.light,
-                  statusBarColor: Colors.transparent,
-                )
-              : const SystemUiOverlayStyle(
-                  statusBarBrightness: Brightness.light,
-                  statusBarIconBrightness: Brightness.dark,
-                  statusBarColor: Colors.transparent,
-                ),
-          // Заставка лежит выше телефонной колонки, а не внутри неё:
-          // ограничение в 460 pt прижимает контент к центру, а чёрный фон
-          // заставки должен закрывать окно целиком.
-          child: _ColdStart(
-            child: ColoredBox(
-              // Поля вокруг телефонной колонки на широком экране: в тёмной
-              // теме светлая рамка вокруг тёмного приложения била бы в глаза.
-              color: variant.brightness == Brightness.dark
-                  ? const Color(0xFF0B0D12)
-                  : const Color(0xFFF2F2F3),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 460),
-                  // Тап мимо поля закрывает клавиатуру. Без этого её нечем
-                  // убрать: «Имя» стоит посреди списка оформления, кнопка
-                  // «Заказать» уходит под клавиатуру, и человек остаётся с
-                  // наполовину закрытым экраном. Обработчик стоит выше всех
-                  // экранов, а не в оформлении: поля есть ещё в корзине,
-                  // адресах, отзыве и входе, и чинить их поодиночке значит
-                  // забыть следующее.
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-                    child: child ?? const SizedBox.shrink(),
-                  ),
+      navigatorKey: _navigatorKey,
+      scaffoldMessengerKey: _messengerKey,
+      title: 'PizzBurg',
+      debugShowCheckedModeBanner: false,
+      // Направление «Сигнал» из design_handoff_pizzburg_app.
+      // accent и benefit — параметры темы: платформа мультитенантная,
+      // следующее заведение придёт со своими цветами.
+      theme: AppTheme.build(
+        ink: variant.ink,
+        accent: variant.accent,
+        benefit: variant.benefit,
+        surface: variant.surface,
+        page: variant.page,
+        panel: variant.panel,
+        onSurface: variant.onSurface,
+        danger: variant.danger ?? const Color(0xFFD92D20),
+        brightness: variant.brightness,
+      ),
+      // Макет мобильный (390 pt по хендоффу). «Адаптивный» не означает
+      // «растянуть телефонный экран на 1600 px»: миниатюра 76 px рядом
+      // со строкой во всю ширину монитора выглядит сломанной. На широком
+      // экране прижимаем контент к телефонной колонке по центру.
+      builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+        // Значения по умолчанию — тёмные иконки статус-бара: в светлых
+        // темах почти все экраны белые. Без этой аннотации система просто
+        // оставляет последний применённый стиль, и светлые иконки чёрного
+        // хедера каталога уезжают на белые экраны, где их не видно.
+        //
+        // В тёмной теме всё наоборот: там страница тёмная, и умолчанием
+        // должны быть светлые иконки.
+        value: variant.brightness == Brightness.dark
+            ? const SystemUiOverlayStyle(
+                statusBarBrightness: Brightness.dark,
+                statusBarIconBrightness: Brightness.light,
+                statusBarColor: Colors.transparent,
+              )
+            : const SystemUiOverlayStyle(
+                statusBarBrightness: Brightness.light,
+                statusBarIconBrightness: Brightness.dark,
+                statusBarColor: Colors.transparent,
+              ),
+        // Заставка лежит выше телефонной колонки, а не внутри неё:
+        // ограничение в 460 pt прижимает контент к центру, а чёрный фон
+        // заставки должен закрывать окно целиком.
+        child: _ColdStart(
+          child: ColoredBox(
+            // Поля вокруг телефонной колонки на широком экране: в тёмной
+            // теме светлая рамка вокруг тёмного приложения била бы в глаза.
+            color: variant.brightness == Brightness.dark
+                ? const Color(0xFF0B0D12)
+                : const Color(0xFFF2F2F3),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
+                // Тап мимо поля закрывает клавиатуру. Без этого её нечем
+                // убрать: «Имя» стоит посреди списка оформления, кнопка
+                // «Заказать» уходит под клавиатуру, и человек остаётся с
+                // наполовину закрытым экраном. Обработчик стоит выше всех
+                // экранов, а не в оформлении: поля есть ещё в корзине,
+                // адресах, отзыве и входе, и чинить их поодиночке значит
+                // забыть следующее.
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+                  child: child ?? const SizedBox.shrink(),
                 ),
               ),
             ),
           ),
         ),
+      ),
       home: const AppShell(),
     );
   }

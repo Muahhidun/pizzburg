@@ -57,6 +57,26 @@ export interface PaymentSettings {
   askChangeFrom: boolean;
 }
 
+export interface MessageSettings {
+  /**
+   * Через сколько минут после заказа клиент может спросить «Где мой
+   * заказ?». Раньше это вопрос без ответа: заказ везут 40–60 минут, а
+   * кнопка в первые же минуты только засыпала кассу сообщениями.
+   */
+  whereAfterMinutes: number;
+}
+
+export const DEFAULT_MESSAGES: MessageSettings = { whereAfterMinutes: 60 };
+
+/** Настройки обращений клиента из Tenant.settings */
+export function messageSettingsOf(tenantSettings: unknown): MessageSettings {
+  const raw = ((tenantSettings ?? {}) as Record<string, any>).messages ?? {};
+  const n = Number(raw.whereAfterMinutes);
+  return {
+    whereAfterMinutes: Number.isFinite(n) && n >= 0 ? n : DEFAULT_MESSAGES.whereAfterMinutes,
+  };
+}
+
 export interface CancellationSettings {
   /** Сколько минут клиент может отменить заказ сам; 0 — нельзя */
   customerWindowMinutes: number;
@@ -96,6 +116,7 @@ export interface AvailabilityState {
   preorder: PreorderSettings;
   payments: PaymentSettings;
   cancellation: CancellationSettings;
+  messages: MessageSettings;
   /** Сколько минут добавлено к сроку из-за наплыва; 0 — обычный режим */
   rushExtraMinutes: number;
   /** До какого момента держится добавка — для админки */
@@ -317,6 +338,7 @@ export class AvailabilityService {
       preorder,
       payments,
       cancellation,
+      messages: messageSettingsOf(tenantSettings),
       rushExtraMinutes,
       rushUntil: rushAlive ? rushRaw.until : null,
       rushNotice: rushExtraMinutes

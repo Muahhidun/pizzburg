@@ -629,7 +629,31 @@ export class PaymentsService {
       // Редкая гонка: клиент отменил ещё ожидающую оплату, а подтверждение
       // пришло следом. Заказ не оживает и не едет в Poster — деньги сразу
       // ставятся на возврат.
-      if (cancelled) await this.refundCancelledOrder(attempt.orderId);
+      if (cancelled) {
+        await this.refundCancelledOrder(attempt.orderId);
+        return;
+      }
+      // Kaspi после оплаты в приложение не возвращает, ссылки «назад» у
+      // него нет. Пуш — короткий путь обратно: нажал и сразу на заказе.
+      try {
+        const number = attempt.order.number;
+        await this.notifications?.sendOrderEvent(
+          attempt.orderId,
+          (lang) =>
+            lang === "kk"
+              ? {
+                  title: `✅ №${number} тапсырыс төленді`,
+                  body: "Тапсырыс күйін көру үшін басыңыз",
+                }
+              : {
+                  title: `✅ Заказ №${number} оплачен`,
+                  body: "Нажмите, чтобы посмотреть статус заказа",
+                },
+          { type: "order_paid" },
+        );
+      } catch (e) {
+        this.logger.warn(`Пуш об оплате не отправлен: ${e}`);
+      }
     }
   }
 
