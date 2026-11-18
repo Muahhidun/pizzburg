@@ -183,50 +183,74 @@ class PushOffBanner extends StatelessWidget {
       return const SizedBox.shrink();
     }
     final c = context.colors;
+    // Единственная салатовая карточка на тёмном экране: в общей
+    // стилистике её не замечали, а пропустить её — значит не узнать,
+    // что заказ готов.
     return Container(
-      margin: const EdgeInsets.only(top: Gap.lg),
+      margin: const EdgeInsets.only(top: 28),
       padding: const EdgeInsets.all(20),
-      // Экран заказа всегда тёмный (фон panel, текст surface) — та же
-      // подложка, что у карточки состава, и кнопка в цвет «выгоды».
-      decoration: BoxDecoration(
-        color: c.surface.withValues(alpha: 0.1),
-        borderRadius: R.thumb,
-      ),
+      decoration: BoxDecoration(color: c.benefit, borderRadius: R.thumb),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            S.pushOffOrderTitle,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: c.surface,
-            ),
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: c.onBenefit,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.notifications_off_rounded,
+                  size: 20,
+                  color: c.benefit,
+                ),
+              ),
+              const SizedBox(width: Gap.md),
+              Expanded(
+                child: Text(
+                  S.pushOffOrderTitle,
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: c.onBenefit,
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: Gap.md),
           Text(
             S.pushOffOrderHint,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: 14,
               height: 1.4,
-              color: c.surface.withValues(alpha: 0.75),
+              color: c.onBenefit.withValues(alpha: 0.8),
             ),
           ),
-          const SizedBox(height: Gap.md),
+          const SizedBox(height: Gap.lg),
           PressScale(
             onTap: () {
               Haptics.tap();
               push.openSystemSettings();
             },
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(color: c.benefit, borderRadius: R.pill),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 15),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: c.onBenefit,
+                borderRadius: R.pill,
+              ),
               child: Text(
                 S.openSettings,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: c.onBenefit,
+                  color: c.benefit,
                 ),
               ),
             ),

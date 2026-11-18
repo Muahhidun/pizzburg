@@ -326,9 +326,9 @@ class _OrderScreenState extends State<OrderScreen> {
     final pay = d['paymentStatus']?.toString();
     final lines = <String>[];
     if (kaspi && pay == 'PENDING') {
-      lines.add(S.cancelledUnpaid(
-        AppConfig.instance?.unpaidCancelMinutes ?? 30,
-      ));
+      lines.add(
+        S.cancelledUnpaid(AppConfig.instance?.unpaidCancelMinutes ?? 30),
+      );
     } else if (by == 'CUSTOMER') {
       lines.add(S.cancelledByYou);
     } else if (by == 'SYSTEM') {
@@ -338,9 +338,11 @@ class _OrderScreenState extends State<OrderScreen> {
     }
     if (kaspi) {
       if (pay == 'REFUNDED') {
-        lines.add(S.moneyReturned(
-          formatTenge(((d['total'] as num?) ?? widget.order.total).toInt()),
-        ));
+        lines.add(
+          S.moneyReturned(
+            formatTenge(((d['total'] as num?) ?? widget.order.total).toInt()),
+          ),
+        );
       } else if (pay == 'PARTIALLY_REFUNDED') {
         lines.add(S.moneyPartlyReturned);
       } else if (pay == 'REFUND_PENDING') {
@@ -704,6 +706,11 @@ class _OrderScreenState extends State<OrderScreen> {
                 ],
               ],
 
+              // Уведомления запрещены — честно говорим, что «готово» и
+              // ответ кассира не придут, и ведём в настройки телефона.
+              // Сразу под статусом: ниже карточки состава её пролистывают.
+              if (_isLive) const PushOffBanner(),
+
               const SizedBox(height: 28),
               Container(
                 padding: const EdgeInsets.all(20),
@@ -808,10 +815,6 @@ class _OrderScreenState extends State<OrderScreen> {
               // или «забыли соус», пока это ещё можно исправить.
               // Переписка видна и после закрытия заказа: ответ кассира
               // мог прийти последним, и человек открыл экран по пушу.
-              // Уведомления запрещены — честно говорим, что «готово» и
-              // ответ кассира не придут, и ведём в настройки телефона
-              if (_isLive) const PushOffBanner(),
-
               if (_thread.isNotEmpty) ...[
                 const SizedBox(height: Gap.lg),
                 _Thread(messages: _thread),
