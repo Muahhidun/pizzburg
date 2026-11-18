@@ -36,6 +36,16 @@ class ApiClient {
     if (token != null) 'Authorization': 'Bearer $token',
   };
 
+  /// Настройки приложения с сервера: минимальная версия, сторы и
+  /// числа, которые раньше были зашиты в сборку.
+  Future<Map<String, dynamic>> fetchAppConfig() async {
+    final res = await http
+        .get(Uri.parse('$baseUrl/app/$tenant/config'), headers: _headers)
+        .timeout(const Duration(seconds: 8));
+    _ensureOk(res);
+    return jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
+  }
+
   Future<MenuResponse> fetchMenu() async {
     final res = await http.get(
       Uri.parse('$baseUrl/menu/$tenant'),

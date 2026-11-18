@@ -540,6 +540,8 @@ export interface Settings {
     preorder?: Partial<PreorderSettings>;
     payments?: Partial<PaymentSettings>;
     cancellation?: { customerWindowMinutes?: number };
+    /// Минимальная версия приложения: ниже — экран «Обновите приложение»
+    appUpdate?: { minIos?: string; minAndroid?: string };
   };
   venues: { id: string; name: string; address: string }[];
   posterAccounts: {

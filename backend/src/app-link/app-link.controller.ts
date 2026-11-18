@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
+import { UNPAID_CANCEL_AFTER_MS } from '../orders/unpaid-orders.service';
 
 /**
  * Одна ссылка «скачать приложение» для баннера, Reels и QR на кассе.
@@ -25,6 +26,26 @@ import { PrismaService } from '../prisma/prisma.service';
 @Controller('app')
 export class AppLinkController {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Что приложение спрашивает при каждом запуске и возврате из фона.
+   *
+   * Минимальная версия: ниже неё приложение закрывается экраном
+   * «Обновите приложение» с кнопкой в стор. Без этого старую версию
+   * нельзя было бы заставить обновиться ни к Рамадану, ни после
+   * изменения оплаты. Сюда же — числа, которые раньше были зашиты в
+   * приложении и разошлись бы с сервером при первой же правке.
+   */
+  @Get(':tenantSlug/config')
+  @Header('Cache-Control', 'no-store')
+  async config(@Param('tenantSlug') slug: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { slug },
+      select: { settings: true },
+    });
+    if (!tenant) throw new NotFoundException('Unknown tenant');
+    return appConfigFrom(tenant.settings);
+  }
 
   @Get(':tenantSlug')
   @Header('Cache-Control', 'no-store')
@@ -69,6 +90,21 @@ export function appLinksFrom(settings: unknown): AppLinks {
   const text = (v: unknown) =>
     typeof v === 'string' && v.trim() ? v.trim() : undefined;
   return { ios: url(raw.ios), android: url(raw.android), promo: text(raw.promo) };
+}
+
+const VERSION = /^\d+\.\d+\.\d+$/;
+
+export function appConfigFrom(settings: unknown) {
+  const all = (settings ?? {}) as Record<string, unknown>;
+  const update = (all.appUpdate ?? {}) as Record<string, unknown>;
+  const version = (v: unknown) =>
+    typeof v === 'string' && VERSION.test(v.trim()) ? v.trim() : null;
+  const links = appLinksFrom(settings);
+  return {
+    minVersion: { ios: version(update.minIos), android: version(update.minAndroid) },
+    store: { ios: links.ios ?? null, android: links.android ?? null },
+    unpaidCancelMinutes: Math.round(UNPAID_CANCEL_AFTER_MS / 60_000),
+  };
 }
 
 /** Куда вести по User-Agent; undefined — показать страницу */

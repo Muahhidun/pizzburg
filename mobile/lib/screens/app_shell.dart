@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../services/store_review.dart';
 import '../state/auth.dart';
 import '../state/cart.dart';
 import '../theme/app_theme.dart';
@@ -69,6 +70,21 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     AppShell.jump.addListener(_onJump);
     _onJump();
+    _auth = context.read<AuthState>()..addListener(_maybeAskReview);
+    _maybeAskReview();
+  }
+
+  late final AuthState _auth;
+
+  /// Просьба оценить — когда профиль обновился (вход, возврат в
+  /// приложение, вкладка «Заказы»). С паузой: окно не должно выскакивать
+  /// в ту же секунду, когда человек что-то нажал.
+  void _maybeAskReview() {
+    if (!_auth.isAuthenticated) return;
+    final orders = _auth.orders;
+    Future.delayed(const Duration(seconds: 4), () {
+      if (mounted) StoreReview.maybeAsk(orders);
+    });
   }
 
   void _onJump() {
@@ -82,6 +98,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     AppShell.jump.removeListener(_onJump);
+    _auth.removeListener(_maybeAskReview);
     for (final c in _scrolls) {
       c.dispose();
     }

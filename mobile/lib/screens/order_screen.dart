@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
+import '../services/app_config.dart';
 import '../state/auth.dart';
 import '../state/cart.dart';
 import '../theme/app_theme.dart';
@@ -314,7 +315,9 @@ class _OrderScreenState extends State<OrderScreen> {
     final pay = d['paymentStatus']?.toString();
     final lines = <String>[];
     if (kaspi && pay == 'PENDING') {
-      lines.add(S.cancelledUnpaid);
+      lines.add(S.cancelledUnpaid(
+        AppConfig.instance?.unpaidCancelMinutes ?? 30,
+      ));
     } else if (by == 'CUSTOMER') {
       lines.add(S.cancelledByYou);
     } else if (by == 'SYSTEM') {

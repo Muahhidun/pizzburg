@@ -1260,6 +1260,18 @@ export class AdminService {
     });
   }
 
+  /**
+   * Минимальная версия приложения (iOS и Android отдельно: ревью идут
+   * в разном темпе). Поднимать только когда новая версия уже вышла в
+   * сторе — иначе клиенту нечем будет обновиться.
+   */
+  async updateAppUpdate(dto: { minIos?: string; minAndroid?: string }) {
+    return this.patchSettings('appUpdate', {
+      ...(dto.minIos !== undefined ? { minIos: dto.minIos } : {}),
+      ...(dto.minAndroid !== undefined ? { minAndroid: dto.minAndroid } : {}),
+    });
+  }
+
   /** Аварийный режим приёма: всё / только самовывоз / приём закрыт */
   async updateOrdering(dto: UpdateOrderingDto) {
     // Владелец здесь задаёт бессрочный режим. Если до этого

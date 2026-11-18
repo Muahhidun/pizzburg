@@ -61,6 +61,7 @@ export default function OperationsPage() {
       <PaymentsCard settings={data} onSave={save} />
       <CancellationCard settings={data} onSave={save} />
       <MessagesCard settings={data} onSave={save} />
+      <AppUpdateCard settings={data} onSave={save} />
 
       {toast && (
         <div className="fixed bottom-4 left-1/2 z-30 -translate-x-1/2 rounded-xl bg-black px-4 py-2 text-sm text-white shadow-lg dark:bg-white dark:text-black">
@@ -663,6 +664,67 @@ function MessagesCard({ settings, onSave }: { settings: Settings; onSave: SaveFn
       </label>
       <SaveButton
         onClick={() => onSave('/admin/settings/messages', { whereAfterMinutes: minutes })}
+      />
+    </Card>
+  );
+}
+
+/**
+ * Принудительное обновление приложения.
+ *
+ * iOS и Android отдельно: проверка в сторах идёт в разном темпе, и
+ * поднимать минимум можно только когда версия уже вышла в своём сторе —
+ * иначе клиенту нечем будет обновиться и приложение просто закроется.
+ */
+function AppUpdateCard({ settings, onSave }: { settings: Settings; onSave: SaveFn }) {
+  const current = settings.settings.appUpdate ?? {};
+  const [ios, setIos] = useState(current.minIos ?? '');
+  const [android, setAndroid] = useState(current.minAndroid ?? '');
+  const valid = (v: string) => v === '' || /^\d+\.\d+\.\d+$/.test(v);
+
+  return (
+    <Card
+      title="Обязательное обновление приложения"
+      hint="Клиенты с версией ниже указанной увидят экран «Обновите приложение» с кнопкой в App Store или Google Play — заказывать в старой версии они не смогут. Ставьте версию только после того, как она вышла в сторе. Пусто — обновление не требуется."
+    >
+      <div className="flex flex-wrap gap-3">
+        <label className="block w-[160px]">
+          <span className="mb-1 block text-sm font-medium">iPhone, не ниже</span>
+          <input
+            value={ios}
+            placeholder="например 1.0.1"
+            onChange={(e) => setIos(e.target.value.trim())}
+            className={inputClass}
+          />
+        </label>
+        <label className="block w-[160px]">
+          <span className="mb-1 block text-sm font-medium">Android, не ниже</span>
+          <input
+            value={android}
+            placeholder="например 1.0.1"
+            onChange={(e) => setAndroid(e.target.value.trim())}
+            className={inputClass}
+          />
+        </label>
+      </div>
+      {!(valid(ios) && valid(android)) && (
+        <p className="mt-2 text-sm text-red-600">Версия пишется так: 1.0.1</p>
+      )}
+      <SaveButton
+        onClick={() => {
+          if (!(valid(ios) && valid(android))) return;
+          if (
+            (ios || android) &&
+            !confirm(
+              `Клиенты с версией ниже ${[ios && `iPhone ${ios}`, android && `Android ${android}`]
+                .filter(Boolean)
+                .join(', ')} не смогут заказывать, пока не обновятся. Эта версия уже вышла в сторе?`,
+            )
+          ) {
+            return;
+          }
+          onSave('/admin/settings/app-update', { minIos: ios, minAndroid: android });
+        }}
       />
     </Card>
   );

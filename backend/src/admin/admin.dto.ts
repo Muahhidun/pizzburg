@@ -187,6 +187,19 @@ export class UpdateMessagesDto {
   @IsInt() @Min(0) @Max(240) whereAfterMinutes: number;
 }
 
+/** Минимальная версия приложения: ниже — экран «Обновите приложение» */
+export class UpdateAppUpdateDto {
+  @IsOptional() @IsString() @Matches(/^(\d+\.\d+\.\d+)?$/, {
+    message: 'Версия в виде 1.0.1 или пусто',
+  })
+  minIos?: string;
+
+  @IsOptional() @IsString() @Matches(/^(\d+\.\d+\.\d+)?$/, {
+    message: 'Версия в виде 1.0.1 или пусто',
+  })
+  minAndroid?: string;
+}
+
 export class CreateAddressDto {
   @IsString() @Length(2, 120) street: string;
   @IsString() @Length(1, 20) house: string;

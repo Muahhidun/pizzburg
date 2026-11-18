@@ -1,5 +1,9 @@
 import 'dart:async';
 
+import 'dart:ui';
+
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +14,8 @@ import 'state/favorites.dart';
 import 'screens/app_shell.dart';
 import 'state/auth.dart';
 import 'services/analytics.dart';
+import 'services/app_config.dart';
+import 'screens/update_required_screen.dart';
 import 'services/push_notifications.dart';
 import 'screens/messages_screen.dart';
 import 'screens/order_screen.dart';
@@ -36,7 +42,15 @@ Future<void> main() async {
     return;
   }
 
+  await _startCrashReports();
+
   final api = ApiClient();
+  final appConfig = AppConfig(api);
+  // Не ждём: проверка версии не должна задерживать старт. Если версия
+  // устарела, экран обновления закроет приложение через долю секунды.
+  unawaited(appConfig.refresh());
+  // Приложение месяцами живёт в памяти — проверяем и при возврате из фона
+  AppLifecycleListener(onResume: () => unawaited(appConfig.refresh()));
   final auth = AuthState(api);
   final push = PushNotificationsService(api);
   final favorites = Favorites(api);
@@ -128,6 +142,7 @@ Future<void> main() async {
   };
   runApp(
     PizzBurgApp(
+      appConfig: appConfig,
       api: api,
       auth: auth,
       push: push,
@@ -140,7 +155,29 @@ Future<void> main() async {
   unawaited(push.initialize());
 }
 
+/// Отчёты о сбоях (Firebase Crashlytics).
+///
+/// Без них о падении у клиента мы узнаём, только если он позвонит, — а
+/// обновления выходят редко, и сбой мог бы жить месяцами. В отладке
+/// отчёты не шлём: там падения — часть работы.
+Future<void> _startCrashReports() async {
+  if (kIsWeb) return;
+  try {
+    if (Firebase.apps.isEmpty) await Firebase.initializeApp();
+    final crashlytics = FirebaseCrashlytics.instance;
+    await crashlytics.setCrashlyticsCollectionEnabled(kReleaseMode);
+    FlutterError.onError = crashlytics.recordFlutterFatalError;
+    PlatformDispatcher.instance.onError = (error, stack) {
+      crashlytics.recordError(error, stack, fatal: true);
+      return true;
+    };
+  } catch (e) {
+    debugPrint('Отчёты о сбоях не запущены: $e');
+  }
+}
+
 class PizzBurgApp extends StatelessWidget {
+  final AppConfig appConfig;
   final ApiClient api;
   final AuthState auth;
   final PushNotificationsService push;
@@ -150,6 +187,7 @@ class PizzBurgApp extends StatelessWidget {
   final Analytics analytics;
   const PizzBurgApp({
     super.key,
+    required this.appConfig,
     required this.api,
     required this.auth,
     required this.push,
@@ -164,6 +202,7 @@ class PizzBurgApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         Provider.value(value: api),
+        ChangeNotifierProvider.value(value: appConfig),
         ChangeNotifierProvider.value(value: auth),
         ChangeNotifierProvider.value(value: push),
         ChangeNotifierProvider.value(value: favorites),
@@ -246,7 +285,14 @@ class PizzBurgApp extends StatelessWidget {
                 child: GestureDetector(
                   behavior: HitTestBehavior.translucent,
                   onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-                  child: child ?? const SizedBox.shrink(),
+                  // Устаревшая версия закрывается экраном обновления
+                  // поверх всего, включая открытые экраны и шторки
+                  child: Consumer<AppConfig>(
+                    builder: (context, config, _) =>
+                        config.updateRequired && config.storeUrl != null
+                        ? UpdateRequiredScreen(storeUrl: config.storeUrl!)
+                        : (child ?? const SizedBox.shrink()),
+                  ),
                 ),
               ),
             ),
