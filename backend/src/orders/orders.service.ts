@@ -989,6 +989,7 @@ export class OrdersService {
           data: {
             status: "SENT",
             posterOrderId: "dry-run",
+            sentAt: new Date(),
             ...(resending ? { replacedOrders: this.withReplaced(d) } : {}),
           },
         });
@@ -1064,6 +1065,7 @@ export class OrdersService {
           data: {
             status: "SENT",
             posterOrderId: String(res.incoming_order_id),
+            sentAt: new Date(),
             // Новый чек — новая жизнь: старый статус с планшета относится
             // к отклонённому заказу и сбил бы агрегацию.
             posterStatus: null,

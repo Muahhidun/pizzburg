@@ -721,6 +721,8 @@ model Order {
   cancelReasonRef    CancelReason? @relation(fields: [cancelReasonId], references: [id])
   /// Кто отменил: CUSTOMER | ADMIN | POSTER | SYSTEM — для отчёта по отменам
   cancelledBy        String?
+  /// Напоминаний «заказ не принят» уже отправлено: 1 — кассе, 2 — руководству
+  acceptReminders    Int           @default(0)
   cancelledAt        DateTime?
   /// Версии документов, действовавшие при оформлении — доказательство
   /// согласия именно на эту редакцию
@@ -964,6 +966,8 @@ model OrderDispatch {
   /// отклоняет на планшете. Здесь хранится, что именно она отклоняет:
   /// иначе при разборе смены два чека на один заказ выглядят как дубль.
   replacedOrders  Json          @default("[]")
+  /// Когда чек ушёл на планшет — от этого считаем «долго не принимают»
+  sentAt          DateTime?
   createdAt       DateTime      @default(now())
 
   @@unique([orderId, posterAccountId])

@@ -36,6 +36,16 @@ import '../i18n/strings.dart';
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
 
+  /// Вкладка, на которую вернуться из экрана заказа.
+  ///
+  /// После оформления корзина пуста, а оболочка под экраном заказа
+  /// оставалась на ней: «назад» вёл в пустую корзину. Оформление, оплата
+  /// и пуш об оплате ставят сюда «Меню».
+  static final ValueNotifier<int?> jump = ValueNotifier<int?>(null);
+
+  /// Под экраном заказа — меню, а не опустевшая корзина
+  static void showMenu() => jump.value = 0;
+
   @override
   State<AppShell> createState() => _AppShellState();
 }
@@ -57,11 +67,21 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    AppShell.jump.addListener(_onJump);
+    _onJump();
+  }
+
+  void _onJump() {
+    final index = AppShell.jump.value;
+    if (index == null) return;
+    AppShell.jump.value = null;
+    if (mounted && index != _index) setState(() => _index = index);
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    AppShell.jump.removeListener(_onJump);
     for (final c in _scrolls) {
       c.dispose();
     }

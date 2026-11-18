@@ -248,7 +248,7 @@ export class TelegramService {
   ): Promise<{ error: string | null; messageId?: number }> {
     const { error, result } = await this.request(s.botToken, 'sendMessage', {
       chat_id: s.chatId,
-      text,
+      text: linkOrderNumbers(text),
       parse_mode: 'HTML',
       disable_web_page_preview: true,
       ...extra,
@@ -319,3 +319,39 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export const esc = (v: string) =>
   v.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+
+/**
+ * Адрес админки для ссылок из Телеграма. Railway сам кладёт адрес
+ * соседнего сервиса в RAILWAY_SERVICE_ADMIN_URL; ADMIN_PUBLIC_URL —
+ * если админка переедет на свой домен.
+ */
+export function adminBaseUrl(): string {
+  const explicit = process.env.ADMIN_PUBLIC_URL?.trim();
+  if (explicit) return explicit.replace(/\/$/, '');
+  const railway = process.env.RAILWAY_SERVICE_ADMIN_URL?.trim();
+  return railway ? `https://${railway.replace(/\/$/, '')}` : '';
+}
+
+/**
+ * Номера заказов в сообщениях — ссылками на заказ в админке.
+ *
+ * Нажал на №114 в «похоже на перезаказ» — и видишь, что это за заказ.
+ * Номер чека Poster («чек №105509») ссылкой не делаем: это другой
+ * номер, и ссылка вела бы на чужой заказ. Уже оформленные ссылки не
+ * трогаем.
+ */
+export function linkOrderNumbers(text: string, base = adminBaseUrl()): string {
+  if (!base || !text.includes('№')) return text;
+  return text
+    .split(/(<a\b[^>]*>.*?<\/a>)/is)
+    .map((chunk) =>
+      chunk.startsWith('<a')
+        ? chunk
+        : chunk.replace(
+            /(^|[^\p{L}])(?<!чек\s)(?<!ЧЕК\s)(?<!Чек\s)№(\d+)(?![\d\/-])/gu,
+            (_m, pre: string, n: string) =>
+              `${pre}<a href="${base}/orders?n=${n}">№${n}</a>`,
+          ),
+    )
+    .join('');
+}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { MessagesReport, ReviewsReport, api } from '@/lib/api';
 
 /**
@@ -133,7 +134,7 @@ function Reviews({ report }: { report: ReviewsReport }) {
             <span className="font-semibold">
               {r.rating}/5{' '}
               <span className="font-normal text-neutral-500">
-                №{r.orderNumber} ·{' '}
+                <OrderLink n={r.orderNumber} /> ·{' '}
                 {r.orderType === 'DELIVERY' ? 'доставка' : 'самовывоз'}
               </span>
             </span>
@@ -231,7 +232,7 @@ function Messages({ report }: { report: MessagesReport }) {
             <span className="font-semibold">
               {m.label}{' '}
               <span className="font-normal text-neutral-500">
-                №{m.orderNumber}
+                <OrderLink n={m.orderNumber} />
               </span>
             </span>
             <span className="text-xs text-neutral-500">
@@ -285,6 +286,15 @@ function Reply({
   if (!pending) return null;
   return (
     <p className="mt-3 text-xs text-neutral-400">Ответа не было</p>
+  );
+}
+
+/** Номер заказа — ссылкой на сам заказ в ленте «Заказы» */
+function OrderLink({ n }: { n: number }) {
+  return (
+    <Link href={`/orders?n=${n}`} className="text-sky-700 hover:underline dark:text-sky-300">
+      №{n}
+    </Link>
   );
 }
 

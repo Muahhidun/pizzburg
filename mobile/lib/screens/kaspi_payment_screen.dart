@@ -14,6 +14,7 @@ import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../utils/haptics.dart';
 import '../widgets/motion.dart';
+import 'app_shell.dart';
 import 'order_screen.dart';
 
 /// Второй предохранитель после серверного `payments.kaspiOnline`.
@@ -195,6 +196,7 @@ class _KaspiPaymentScreenState extends State<KaspiPaymentScreen>
     final auth = context.read<AuthState>();
     if (auth.isAuthenticated) await auth.refresh();
     if (!mounted) return;
+    AppShell.showMenu();
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (_) => OrderScreen(order: widget.order)),

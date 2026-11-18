@@ -6,6 +6,7 @@ import { PromotionsModule } from '../promotions/promotions.module';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { StatusPollerService } from './status-poller.service';
+import { AcceptReminderService } from './accept-reminder.service';
 import { CancelReasonsService } from './cancel-reasons.service';
 import { ShortageService } from './shortage.service';
 import { ServiceReceiptService } from './service-receipt.service';
@@ -32,6 +33,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
   providers: [
     OrdersService,
     StatusPollerService,
+    AcceptReminderService,
     UnpaidOrdersService,
     DailySummaryService,
     CancelReasonsService,

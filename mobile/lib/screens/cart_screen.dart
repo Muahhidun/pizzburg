@@ -308,6 +308,24 @@ class _CartScreenState extends State<CartScreen> {
                       points: _points,
                       promo: _promoApplied,
                     ),
+                    if (deliveryHint(preview) case final hint?) ...[
+                      const SizedBox(height: Gap.md),
+                      Container(
+                        padding: const EdgeInsets.all(Gap.lg),
+                        decoration: BoxDecoration(
+                          color: c.warnSoft,
+                          borderRadius: R.field,
+                        ),
+                        child: Text(
+                          hint,
+                          style: TextStyle(
+                            fontSize: 13,
+                            height: 1.4,
+                            color: c.warnText,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
 
                   if (_loading)
@@ -393,7 +411,9 @@ class _CartScreenState extends State<CartScreen> {
   }
 
   int _total(CartPreview p) =>
-      p.subtotal + p.deliveryFee - _points.clamp(0, p.subtotal);
+      p.subtotal +
+      (p.deliveryAvailable ? p.deliveryFee : 0) -
+      _points.clamp(0, p.subtotal);
 
 }
 
@@ -955,7 +975,14 @@ class _Totals extends StatelessWidget {
         _row(S.goods, formatTenge(preview.subtotal), line(), line()),
         _row(
           S.delivery,
-          preview.deliveryFee == 0
+          // Доставить такую корзину нельзя — значит и цены доставки нет.
+          // Раньше тут стояли 600 ₸ и итог с ними, хотя оформить можно
+          // было только самовывоз, и человек не понимал почему.
+          _belowMin(preview)
+              ? S.deliveryFrom(formatTenge(preview.minOrder))
+              : !preview.deliveryAvailable
+              ? S.deliveryOff
+              : preview.deliveryFee == 0
               ? S.free
               : formatTenge(preview.deliveryFee),
           line(),
@@ -983,6 +1010,25 @@ class _Totals extends StatelessWidget {
     mainAxisAlignment: MainAxisAlignment.spaceBetween,
     children: [Text(label, style: l), Text(value, style: v)],
   );
+}
+
+/// Сумма меньше минимальной для доставки (при открытой доставке)
+bool _belowMin(CartPreview p) =>
+    !p.deliveryAvailable &&
+    p.availability.deliveryAvailable &&
+    p.minOrder > 0 &&
+    p.subtotal < p.minOrder;
+
+/// Почему доставки нет — одной строкой под итогом, или null
+String? deliveryHint(CartPreview p) {
+  if (p.deliveryAvailable) return null;
+  if (_belowMin(p)) {
+    return S.deliveryMinHint(
+      formatTenge(p.minOrder),
+      formatTenge(p.minOrder - p.subtotal),
+    );
+  }
+  return S.deliveryClosedHint;
 }
 
 class _Empty extends StatelessWidget {

@@ -476,6 +476,47 @@ class S {
     'Заказ в работе — обычно он у вас до $time. Если к этому времени заказа нет, напишите здесь, и кассир ответит.',
     'Тапсырыс дайындалуда — әдетте ол $time дейін сізде болады. Осы уақытқа дейін болмаса, осында жазыңыз, кассир жауап береді.',
   );
+  // ─── Доставка недоступна: почему ───────────────────────────────
+  static String deliveryFrom(String sum) => t('от $sum', '$sum бастап');
+  static String get deliveryOff => t('недоступна', 'қолжетімсіз');
+  static String deliveryMinHint(String min, String left) => t(
+    'Доставка — от $min. Добавьте ещё на $left или заберите заказ сами.',
+    'Жеткізу — $min бастап. Тағы $left қосыңыз немесе тапсырысты өзіңіз алып кетіңіз.',
+  );
+  static String deliveryMinShort(String min, String left) => t(
+    'Доставка от $min — добавьте ещё на $left',
+    'Жеткізу $min бастап — тағы $left қосыңыз',
+  );
+  static String get deliveryClosedHint => t(
+    'Доставка сейчас недоступна — только самовывоз.',
+    'Жеткізу қазір қолжетімсіз — тек өзі алып кету.',
+  );
+
+  // ─── Почему заказ отменён ──────────────────────────────────────
+  static String get cancelledUnpaid => t(
+    'Оплата в Kaspi не пришла за 30 минут, поэтому заказ отменили. Деньги не списаны.',
+    'Kaspi арқылы төлем 30 минут ішінде түспеді, сондықтан тапсырыс тоқтатылды. Ақша алынған жоқ.',
+  );
+  static String get cancelledByYou =>
+      t('Вы отменили заказ.', 'Тапсырысты өзіңіз тоқтаттыңыз.');
+  static String cancelledByCafe(String reason) => reason.isEmpty
+      ? t('Заказ отменило заведение.', 'Тапсырысты мекеме тоқтатты.')
+      : t('Заказ отменило заведение: $reason.', 'Тапсырысты мекеме тоқтатты: $reason.');
+  static String get cancelledNotAccepted => t(
+    'Заказ не приняли вовремя, поэтому его отменили.',
+    'Тапсырыс уақытында қабылданбады, сондықтан тоқтатылды.',
+  );
+  static String moneyReturned(String sum) =>
+      t('$sum вернули на Kaspi.kz.', '$sum Kaspi.kz-ке қайтарылды.');
+  static String get moneyPartlyReturned =>
+      t('Часть денег вернули на Kaspi.kz.', 'Ақшаның бір бөлігі Kaspi.kz-ке қайтарылды.');
+  static String get moneyReturning => t(
+    'Возврат оформлен — деньги придут на Kaspi.kz.',
+    'Қайтару рәсімделді — ақша Kaspi.kz-ке түседі.',
+  );
+  static String get pointsReturned =>
+      t('Списанные баллы вернулись.', 'Жұмсалған ұпайлар қайтарылды.');
+
   static String get ourMessages => t('Переписка', 'Хат алмасу');
   static String get waitingReply =>
       t('Кассир скоро ответит', 'Кассир жақында жауап береді');

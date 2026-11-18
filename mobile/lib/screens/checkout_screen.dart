@@ -9,6 +9,7 @@ import '../services/analytics.dart';
 import '../services/push_notifications.dart';
 import '../state/auth.dart';
 import '../state/cart.dart';
+import 'cart_screen.dart' show deliveryHint;
 import 'catalog_parts.dart';
 import 'login_screen.dart';
 import '../widgets/address_picker.dart';
@@ -18,6 +19,7 @@ import '../utils/haptics.dart';
 import '../utils/input_validation.dart';
 import '../widgets/motion.dart';
 import 'legal_screen.dart';
+import 'app_shell.dart';
 import 'order_screen.dart';
 import 'kaspi_payment_screen.dart';
 import '../i18n/strings.dart';
@@ -70,7 +72,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   PreorderSlot? _slot;
   List<PreorderSlot> _slots = [];
 
-  static const _changeOptions = [5000, 10000, 20000];
+  static const _changeOptions = [2000, 5000, 10000, 20000];
 
   Availability get _availability => widget.preview.availability;
 
@@ -275,6 +277,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (auth.isAuthenticated) await auth.refresh();
       if (!mounted) return;
       cart.clear();
+      AppShell.showMenu();
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => OrderScreen(order: order)),
@@ -373,6 +376,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   _loadSlots();
                 },
               ),
+              // Серая «Доставка» без объяснения выглядела как поломка.
+              // Говорим прямо: не хватает суммы или доставка закрыта.
+              if (deliveryHint(widget.preview) case final hint?) ...[
+                const SizedBox(height: Gap.sm),
+                Text(
+                  hint,
+                  style: TextStyle(fontSize: 12.5, height: 1.4, color: c.muted),
+                ),
+              ],
               const SizedBox(height: Gap.lg),
 
               // ─── Адрес ───────────────────────────────────────────

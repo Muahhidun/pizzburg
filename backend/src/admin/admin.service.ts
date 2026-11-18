@@ -311,13 +311,22 @@ export class AdminService {
     return { ok: true, count: ids.length };
   }
 
-  async orders(params: { date?: string; status?: string }) {
+  async orders(params: { date?: string; status?: string; number?: number }) {
     const tenant = await this.tenant();
     // Дата приходит как YYYY-MM-DD и означает КАЛЕНДАРНЫЙ ДЕНЬ ЗАВЕДЕНИЯ:
     // парсим по локальному времени сервера, не по UTC (иначе ночные
     // заказы попадают в соседние сутки).
     const from = new Date();
-    if (params.date) {
+    // Ссылка из Телеграма «№114»: открываем ленту за день этого заказа
+    const byNumber = params.number
+      ? await this.prisma.order.findFirst({
+          where: { tenantId: tenant.id, number: params.number },
+          select: { createdAt: true },
+        })
+      : null;
+    if (byNumber) {
+      from.setTime(byNumber.createdAt.getTime());
+    } else if (params.date) {
       const [y, m, d] = params.date.split('-').map(Number);
       from.setFullYear(y, m - 1, d);
     }

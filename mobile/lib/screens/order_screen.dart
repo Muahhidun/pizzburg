@@ -284,8 +284,57 @@ class _OrderScreenState extends State<OrderScreen> {
   /// Закрытый обсуждать поздно: смена его уже не видит, и впечатления
   /// соберёт анкета качества.
   bool get _isLive {
+    // Пока заказ не загрузился, мы не знаем, живой ли он. Раньше в эти
+    // секунду-две кнопка уже была, и по доставленному заказу можно было
+    // открыть «Что случилось?» — сервер отказывал только в конце.
+    if (_data == null) return false;
     final status = _data?['status'] ?? 'NEW';
     return status != 'DELIVERED' && status != 'CANCELLED';
+  }
+
+  /// «Написать нам» — только когда заказ уже у заведения.
+  ///
+  /// В окно бесплатной отмены заведение о заказе ещё не знает: не тот
+  /// адрес или лишняя позиция решаются кнопкой «Отменить», а пожелания
+  /// пишут в комментарии при оформлении. Неоплаченный Kaspi тоже на
+  /// кухню не ушёл — по нему писать некому.
+  bool get _canWrite => _isLive && _cancelLeft == null && !_unpaid;
+
+  /// Почему заказ отменён и что с деньгами — для экрана отмены.
+  ///
+  /// Через полчаса человек может не вспомнить, что это за заказ, а
+  /// после двух-трёх попыток оформить — тем более. Одна-две строки
+  /// снимают вопрос «а деньги?» без звонка.
+  String? get _cancelNote {
+    final d = _data;
+    if (d == null || d['status'] != 'CANCELLED') return null;
+    final by = d['cancelledBy']?.toString();
+    final reason = (d['cancelReason'] ?? '').toString().trim();
+    final kaspi = d['paymentMethod'] == 'KASPI_ONLINE';
+    final pay = d['paymentStatus']?.toString();
+    final lines = <String>[];
+    if (kaspi && pay == 'PENDING') {
+      lines.add(S.cancelledUnpaid);
+    } else if (by == 'CUSTOMER') {
+      lines.add(S.cancelledByYou);
+    } else if (by == 'SYSTEM') {
+      lines.add(S.cancelledNotAccepted);
+    } else {
+      lines.add(S.cancelledByCafe(reason));
+    }
+    if (kaspi) {
+      if (pay == 'REFUNDED') {
+        lines.add(S.moneyReturned(
+          formatTenge(((d['total'] as num?) ?? widget.order.total).toInt()),
+        ));
+      } else if (pay == 'PARTIALLY_REFUNDED') {
+        lines.add(S.moneyPartlyReturned);
+      } else if (pay == 'REFUND_PENDING') {
+        lines.add(S.moneyReturning);
+      }
+    }
+    if (((d['pointsSpent'] as num?) ?? 0) > 0) lines.add(S.pointsReturned);
+    return lines.join(' ');
   }
 
   /// Написать в заведение (DECISIONS §12.21).
@@ -465,6 +514,19 @@ class _OrderScreenState extends State<OrderScreen> {
                   ),
                 ),
               ],
+
+              if (_cancelNote case final note?)
+                Padding(
+                  padding: const EdgeInsets.only(top: Gap.md),
+                  child: Text(
+                    note,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      height: 1.45,
+                      color: c.surface.withValues(alpha: 0.75),
+                    ),
+                  ),
+                ),
 
               if (_awaitingShortage) _shortageChoice(),
 
@@ -737,7 +799,7 @@ class _OrderScreenState extends State<OrderScreen> {
                 _Thread(messages: _thread),
               ],
 
-              if (_isLive) ...[
+              if (_canWrite) ...[
                 const SizedBox(height: Gap.lg),
                 _WriteUsButton(
                   sending: _sendingMessage,

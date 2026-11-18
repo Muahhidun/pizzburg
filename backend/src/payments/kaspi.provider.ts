@@ -461,7 +461,9 @@ export class KaspiProviderCore implements PaymentProvider {
         return {
           status: "ERROR",
           errorCode: "PAYMENT_ERROR",
-          errorMessage: envelope.Message ?? "Kaspi отклонил платёж",
+          // «Error» Kaspi отдаёт и когда клиент просто не оплатил: закрыл
+          // окно оплаты или ссылка истекла. «Отклонил» пугало зря.
+          errorMessage: envelope.Message ?? "Оплата не завершена: клиент не оплатил или ссылка Kaspi истекла",
         };
       default:
         return {

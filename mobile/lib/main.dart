@@ -111,6 +111,7 @@ Future<void> main() async {
     // висит экран оплаты. Убираем его, чтобы «назад» не вёл на оплату.
     if (data['type'] == 'order_paid') {
       _navigatorKey.currentState?.popUntil((route) => route.isFirst);
+      AppShell.showMenu();
     }
     _navigatorKey.currentState?.push(
       MaterialPageRoute(

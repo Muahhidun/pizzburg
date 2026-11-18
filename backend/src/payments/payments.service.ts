@@ -414,6 +414,7 @@ export class PaymentsService {
         "SUCCEEDED",
         undefined,
         processing.requestedBy,
+        processing.idempotencyKey,
       );
       return succeeded;
     } catch (error) {
@@ -469,6 +470,7 @@ export class PaymentsService {
     outcome: "SUCCEEDED" | "RETRYING" | "STOPPED",
     error?: string,
     requestedBy?: string,
+    idempotencyKey?: string,
   ) {
     try {
       const order = await this.prisma.order.findUnique({
@@ -491,13 +493,18 @@ export class PaymentsService {
                 },
           { type: "order_refund", outcome },
         );
-        // Руководству — о возвратах, которые сделал кассир. Отмена клиентом
-        // в свою минуту ничего не стоила и попадёт в вечернюю сводку.
+        // Руководству — о возвратах, которые сделали в админке. Отмена
+        // клиентом в свою минуту ничего не стоила и попадёт в вечернюю
+        // сводку. Возврат при отмене (его делает кассир в окне отмены)
+        // видит и касса: она его и оформляла. Отдельный возврат делает
+        // только владелец — касса о нём не знает и знать не должна.
         if (requestedBy === "ADMIN") {
-          await this.telegram?.notify(
-            order.tenantId,
-            `✅ Деньги вернули: ${amount} ₸ по заказу №${order.number} зачислены клиенту на Kaspi.`,
-          );
+          const text =
+            `✅ Деньги вернули: ${amount} ₸ по заказу №${order.number} зачислены клиенту на Kaspi.`;
+          await this.telegram?.notify(order.tenantId, text);
+          if (idempotencyKey?.startsWith("order-cancel:")) {
+            await this.telegram?.notifyCashier(order.tenantId, text);
+          }
         }
         return;
       }

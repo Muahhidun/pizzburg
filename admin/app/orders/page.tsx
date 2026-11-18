@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   AdminCancelReason,
   AdminOrder,
+  AdminProfile,
   OrdersResponse,
   api,
   formatTenge,
@@ -35,6 +36,16 @@ const PAYMENT_STATUS_RU: Record<string, string> = {
   REFUNDED: 'возвращено полностью',
   REFUND_FAILED: 'возврат требует внимания',
   NOT_REQUIRED: 'оплата при получении',
+};
+
+/** Операция оплаты Kaspi — по-русски, а не кодом */
+const ATTEMPT_RU: Record<string, string> = {
+  CREATED: 'создаётся',
+  QR_TOKEN_CREATED: 'ссылка на оплату создана',
+  WAIT: 'клиент открыл оплату в Kaspi',
+  PROCESSED: 'оплачено',
+  ERROR: 'не оплачено',
+  EXPIRED: 'ссылка истекла',
 };
 
 const REFUND_STATUS_RU: Record<string, string> = {
@@ -69,16 +80,54 @@ export default function OrdersPage() {
   const [date, setDate] = useState(todayLocal);
   const [data, setData] = useState<OrdersResponse | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  // Ссылка «№114» из Телеграма или из обращений: сначала находим день
+  // этого заказа, потом живая лента идёт уже за этот день
+  const [focus, setFocus] = useState<number | null>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const n = Number(new URLSearchParams(window.location.search).get('n'));
+    if (!Number.isInteger(n) || n <= 0) {
+      setReady(true);
+      return;
+    }
+    (async () => {
+      // Кассиру лента «Заказы» закрыта — его заказ ждёт в «Кассе»
+      const me = await api.get<AdminProfile>('/admin/auth/me').catch(() => null);
+      if (me?.role === 'CASHIER') {
+        window.location.replace(`/cashier?n=${n}`);
+        return;
+      }
+      try {
+        const res = await api.get<OrdersResponse>(`/admin/orders?number=${n}`);
+        const hit = res.orders.find((o) => o.number === n);
+        setDate(res.date);
+        setData(res);
+        if (hit) {
+          setOpen(hit.id);
+          setFocus(n);
+        }
+      } finally {
+        setReady(true);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (focus === null) return;
+    document.getElementById(`order-${focus}`)?.scrollIntoView({ block: 'start' });
+  }, [focus]);
 
   const load = useCallback(async () => {
     setData(await api.get<OrdersResponse>(`/admin/orders?date=${date}`));
   }, [date]);
 
   useEffect(() => {
+    if (!ready) return;
     load();
     const t = setInterval(load, 15000); // живая лента
     return () => clearInterval(t);
-  }, [load]);
+  }, [load, ready]);
 
   return (
     <div>
@@ -108,7 +157,13 @@ export default function OrdersPage() {
 
       <ul className="space-y-2">
         {data?.orders.map((o) => (
-          <li key={o.id} className="rounded-2xl bg-white shadow-sm dark:bg-neutral-900">
+          <li
+            key={o.id}
+            id={`order-${o.number}`}
+            className={`scroll-mt-20 rounded-2xl bg-white shadow-sm dark:bg-neutral-900 ${
+              focus === o.number ? 'ring-2 ring-sky-400' : ''
+            }`}
+          >
             <button
               onClick={() => setOpen(open === o.id ? null : o.id)}
               className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 p-4 text-left"
@@ -369,10 +424,17 @@ function PaymentPanel({
       {order.payment ? (
         <>
           <p className="mt-1 text-xs text-neutral-500">
-            Операция: {order.payment.status} · {formatTenge(order.payment.amount)}
+            Операция: {ATTEMPT_RU[order.payment.status] ?? order.payment.status} ·{' '}
+            {formatTenge(order.payment.amount)}
           </p>
           {order.payment.errorMessage && (
-            <p className="mt-1 text-xs text-red-600">{order.payment.errorMessage}</p>
+            <p className="mt-1 text-xs text-red-600">
+              {/* Старые записи хранят «Kaspi отклонил платёж» — на деле
+                  клиент просто не оплатил: закрыл окно или ссылка истекла */}
+              {order.payment.errorMessage === 'Kaspi отклонил платёж'
+                ? 'Оплата не завершена: клиент не оплатил или ссылка Kaspi истекла'
+                : order.payment.errorMessage}
+            </p>
           )}
           {order.payment.refunds.length > 0 && (
             <ul className="mt-2 space-y-1 text-xs">

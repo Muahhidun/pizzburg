@@ -145,8 +145,17 @@ export class AdminController {
   }
 
   @Get('orders')
-  orders(@Query('date') date?: string, @Query('status') status?: string) {
-    return this.admin.orders({ date, status });
+  orders(
+    @Query('date') date?: string,
+    @Query('status') status?: string,
+    @Query('number') number?: string,
+  ) {
+    const n = Number(number);
+    return this.admin.orders({
+      date,
+      status,
+      number: Number.isInteger(n) && n > 0 ? n : undefined,
+    });
   }
 
   /**

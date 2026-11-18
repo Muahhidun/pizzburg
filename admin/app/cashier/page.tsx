@@ -51,6 +51,20 @@ function partLabel(part: { status: string; posterStatus: string | null }) {
 export default function CashierPage() {
   const [data, setData] = useState<CashierQueue | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Пришли по ссылке «№116» из Телеграма — подсветим этот заказ
+  const [focus, setFocus] = useState<number | null>(null);
+  useEffect(() => {
+    const n = Number(new URLSearchParams(window.location.search).get('n'));
+    if (Number.isInteger(n) && n > 0) setFocus(n);
+  }, []);
+  const focusMissing =
+    focus !== null && data !== null && !data.orders.some((o) => o.number === focus);
+  useEffect(() => {
+    if (focus === null || !data) return;
+    document.getElementById(`order-${focus}`)?.scrollIntoView({ block: 'start' });
+    // Только при первом показе: дальше лента обновляется сама
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus, data !== null]);
 
   const load = useCallback(async () => {
     try {
@@ -91,9 +105,15 @@ export default function CashierPage() {
         </p>
       )}
 
+      {focusMissing && (
+        <p className="mb-3 rounded-xl bg-sky-50 p-3 text-sm text-sky-800 dark:bg-sky-950 dark:text-sky-200">
+          Заказа №{focus} нет среди живых: он уже закрыт, отменён или ещё не оплачен.
+        </p>
+      )}
+
       <ul className="space-y-3">
         {data?.orders.map((o) => (
-          <OrderCard key={o.id} order={o} onDone={load} />
+          <OrderCard key={o.id} order={o} onDone={load} focused={o.number === focus} />
         ))}
       </ul>
     </div>
@@ -163,7 +183,15 @@ function StopRow({ name, until, release }: { name: string; until: string; releas
   return <li className="flex items-center gap-2 rounded-lg bg-amber-50 px-2 py-1.5 text-xs dark:bg-amber-950/40"><span className="min-w-0 flex-1 truncate">{name}</span><span className="text-neutral-500">до {new Date(until).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span><button onClick={() => release()} className="font-medium text-emerald-700">вернуть</button></li>;
 }
 
-function OrderCard({ order, onDone }: { order: CashierOrder; onDone: () => void }) {
+function OrderCard({
+  order,
+  onDone,
+  focused = false,
+}: {
+  order: CashierOrder;
+  onDone: () => void;
+  focused?: boolean;
+}) {
   const [picked, setPicked] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -190,8 +218,9 @@ function OrderCard({ order, onDone }: { order: CashierOrder; onDone: () => void 
 
   return (
     <li
-      className={`rounded-2xl bg-white p-4 shadow-sm dark:bg-neutral-900 ${
-        cancelled ? 'ring-2 ring-red-500' : waiting ? 'ring-2 ring-amber-400' : ''
+      id={`order-${order.number}`}
+      className={`scroll-mt-20 rounded-2xl bg-white p-4 shadow-sm dark:bg-neutral-900 ${
+        cancelled ? 'ring-2 ring-red-500' : waiting ? 'ring-2 ring-amber-400' : focused ? 'ring-2 ring-sky-400' : ''
       }`}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
