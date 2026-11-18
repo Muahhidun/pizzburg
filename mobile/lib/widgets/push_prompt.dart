@@ -78,14 +78,21 @@ class _IntroSheet extends StatelessWidget {
             width: 36,
             height: 36,
             alignment: Alignment.center,
-            decoration: BoxDecoration(color: c.accentSoft, shape: BoxShape.circle),
+            decoration: BoxDecoration(
+              color: c.accentSoft,
+              shape: BoxShape.circle,
+            ),
             child: Icon(icon, size: 18, color: c.accent),
           ),
           const SizedBox(width: Gap.md),
           Expanded(
             child: Text(
               text,
-              style: TextStyle(fontSize: 14.5, height: 1.35, color: c.onSurface),
+              style: TextStyle(
+                fontSize: 14.5,
+                height: 1.35,
+                color: c.onSurface,
+              ),
             ),
           ),
         ],
@@ -106,9 +113,9 @@ class _IntroSheet extends StatelessWidget {
         children: [
           Text(
             S.pushIntroTitle,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w800,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: Gap.sm),
           Text(
@@ -178,8 +185,13 @@ class PushOffBanner extends StatelessWidget {
     final c = context.colors;
     return Container(
       margin: const EdgeInsets.only(top: Gap.lg),
-      padding: const EdgeInsets.all(Gap.lg),
-      decoration: BoxDecoration(color: c.warnSoft, borderRadius: R.field),
+      padding: const EdgeInsets.all(20),
+      // Экран заказа всегда тёмный (фон panel, текст surface) — та же
+      // подложка, что у карточки состава, и кнопка в цвет «выгоды».
+      decoration: BoxDecoration(
+        color: c.surface.withValues(alpha: 0.1),
+        borderRadius: R.thumb,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -188,13 +200,17 @@ class PushOffBanner extends StatelessWidget {
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: c.warnText,
+              color: c.surface,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             S.pushOffOrderHint,
-            style: TextStyle(fontSize: 13, height: 1.4, color: c.warnText),
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.4,
+              color: c.surface.withValues(alpha: 0.75),
+            ),
           ),
           const SizedBox(height: Gap.md),
           PressScale(
@@ -204,13 +220,13 @@ class PushOffBanner extends StatelessWidget {
             },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(color: c.warnText, borderRadius: R.pill),
+              decoration: BoxDecoration(color: c.benefit, borderRadius: R.pill),
               child: Text(
                 S.openSettings,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: c.warnSoft,
+                  color: c.onBenefit,
                 ),
               ),
             ),
