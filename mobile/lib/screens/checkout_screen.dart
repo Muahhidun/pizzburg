@@ -6,7 +6,6 @@ import 'package:provider/provider.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
 import '../services/analytics.dart';
-import '../services/push_notifications.dart';
 import '../state/auth.dart';
 import '../state/cart.dart';
 import 'cart_screen.dart' show deliveryHint;
@@ -270,7 +269,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       //
       // Не ждём ответа: диалог всплывёт поверх экрана заказа, а переход
       // туда задерживать незачем.
-      unawaited(context.read<PushNotificationsService>().requestPermission());
+      // Разрешение спрашивает экран заказа — с пояснением (PushPrompt)
 
       Haptics.success();
       final auth = context.read<AuthState>();

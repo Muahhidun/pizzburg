@@ -10,6 +10,7 @@ import '../theme/tokens.dart';
 import '../utils/haptics.dart';
 import '../widgets/glass_nav_bar.dart';
 import '../widgets/motion.dart';
+import '../widgets/push_prompt.dart';
 import 'cart_screen.dart';
 import 'favorites_screen.dart';
 import 'menu_screen.dart';
@@ -72,6 +73,11 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     _onJump();
     _auth = context.read<AuthState>()..addListener(_maybeAskReview);
     _maybeAskReview();
+    // Первый запуск: объясняем, зачем уведомления. С паузой — сначала
+    // человек должен увидеть меню, а не окно поверх заставки.
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) PushPrompt.maybeShowIntro(context);
+    });
   }
 
   late final AuthState _auth;

@@ -8,7 +8,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
 import '../i18n/strings.dart';
-import '../services/push_notifications.dart';
 import '../state/auth.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
@@ -192,7 +191,6 @@ class _KaspiPaymentScreenState extends State<KaspiPaymentScreen>
     if (_leaving) return;
     _leaving = true;
     _stopCountdown();
-    unawaited(context.read<PushNotificationsService>().requestPermission());
     final auth = context.read<AuthState>();
     if (auth.isAuthenticated) await auth.refresh();
     if (!mounted) return;

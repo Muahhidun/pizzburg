@@ -11,6 +11,7 @@ import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../utils/haptics.dart';
 import '../widgets/motion.dart';
+import '../widgets/push_prompt.dart';
 import '../i18n/strings.dart';
 import 'kaspi_payment_screen.dart';
 
@@ -196,6 +197,14 @@ class _OrderScreenState extends State<OrderScreen> {
       if (data['status'] == 'DELIVERED' || data['status'] == 'CANCELLED') {
         await LastPlacedOrder.forget();
       }
+      // Живой заказ — момент, когда уведомления действительно нужны:
+      // объясняем и спрашиваем (один раз на заказ, см. PushPrompt)
+      if (!_pushAsked && _isLive && mounted) {
+        _pushAsked = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) PushPrompt.forOrder(context, widget.order.id);
+        });
+      }
     } catch (e) {
       // Пока заказ уже показан, молчим: следующий тик перечитает. А вот
       // если показывать нечего — говорим прямо, иначе экран врёт, что
@@ -299,6 +308,8 @@ class _OrderScreenState extends State<OrderScreen> {
   /// адрес или лишняя позиция решаются кнопкой «Отменить», а пожелания
   /// пишут в комментарии при оформлении. Неоплаченный Kaspi тоже на
   /// кухню не ушёл — по нему писать некому.
+  bool _pushAsked = false;
+
   bool get _canWrite => _isLive && _cancelLeft == null && !_unpaid;
 
   /// Почему заказ отменён и что с деньгами — для экрана отмены.
@@ -797,6 +808,10 @@ class _OrderScreenState extends State<OrderScreen> {
               // или «забыли соус», пока это ещё можно исправить.
               // Переписка видна и после закрытия заказа: ответ кассира
               // мог прийти последним, и человек открыл экран по пушу.
+              // Уведомления запрещены — честно говорим, что «готово» и
+              // ответ кассира не придут, и ведём в настройки телефона
+              if (_isLive) const PushOffBanner(),
+
               if (_thread.isNotEmpty) ...[
                 const SizedBox(height: Gap.lg),
                 _Thread(messages: _thread),

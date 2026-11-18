@@ -50,9 +50,16 @@ Future<void> main() async {
   // устарела, экран обновления закроет приложение через долю секунды.
   unawaited(appConfig.refresh());
   // Приложение месяцами живёт в памяти — проверяем и при возврате из фона
-  AppLifecycleListener(onResume: () => unawaited(appConfig.refresh()));
+  // Push объявлен ниже, поэтому слушатель — после его создания
   final auth = AuthState(api);
   final push = PushNotificationsService(api);
+  AppLifecycleListener(
+    onResume: () {
+      unawaited(appConfig.refresh());
+      // Человек мог включить уведомления в настройках телефона
+      unawaited(push.recheck());
+    },
+  );
   final favorites = Favorites(api);
   // Избранное живёт на сервере и привязано к клиенту: при входе подтягиваем,
   // при выходе гасим — иначе следующий человек на этом телефоне увидит

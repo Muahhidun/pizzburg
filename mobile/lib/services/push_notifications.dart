@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../api/api_client.dart';
 
@@ -92,6 +94,44 @@ class PushNotificationsService extends ChangeNotifier {
       debugPrint('FCM отключён: $error');
       _setStatus(PushNotificationsStatus.error, error: error);
     }
+  }
+
+  static const _settingsChannel = MethodChannel('pizzburg/settings');
+
+  /// Открыть настройки уведомлений телефона для PizzBurg.
+  ///
+  /// Если человек однажды отказал, система больше не спрашивает — включить
+  /// можно только в настройках. Ведём прямо туда, а не объясняем путь.
+  Future<void> openSystemSettings() async {
+    try {
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        await launchUrl(Uri.parse('app-settings:'));
+      } else if (defaultTargetPlatform == TargetPlatform.android) {
+        await _settingsChannel.invokeMethod('openNotificationSettings');
+      }
+    } catch (e) {
+      debugPrint('Настройки уведомлений не открылись: $e');
+    }
+  }
+
+  /// Перечитать разрешение — после возврата из настроек телефона.
+  Future<void> recheck() async {
+    final messaging = _messaging;
+    if (messaging == null) return;
+    try {
+      final permission = await messaging.getNotificationSettings();
+      if (_isGranted(permission.authorizationStatus)) {
+        if (!_permissionGranted) {
+          _permissionGranted = true;
+          await _activateMessaging();
+        }
+        _isProvisional =
+            permission.authorizationStatus == AuthorizationStatus.provisional;
+        _setStatus(PushNotificationsStatus.enabled);
+      } else if (permission.authorizationStatus == AuthorizationStatus.denied) {
+        _setStatus(PushNotificationsStatus.denied);
+      }
+    } catch (_) {}
   }
 
   /// Должен вызываться напрямую из обработчика нажатия: Safari блокирует

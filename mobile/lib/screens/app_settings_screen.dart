@@ -253,6 +253,8 @@ class _PushRow extends StatelessWidget {
     final canAsk =
         status == PushNotificationsStatus.notRequested ||
         status == PushNotificationsStatus.error;
+    // Отказ системой больше не переспрашивается — ведём в настройки
+    final denied = status == PushNotificationsStatus.denied;
 
     return Container(
       margin: const EdgeInsets.only(bottom: Gap.block),
@@ -275,11 +277,15 @@ class _PushRow extends StatelessWidget {
               ],
             ),
           ),
-          if (canAsk)
+          if (canAsk || denied)
             PressScale(
               onTap: () async {
                 Haptics.tap();
-                await push.requestPermission();
+                if (denied) {
+                  await push.openSystemSettings();
+                } else {
+                  await push.requestPermission();
+                }
               },
               child: Container(
                 padding: const EdgeInsets.symmetric(
