@@ -1085,10 +1085,20 @@ export class OrdersService {
 
     if (firstSend && sentNow > 0) {
       try {
-        await this.telegram.notifyCashier(
+        const posted = await this.telegram.notifyCashier(
           order.tenantId,
           newOrderMessage(order, liveItems),
+          undefined,
+          { links: false },
         );
+        // Запоминаем, где лежит сообщение: «№N» в других сообщениях бота
+        // будет вести прямо на него
+        if (posted.messageId && posted.chatId) {
+          await this.prisma.order.update({
+            where: { id: order.id },
+            data: { cashierChatId: posted.chatId, cashierMessageId: posted.messageId },
+          });
+        }
       } catch (e) {
         this.logger.warn(`Сообщение о заказе №${order.number} не ушло: ${e}`);
       }

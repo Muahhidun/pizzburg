@@ -68,6 +68,7 @@ function serviceWith({
       sent.push({ text, keyboard });
       return { sent: true, chatId: '-100', messageId: 77 };
     },
+    linkOrders: async (_t: string, text: string) => text,
     call: async (_t: string, method: string, payload: Record<string, unknown>) => {
       calls.push({ method, payload });
       return { error: null };

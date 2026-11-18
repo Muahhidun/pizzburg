@@ -169,7 +169,7 @@ export class TelegramService {
   async notify(tenantId: string, text: string) {
     const s = await this.settings(tenantId);
     if (!s.enabled || !s.botToken || !s.chatId) return { sent: false };
-    const { error } = await this.deliver(s, text);
+    const { error } = await this.deliver(s, await this.linkOrders(tenantId, text));
     if (error) {
       this.logger.warn(`Телеграм не принял сообщение: ${error}`);
       return { sent: false };
@@ -191,9 +191,12 @@ export class TelegramService {
     tenantId: string,
     text: string,
     keyboard?: InlineButton[][],
+    opts: { links?: boolean } = {},
   ): Promise<{ sent: boolean; chatId?: string; messageId?: number }> {
     const s = await this.settings(tenantId);
     if (!s.enabled || !s.botToken || !s.cashierChatId) return { sent: false };
+    // Сообщение о самом заказе на себя не ссылается
+    if (opts.links !== false) text = await this.linkOrders(tenantId, text);
     const { error, messageId } = await this.deliver(
       { ...s, chatId: s.cashierChatId },
       text,
@@ -241,6 +244,25 @@ export class TelegramService {
     });
   }
 
+  /**
+   * Номера заказов в тексте — ссылками на сообщение о заказе в группе
+   * кассиров: нажал «№118» — и Телеграм прокрутил к самому заказу, листать
+   * чат не нужно. Если сообщения нет (старый заказ, не дошло) — ссылка
+   * на заказ в админке.
+   */
+  async linkOrders(tenantId: string, text: string): Promise<string> {
+    const numbers = [...text.matchAll(/№(\d+)/g)].map((m) => Number(m[1]));
+    if (numbers.length === 0) return text;
+    const orders = await this.prisma.order.findMany({
+      where: { tenantId, number: { in: numbers } },
+      select: { number: true, cashierChatId: true, cashierMessageId: true },
+    });
+    const byNumber = new Map(
+      orders.map((o) => [o.number, telegramMessageUrl(o.cashierChatId, o.cashierMessageId)]),
+    );
+    return linkOrderNumbers(text, adminBaseUrl(), (n) => byNumber.get(n) ?? null);
+  }
+
   private async deliver(
     s: TelegramSettings,
     text: string,
@@ -248,7 +270,7 @@ export class TelegramService {
   ): Promise<{ error: string | null; messageId?: number }> {
     const { error, result } = await this.request(s.botToken, 'sendMessage', {
       chat_id: s.chatId,
-      text: linkOrderNumbers(text),
+      text,
       parse_mode: 'HTML',
       disable_web_page_preview: true,
       ...extra,
@@ -340,8 +362,25 @@ export function adminBaseUrl(): string {
  * номер, и ссылка вела бы на чужой заказ. Уже оформленные ссылки не
  * трогаем.
  */
-export function linkOrderNumbers(text: string, base = adminBaseUrl()): string {
-  if (!base || !text.includes('№')) return text;
+/**
+ * Ссылка на сообщение в группе. Работает только для супергрупп (id
+ * начинается с -100): у них есть внутренние ссылки t.me/c/…, открывающие
+ * чат на нужном сообщении. Видят её только участники группы.
+ */
+export function telegramMessageUrl(
+  chatId: string | null | undefined,
+  messageId: number | null | undefined,
+): string | null {
+  if (!chatId || !messageId || !/^-100\d+$/.test(chatId)) return null;
+  return `https://t.me/c/${chatId.slice(4)}/${messageId}`;
+}
+
+export function linkOrderNumbers(
+  text: string,
+  base = adminBaseUrl(),
+  messageUrl: (n: number) => string | null = () => null,
+): string {
+  if (!text.includes('№')) return text;
   return text
     .split(/(<a\b[^>]*>.*?<\/a>)/is)
     .map((chunk) =>
@@ -349,8 +388,10 @@ export function linkOrderNumbers(text: string, base = adminBaseUrl()): string {
         ? chunk
         : chunk.replace(
             /(^|[^\p{L}])(?<!чек\s)(?<!ЧЕК\s)(?<!Чек\s)№(\d+)(?![\d\/-])/gu,
-            (_m, pre: string, n: string) =>
-              `${pre}<a href="${base}/orders?n=${n}">№${n}</a>`,
+            (m: string, pre: string, n: string) => {
+              const url = messageUrl(Number(n)) ?? (base ? `${base}/orders?n=${n}` : null);
+              return url ? `${pre}<a href="${url}">№${n}</a>` : m;
+            },
           ),
     )
     .join('');

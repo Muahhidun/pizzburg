@@ -723,6 +723,9 @@ model Order {
   cancelledBy        String?
   /// Напоминаний «заказ не принят» уже отправлено: 1 — кассе, 2 — руководству
   acceptReminders    Int           @default(0)
+  /// Сообщение о заказе в группе кассиров — на него ведут ссылки «№N»
+  cashierChatId      String?
+  cashierMessageId   Int?
   cancelledAt        DateTime?
   /// Версии документов, действовавшие при оформлении — доказательство
   /// согласия именно на эту редакцию

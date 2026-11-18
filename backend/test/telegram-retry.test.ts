@@ -16,6 +16,7 @@ function serviceWith(responses: (() => Response | never)[]) {
         },
       }),
     },
+    order: { findMany: async () => [] },
   };
   const service = new TelegramService(prisma as never);
   const bodies: { chat_id: string; text: string }[] = [];

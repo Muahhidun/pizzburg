@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { esc, InlineButton, linkOrderNumbers, TelegramService } from '../telegram/telegram.service';
+import { esc, InlineButton, TelegramService } from '../telegram/telegram.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { messageSettingsOf } from '../availability/availability.service';
 
@@ -337,7 +337,8 @@ export class OrderMessagesService {
         // Ссылку на заказ ставим только в вопрос: ответ кассира — это
         // её собственный текст, номера в нём не трогаем
         text:
-          linkOrderNumbers(
+          (await this.telegram.linkOrders(
+            order.tenantId,
             questionText(
               order.number,
               MESSAGE_TOPICS[message.topic] ?? message.topic,
@@ -345,7 +346,7 @@ export class OrderMessagesService {
               order.customer?.phone,
               where,
             ),
-          ) +
+          )) +
           `\n\n↩️ <b>${esc(answeredBy)}</b>, ${hhmm(now, order.tenant?.settings)}: ${esc(text)}`,
       });
       if (error) this.logger.warn(`Не переписали вопрос в группе: ${error}`);
