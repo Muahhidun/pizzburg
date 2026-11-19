@@ -1,6 +1,6 @@
 'use client';
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3210';
+export const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3210';
 const TOKEN_KEY = 'pizzburg_admin_token';
 
 export function getToken(): string | null {

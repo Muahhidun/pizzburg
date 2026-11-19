@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Settings, TelegramSettings, WoltDriveSettings, api, formatTenge } from '@/lib/api';
+import { Settings, TelegramSettings, WoltDriveSettings, BASE, api, formatTenge } from '@/lib/api';
 
 export default function SettingsPage() {
   const [data, setData] = useState<Settings | null>(null);
@@ -620,6 +620,19 @@ function WoltDriveSection() {
     finally { setBusy(false); }
   }
 
+  // Wolt присылает статусы курьера на наш публичный адрес. Сохранённые
+  // поля нужны на сервере: регистрация идёт по Merchant ID и ключу из базы.
+  async function connectWebhook() {
+    setBusy(true); setError(''); setNote('');
+    try {
+      const next = await api.post<WoltDriveSettings>('/admin/settings/wolt-drive/webhook', {
+        callbackUrl: `${BASE}/wolt-drive/webhooks`,
+      });
+      setState(next); setNote('Статусы Wolt подключены');
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  }
+
   if (!state) return error ? <p className="text-sm text-red-600">{error}</p> : null;
   const enabledValid = mode === 'disabled' ||
     ((state.merchantKeyConfigured || merchantKey.trim().length > 0) && venueId.trim() && city.trim());
@@ -629,7 +642,7 @@ function WoltDriveSection() {
       <div><h2 className="font-semibold">Wolt Drive · резервный курьер</h2><p className="mt-1 max-w-2xl text-sm text-neutral-500">Вызов идёт только из экрана «Касса»: сначала цена и ETA, затем отдельное подтверждение.</p></div>
       <span className={`rounded-lg px-2 py-1 text-xs font-medium ${state.ready ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800'}`}>{state.ready ? (state.mode === 'test' ? 'тестовый режим' : 'боевой режим') : 'выключен'}</span>
     </div>
-    <p className="mt-3 rounded-xl bg-sky-50 px-3 py-2 text-sm text-sky-800 dark:bg-sky-950 dark:text-sky-200">Сейчас нужны выданные Wolt <b>development Merchant Key</b> и <b>test Venue ID</b>. В публичной инструкции их нет.</p>
+    {state.ready && !state.webhookConfigured && <p className="mt-3 rounded-xl bg-sky-50 px-3 py-2 text-sm text-sky-800 dark:bg-sky-950 dark:text-sky-200">Статусы курьера ещё не подключены: касса не увидит, что курьер назначен, забрал и доставил. Нажмите «Подключить статусы».</p>}
     {state.webhookConfigured && <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">Webhook статусов подключён: {state.webhookCallbackUrl}</p>}
     <div className="mt-4 grid gap-3 sm:grid-cols-2">
       <label className="text-sm">Режим
@@ -655,7 +668,7 @@ function WoltDriveSection() {
     </div>
     <p className="mt-3 rounded-xl bg-neutral-50 px-3 py-2 text-sm text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">Лимит цены Wolt задаётся автоматически: заказ меньше 6 000 ₸ — 1 200 ₸; от 6 000 до 7 999 ₸ — 1 500 ₸; от 8 000 ₸ — 2 000 ₸.</p>
     {mode === 'production' && <p className="mt-3 text-sm text-red-600">Боевой режим включайте только после тестов и выдачи production-ключа Wolt.</p>}
-    <div className="mt-4 flex items-center gap-3"><button onClick={save} disabled={busy || !enabledValid} className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-40 dark:bg-white dark:text-black">{busy ? 'Сохраняем…' : 'Сохранить Wolt Drive'}</button>{note && <span className="text-sm text-emerald-600">{note}</span>}</div>
+    <div className="mt-4 flex items-center gap-3"><button onClick={save} disabled={busy || !enabledValid} className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-40 dark:bg-white dark:text-black">{busy ? 'Сохраняем…' : 'Сохранить Wolt Drive'}</button>{state.ready && !state.webhookConfigured && <button onClick={connectWebhook} disabled={busy || !state.merchantId} title={state.merchantId ? undefined : 'Сначала сохраните Merchant ID'} className="rounded-xl border border-black/10 px-4 py-2 text-sm font-medium disabled:opacity-40 dark:border-white/15">Подключить статусы</button>}{note && <span className="text-sm text-emerald-600">{note}</span>}</div>
     {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
   </section>;
 }

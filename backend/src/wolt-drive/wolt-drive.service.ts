@@ -160,6 +160,18 @@ export class WoltDriveService {
     }
 
     await this.prisma.tenant.findUniqueOrThrow({ where: { id: tenantId } });
+    // Webhook живёт у конкретного мерчанта в конкретном контуре Wolt
+    // (тест и бой — разные серверы). Сменили контур или мерчанта —
+    // старая регистрация к новым доступам не относится, иначе кнопка
+    // «Подключить статусы» навсегда упрётся в «уже зарегистрирован».
+    const merchantId = dto.merchantId?.trim() || null;
+    const webhookStale =
+      current?.webhookId &&
+      (current.merchantId !== merchantId ||
+        // «Выключен» контур не меняет: включили обратно — та же регистрация
+        (current.mode !== 'disabled' &&
+          dto.mode !== 'disabled' &&
+          current.mode !== dto.mode));
     await this.prisma.woltDriveAccount.upsert({
       where: { tenantId },
       create: {
@@ -174,10 +186,13 @@ export class WoltDriveService {
       update: {
         mode: dto.mode,
         merchantKey,
-        merchantId: dto.merchantId?.trim() || null,
+        merchantId,
         venueId,
         city,
         postCode: dto.postCode?.trim() || null,
+        ...(webhookStale
+          ? { webhookId: null, webhookSecret: null, webhookCallbackUrl: null }
+          : {}),
       },
     });
     return this.publicSettings(tenantId);
@@ -429,11 +444,6 @@ export class WoltDriveService {
 
   async registerWebhook(tenantId: string, callbackUrl: string) {
     const { account, config } = await this.config(tenantId);
-    if (config.mode !== 'test') {
-      throw new BadRequestException(
-        'Регистрация webhook пока разрешена только в тестовом контуре',
-      );
-    }
     if (!account.merchantId) {
       throw new BadRequestException('Для webhook нужен Merchant ID');
     }
@@ -609,7 +619,7 @@ export class WoltDriveService {
       !account.city
     ) {
       throw new ServiceUnavailableException(
-        'Wolt Drive ещё не настроен: нужны тестовые Merchant Key и Venue ID',
+        'Wolt Drive ещё не настроен: нужны Merchant Key, Venue ID и город',
       );
     }
     const mode = account.mode as WoltDriveMode;
