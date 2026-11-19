@@ -702,7 +702,8 @@ class _OrderScreenState extends State<OrderScreen> {
                 // Дальше шкалы нет, поэтому вместо неё — что будет
                 // происходить. Пустое ожидание без объяснения читается как
                 // «о заказе забыли».
-                if (current >= 1) ...[
+                // У выданного заказа «готовят, позвоним» уже неправда
+                if (current >= 1 && status != 'DELIVERED') ...[
                   const SizedBox(height: 18),
                   Text(
                     _data?['type'] == 'PICKUP'
