@@ -307,6 +307,12 @@ class S {
     'Тапсырыста акция бар — оған ұпай қосылмайды. Ұпай жұмсағыңыз келсе, акцияны алып тастаңыз.',
   );
   static String get dontSpend => t('Не списывать', 'Жұмсамау');
+  static String pointsPhoneMismatch(String phone) => t(
+    'Баллы списываются только при заказе на номер вашего аккаунта $phone. Верните его или оформите без баллов.',
+    'Ұпайлар тек аккаунтыңыздың $phone нөміріне тапсырыс бергенде жұмсалады. Нөмірді қайтарыңыз немесе ұпайсыз рәсімдеңіз.',
+  );
+  static String get useMyPhone => t('Вернуть мой номер', 'Нөмірімді қайтару');
+  static String get orderWithoutPoints => t('Без баллов', 'Ұпайсыз');
   static String get maximum => t('Максимум', 'Барынша');
   static String get goods => t('Товары', 'Тауарлар');
   static String get free => t('бесплатно', 'тегін');
@@ -510,15 +516,20 @@ class S {
       t('Вы отменили заказ.', 'Тапсырысты өзіңіз тоқтаттыңыз.');
   static String cancelledByCafe(String reason) => reason.isEmpty
       ? t('Заказ отменило заведение.', 'Тапсырысты мекеме тоқтатты.')
-      : t('Заказ отменило заведение: $reason.', 'Тапсырысты мекеме тоқтатты: $reason.');
+      : t(
+          'Заказ отменило заведение: $reason.',
+          'Тапсырысты мекеме тоқтатты: $reason.',
+        );
   static String get cancelledNotAccepted => t(
     'Заказ не приняли вовремя, поэтому его отменили.',
     'Тапсырыс уақытында қабылданбады, сондықтан тоқтатылды.',
   );
   static String moneyReturned(String sum) =>
       t('$sum вернули на Kaspi.kz.', '$sum Kaspi.kz-ке қайтарылды.');
-  static String get moneyPartlyReturned =>
-      t('Часть денег вернули на Kaspi.kz.', 'Ақшаның бір бөлігі Kaspi.kz-ке қайтарылды.');
+  static String get moneyPartlyReturned => t(
+    'Часть денег вернули на Kaspi.kz.',
+    'Ақшаның бір бөлігі Kaspi.kz-ке қайтарылды.',
+  );
   static String get moneyReturning => t(
     'Возврат оформлен — деньги придут на Kaspi.kz.',
     'Қайтару рәсімделді — ақша Kaspi.kz-ке түседі.',
@@ -642,15 +653,14 @@ class S {
     'Жарнаманы сирек және тек қажет болғанда жібереміз.',
   );
   static String get notNow => t('Не сейчас', 'Қазір емес');
-  static String get pushOffOrderTitle => t(
-    'Уведомления выключены',
-    'Хабарламалар өшірулі',
-  );
+  static String get pushOffOrderTitle =>
+      t('Уведомления выключены', 'Хабарламалар өшірулі');
   static String get pushOffOrderHint => t(
     'Вы не узнаете, когда заказ будет готов и что ответило заведение.',
     'Тапсырыс қашан дайын болатынын және мекеме не жауап бергенін білмейсіз.',
   );
-  static String get openSettings => t('Включить в настройках', 'Баптаулардан қосу');
+  static String get openSettings =>
+      t('Включить в настройках', 'Баптаулардан қосу');
 
   // ── Адрес ──
   static String get pickStreetFromHints => t(

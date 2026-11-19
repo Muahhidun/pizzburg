@@ -33,6 +33,7 @@ class _OrderScreenState extends State<OrderScreen> {
   Availability? _availability;
   Timer? _timer;
   Timer? _countdown;
+  bool _cancelWasOpen = false;
   bool _cancelling = false;
   bool _answering = false;
   int _lastStage = -1;
@@ -71,10 +72,20 @@ class _OrderScreenState extends State<OrderScreen> {
     _countdown = Timer.periodic(const Duration(seconds: 1), (_) {
       // Сюда же обратный отсчёт паузы между обращениями: он тикает
       // локально, срок известен заранее, сервер дёргать незачем.
-      if (mounted &&
-          (_awaitingShortage || _cancelLeft != null || _messageWait != null)) {
+      if (!mounted) return;
+      final cancelOpen = _cancelLeft != null;
+      // Окно отмены только что закрылось: последний кадр показывал «0 с»,
+      // и без этой перерисовки экран так и застывал. Перерисовываем и
+      // сразу спрашиваем сервер — заказ как раз ушёл заведению.
+      final cancelJustClosed = _cancelWasOpen && !cancelOpen;
+      _cancelWasOpen = cancelOpen;
+      if (_awaitingShortage ||
+          cancelOpen ||
+          _messageWait != null ||
+          cancelJustClosed) {
         setState(() {});
       }
+      if (cancelJustClosed) _load();
     });
   }
 

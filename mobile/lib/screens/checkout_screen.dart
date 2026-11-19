@@ -187,7 +187,26 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       (_type == 'DELIVERY' ? widget.preview.deliveryFee : 0) -
       _points.clamp(0, widget.preview.subtotal);
 
+  static String _digits10(String raw) {
+    final d = raw.replaceAll(RegExp(r'\D'), '');
+    return d.length > 10 ? d.substring(d.length - 10) : d;
+  }
+
+  /// Баллы принадлежат номеру аккаунта, и сервер списывает их только
+  /// при заказе на этот номер. Сменили телефон в форме — говорим об этом
+  /// сразу у поля, а не отказом после «Заказать».
+  bool get _pointsPhoneMismatch {
+    if (_points <= 0) return false;
+    final auth = context.read<AuthState>();
+    if (!auth.isAuthenticated || auth.phone.isEmpty) return false;
+    return _digits10(_phone.text) != _digits10(auth.phone);
+  }
+
   Future<void> _submit() async {
+    if (_pointsPhoneMismatch) {
+      await Haptics.warning();
+      return;
+    }
     // Сначала проверяем уже заполненную форму. Иначе гость с опечаткой в
     // адресе или телефоне попадал на вход, а ошибку видел только после SMS.
     if (!_formKey.currentState!.validate()) {
@@ -502,6 +521,51 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     ),
                   ),
                 ],
+              ),
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _phone,
+                builder: (context, _, _) {
+                  if (!_pointsPhoneMismatch) return const SizedBox.shrink();
+                  final own = formatKzPhone(context.read<AuthState>().phone);
+                  return Container(
+                    margin: const EdgeInsets.only(top: Gap.md),
+                    padding: const EdgeInsets.all(Gap.lg),
+                    decoration: BoxDecoration(
+                      color: c.accentSoft,
+                      borderRadius: R.field,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          S.pointsPhoneMismatch(own),
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            height: 1.4,
+                            color: c.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: Gap.md),
+                        Wrap(
+                          spacing: Gap.sm,
+                          runSpacing: Gap.sm,
+                          children: [
+                            _Chip(
+                              label: S.useMyPhone,
+                              selected: true,
+                              onTap: () => setState(() => _phone.text = own),
+                            ),
+                            _Chip(
+                              label: S.orderWithoutPoints,
+                              selected: false,
+                              onTap: () => setState(() => _points = 0),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
 
               // ─── Время ───────────────────────────────────────────
