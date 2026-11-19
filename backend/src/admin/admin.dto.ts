@@ -15,6 +15,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -108,6 +109,12 @@ export class UpdateSettingsDto {
   /// ограничения. Ноль не принимаем: «запретить списание совсем» — это
   /// отдельное решение, а не опечатка в поле процента.
   @IsOptional() @IsInt() @Min(1) @Max(100) maxSpendPct?: number;
+
+  /// Подарок за вход в приложение, баллов. 0 — акция выключена.
+  @IsOptional() @IsInt() @Min(0) @Max(100_000) welcomeBonusAmount?: number;
+  /// Последний день акции YYYY-MM-DD включительно; null — без срока
+  @IsOptional() @ValidateIf((_, v) => v !== null) @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  welcomeBonusUntil?: string | null;
 }
 
 /** Аварийный режим приёма заказов и сообщения клиенту */

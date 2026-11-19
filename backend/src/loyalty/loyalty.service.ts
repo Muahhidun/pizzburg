@@ -266,6 +266,101 @@ export class LoyaltyService {
     return result;
   }
 
+  /**
+   * Подарок за вход в приложение: `settings.loyalty.welcomeBonus`
+   * = { amount, until }. `until` — последний день акции (YYYY-MM-DD,
+   * включительно, по часовому поясу заведения); null — без срока.
+   * amount = 0 — акция выключена.
+   */
+  welcomeBonus(settings: Prisma.JsonValue): { amount: number; until: string | null } {
+    const raw = (settings as any)?.loyalty?.welcomeBonus ?? {};
+    const amount = Number(raw.amount);
+    const until =
+      typeof raw.until === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.until)
+        ? raw.until
+        : null;
+    return {
+      amount: Number.isInteger(amount) && amount > 0 ? amount : 0,
+      until,
+    };
+  }
+
+  /** Сегодняшняя дата заведения в виде YYYY-MM-DD */
+  private localDate(settings: Prisma.JsonValue, now = new Date()) {
+    const tz = (settings as any)?.timezone || 'Asia/Almaty';
+    // en-CA форматирует дату как YYYY-MM-DD
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(now);
+  }
+
+  /**
+   * Начисляет подарок за вход, если акция идёт и клиент его ещё не
+   * получал. Вызывается при входе и при каждом открытии профиля: так
+   * подарок получают и те, кто вошёл в приложение до начала акции.
+   *
+   * Отметка и баланс меняются одним условным UPDATE: два параллельных
+   * запроса не начислят подарок дважды.
+   *
+   * Возвращает начисленную сумму (0 — ничего не начислено).
+   */
+  async grantWelcomeBonus(customerId: string, now = new Date()) {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      select: {
+        tenantId: true,
+        welcomeBonusAt: true,
+        deletedAt: true,
+        tenant: { select: { settings: true } },
+      },
+    });
+    if (!customer || customer.welcomeBonusAt || customer.deletedAt) return 0;
+    const settings = customer.tenant.settings;
+    const { amount, until } = this.welcomeBonus(settings);
+    if (amount === 0) return 0;
+    if (until && this.localDate(settings, now) > until) return 0;
+
+    const granted = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.customer.updateMany({
+        where: { id: customerId, welcomeBonusAt: null, deletedAt: null },
+        data: { welcomeBonusAt: now, pointsBalance: { increment: amount } },
+      });
+      if (updated.count !== 1) return false;
+      await tx.loyaltyTransaction.create({
+        data: {
+          tenantId: customer.tenantId,
+          customerId,
+          type: 'ADJUST',
+          amount,
+          comment: 'Подарок за вход в приложение',
+        },
+      });
+      return true;
+    });
+    if (!granted) return 0;
+
+    // Сразу после первого входа устройства ещё нет — пуш дойдёт только
+    // тем, кто пользовался приложением до акции. Остальные увидят баланс.
+    await this.notifications.sendToCustomer(
+      customerId,
+      (lang) => ({
+        title:
+          lang === 'kk'
+            ? `Сізге ${amount} ұпай сыйлық`
+            : `Вам подарок — ${amount} ${pointsWord(amount)}`,
+        body:
+          lang === 'kk'
+            ? 'Ұпаймен келесі тапсырыстың бір бөлігін төлеңіз.'
+            : 'Оплатите ими часть следующего заказа.',
+      }),
+      { type: 'loyalty_adjust', amount: String(amount) },
+    );
+    return amount;
+  }
+
   async onStatusChanged(orderId: string, status: OrderStatus) {
     if (status === 'DELIVERED') return this.earnForDeliveredOrder(orderId);
     if (status === 'CANCELLED') return this.refundCancelledOrder(orderId);

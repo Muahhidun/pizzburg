@@ -230,7 +230,8 @@ export default function LoyaltyPage() {
             </div>
           </section>
 
-          <MaxSpendSection />
+          <WelcomeBonusSection />
+      <MaxSpendSection />
         </>
       )}
     </main>
@@ -307,6 +308,115 @@ function MaxSpendSection() {
       <p className="mt-2 text-xs text-neutral-400">
         Например, при {pct || 100}% в заказе на 1 100 ₸ баллами закроется не
         больше {Math.floor((1100 * (Number(pct) || 100)) / 100)} ₸.
+      </p>
+      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+    </section>
+  );
+}
+
+/**
+ * Подарок за вход в приложение.
+ *
+ * Начисляется сам: при входе по номеру или при открытии профиля, один раз
+ * на клиента. Так получают его и новые клиенты, и те, кто перешёл из
+ * старого приложения, и те, кто вошёл ещё до начала акции.
+ */
+function WelcomeBonusSection() {
+  const [amount, setAmount] = useState('');
+  const [until, setUntil] = useState('');
+  const [saved, setSaved] = useState<{ amount: string; until: string } | null>(null);
+  const [granted, setGranted] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const s = await api.get<Settings>('/admin/settings');
+    const wb = s.settings.loyalty?.welcomeBonus ?? {};
+    const next = { amount: String(wb.amount ?? 0), until: wb.until ?? '' };
+    setSaved(next);
+    setAmount(next.amount);
+    setUntil(next.until);
+    setGranted(s.welcomeBonusGranted ?? 0);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const valid = /^\d+$/.test(amount) && Number(amount) <= 100_000;
+
+  async function save() {
+    if (!valid) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.patch('/admin/settings', {
+        welcomeBonusAmount: Number(amount),
+        welcomeBonusUntil: until || null,
+      });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (saved === null) return null;
+  const on = Number(saved.amount) > 0;
+  const changed = amount !== saved.amount || until !== saved.until;
+
+  return (
+    <section className="mt-8 rounded-2xl bg-white p-5 shadow-sm dark:bg-neutral-900">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="font-semibold">Подарок за вход в приложение</h2>
+        <span
+          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+            on ? 'bg-emerald-100 text-emerald-700' : 'bg-neutral-100 text-neutral-500'
+          }`}
+        >
+          {on ? 'Идёт' : 'Выключен'}
+        </span>
+      </div>
+      <p className="mt-1 max-w-2xl text-sm text-neutral-500">
+        Баллы начисляются сами, один раз на номер телефона: при входе в
+        приложение или при открытии профиля. Тратятся как обычные баллы —
+        в пределах потолка ниже. 0 — подарок выключен.
+      </p>
+
+      <div className="mt-3 flex flex-wrap items-end gap-3">
+        <label>
+          <span className="mb-1 block text-sm font-medium">Баллов</span>
+          <input
+            type="number"
+            min={0}
+            max={100000}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className="w-32 rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
+          />
+        </label>
+        <label>
+          <span className="mb-1 block text-sm font-medium">Последний день</span>
+          <input
+            type="date"
+            value={until}
+            onChange={(e) => setUntil(e.target.value)}
+            className="rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
+          />
+        </label>
+        <button
+          onClick={save}
+          disabled={busy || !valid || !changed}
+          className="rounded-lg bg-black px-3 py-2 text-sm text-white disabled:opacity-40 dark:bg-white dark:text-black"
+        >
+          {busy ? 'Сохраняем…' : 'Сохранить'}
+        </button>
+      </div>
+
+      <p className="mt-2 text-xs text-neutral-400">
+        {until ? `Включительно, по времени заведения.` : 'Без даты — пока не выключите.'}{' '}
+        Получили подарок: {granted.toLocaleString('ru-RU')} клиентов.
       </p>
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
     </section>

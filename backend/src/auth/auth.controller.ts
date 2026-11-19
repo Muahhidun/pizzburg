@@ -163,8 +163,22 @@ export class AuthController {
   }
 
   @Post(':tenantSlug/verify')
-  verify(@Param('tenantSlug') tenantSlug: string, @Body() dto: VerifyOtpDto) {
-    return this.auth.verifyOtp(tenantSlug, dto.phone, dto.code);
+  async verify(@Param('tenantSlug') tenantSlug: string, @Body() dto: VerifyOtpDto) {
+    const result = await this.auth.verifyOtp(tenantSlug, dto.phone, dto.code);
+    // Подарок за вход — сразу, чтобы баланс в ответе уже его включал
+    const bonus = await this.welcomeBonus(result.customer.id);
+    if (bonus > 0) result.customer.pointsBalance += bonus;
+    return result;
+  }
+
+  /** Подарок за вход не должен ронять вход или профиль */
+  private async welcomeBonus(customerId: string) {
+    try {
+      return await this.loyalty.grantWelcomeBonus(customerId);
+    } catch (e) {
+      console.error('welcome bonus failed', e);
+      return 0;
+    }
   }
 
   /** Сохранённые адреса клиента — самые свежие сверху */
@@ -248,6 +262,8 @@ export class AuthController {
   @Get('me')
   @UseGuards(CustomerAuthGuard)
   async me(@Req() req: any) {
+    // До чтения профиля: начисленный подарок сразу виден в балансе
+    await this.welcomeBonus(req.customer.sub);
     const customer = await this.prisma.customer.findUnique({
       where: { id: req.customer.sub },
       select: {

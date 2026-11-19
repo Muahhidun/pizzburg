@@ -529,6 +529,8 @@ export interface Settings {
       earnOnPromotionalOrders?: boolean;
       /// Доля стоимости товаров, которую можно закрыть баллами, %
       maxSpendPct?: number;
+      /// Подарок за вход в приложение: amount 0 — выключен
+      welcomeBonus?: { amount?: number; until?: string | null };
     };
     ordering?: {
       mode?: OrderingMode;
@@ -551,6 +553,8 @@ export interface Settings {
     isActive: boolean;
   }[];
   availabilityNow: AvailabilityNow;
+  /// Сколько клиентов уже получили подарок за вход
+  welcomeBonusGranted?: number;
 }
 
 export const WEEKDAY_LABELS: { key: WeekdayKey; label: string }[] = [

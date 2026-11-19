@@ -831,15 +831,20 @@ export class AdminService {
 
   async settings() {
     const tenant = await this.tenant();
-    const [venues, accounts] = await Promise.all([
+    const [venues, accounts, welcomeBonusGranted] = await Promise.all([
       this.prisma.venue.findMany({ where: { tenantId: tenant.id } }),
       this.prisma.posterAccount.findMany({
         where: { tenantId: tenant.id },
         orderBy: { sortOrder: 'asc' },
         select: { id: true, name: true, sortOrder: true, isActive: true },
       }),
+      // Сколько клиентов получили подарок за вход — мерило перехода
+      this.prisma.customer.count({
+        where: { tenantId: tenant.id, welcomeBonusAt: { not: null } },
+      }),
     ]);
     return {
+      welcomeBonusGranted,
       tenant: { id: tenant.id, slug: tenant.slug, name: tenant.name },
       settings: tenant.settings,
       venues,
@@ -859,6 +864,8 @@ export class AdminService {
       allowPointsWithPromotions,
       earnOnPromotionalOrders,
       maxSpendPct,
+      welcomeBonusAmount,
+      welcomeBonusUntil,
       ...deliveryPatch
     } = dto;
     const delivery = { ...(current.delivery ?? {}), ...deliveryPatch };
@@ -874,6 +881,13 @@ export class AdminService {
         : {}),
       ...(maxSpendPct !== undefined ? { maxSpendPct } : {}),
     };
+    if (welcomeBonusAmount !== undefined || welcomeBonusUntil !== undefined) {
+      loyalty.welcomeBonus = {
+        ...(current.loyalty?.welcomeBonus ?? {}),
+        ...(welcomeBonusAmount !== undefined ? { amount: welcomeBonusAmount } : {}),
+        ...(welcomeBonusUntil !== undefined ? { until: welcomeBonusUntil } : {}),
+      };
+    }
     if (
       delivery.freeFrom > 0 &&
       delivery.minOrder > 0 &&
