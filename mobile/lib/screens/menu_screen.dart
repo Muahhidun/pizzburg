@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show SynchronousFuture;
 import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import '../api/api_client.dart';
@@ -191,10 +192,18 @@ class _MenuScreenState extends State<MenuScreen> {
   /// id адреса, выбранного человеком; null — берём первый сохранённый
   String? _selectedAddressId;
 
+  /// Когда каталог последний раз пришёл с сервера
+  DateTime? _loadedAt;
+  late final AppLifecycleListener _lifecycle;
+
   @override
   void initState() {
     super.initState();
     _future = _load();
+    // Приложение может провисеть в памяти всю ночь: утром без этого
+    // главный экран показал бы ночное «Сейчас закрыто» и вчерашний
+    // стоп-лист. Вернулись спустя пару минут — тихо перечитываем.
+    _lifecycle = AppLifecycleListener(onResume: _refreshIfStale);
     _listController.addListener(_onScroll);
     LastPlacedOrder.revision.addListener(_refreshActiveOrder);
     SelectedAddress.revision.addListener(_reloadSelectedAddress);
@@ -238,8 +247,30 @@ class _MenuScreenState extends State<MenuScreen> {
     }
   }
 
+  Future<void> _refreshIfStale() async {
+    final at = _loadedAt;
+    if (at == null ||
+        DateTime.now().difference(at) < const Duration(minutes: 2)) {
+      return;
+    }
+    try {
+      final data = await _load();
+      if (!mounted) return;
+      // Готовое значение без «ожидания»: FutureBuilder не мигнёт
+      // скелетоном, а просто перерисует каталог с новыми данными
+      setState(() {
+        _rows.clear();
+        _offsets.clear();
+        _future = SynchronousFuture(data);
+      });
+    } catch (_) {
+      // Нет сети — остаёмся на том, что уже показано
+    }
+  }
+
   @override
   void dispose() {
+    _lifecycle.dispose();
     LastPlacedOrder.revision.removeListener(_refreshActiveOrder);
     SelectedAddress.revision.removeListener(_reloadSelectedAddress);
     _activeOrderTimer?.cancel();
@@ -322,6 +353,7 @@ class _MenuScreenState extends State<MenuScreen> {
     _menu = menu;
     _activeOrder = active;
     if (!availability.deliveryAvailable) _mode = 'PICKUP';
+    _loadedAt = DateTime.now();
     return _CatalogData(
       menu: menu,
       availability: availability,
