@@ -167,9 +167,7 @@ class AddressPickerState extends State<AddressPicker> {
           Padding(
             padding: const EdgeInsets.only(top: Gap.sm, left: Gap.xs),
             child: Text(
-              _requestSent
-                  ? S.savedOperatorWillCheck
-                  : S.operatorWillCheck,
+              _requestSent ? S.savedOperatorWillCheck : S.operatorWillCheck,
               style: TextStyle(fontSize: 11.5, color: c.warnText),
             ),
           )

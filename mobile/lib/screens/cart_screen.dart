@@ -11,6 +11,7 @@ import '../utils/haptics.dart';
 import '../widgets/motion.dart';
 import 'checkout_screen.dart';
 import '../i18n/strings.dart';
+import '../widgets/app_route.dart';
 
 /// Корзина по прототипу «Сигнал».
 ///
@@ -246,8 +247,7 @@ class _CartScreenState extends State<CartScreen> {
 
                     if (preview.nextGift != null)
                       _Hint(
-                        text:
-                            S.addMoreForGift(
+                        text: S.addMoreForGift(
                           formatTenge(preview.nextGift!.missing),
                           preview.nextGift!.giftName.toLowerCase(),
                         ),
@@ -360,7 +360,7 @@ class _CartScreenState extends State<CartScreen> {
                   onTap: () async {
                     await Navigator.push(
                       context,
-                      MaterialPageRoute(
+                      AppRoute(
                         builder: (_) => CheckoutScreen(
                           preview: preview,
                           initialPoints: _points,
@@ -380,8 +380,9 @@ class _CartScreenState extends State<CartScreen> {
                       children: [
                         AnimatedMoney(
                           _total(preview),
-                          style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(color: c.surface),
+                          style: Theme.of(
+                            context,
+                          ).textTheme.titleLarge?.copyWith(color: c.surface),
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -414,7 +415,6 @@ class _CartScreenState extends State<CartScreen> {
       p.subtotal +
       (p.deliveryAvailable ? p.deliveryFee : 0) -
       _points.clamp(0, p.subtotal);
-
 }
 
 class _CartRow extends StatelessWidget {
@@ -445,10 +445,16 @@ class _CartRow extends StatelessWidget {
             child: SizedBox(
               width: 58,
               height: 58,
-              child: line.product.photoUrl == null ||
+              child:
+                  line.product.photoUrl == null ||
                       line.product.photoUrl!.isEmpty
                   ? ColoredBox(color: c.fillSoft)
                   : Image.network(
+                      // В браузере фото с чужих серверов (Poster, R2) приходят без
+                      // разрешения CORS, и CanvasKit их не рисует. Сразу берём обычный <img>;
+                      // на iOS и Android это ничего не меняет.
+                      webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
+
                       line.product.photoUrl!,
                       fit: BoxFit.cover,
                       errorBuilder: (_, _, _) => ColoredBox(color: c.fillSoft),
@@ -628,9 +634,9 @@ class _UpsellStrip extends StatelessWidget {
         const SizedBox(height: Gap.lg),
         Text(
           S.addToOrder,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontSize: 15,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontSize: 15),
         ),
         const SizedBox(height: Gap.md),
         SizedBox(
@@ -655,6 +661,12 @@ class _UpsellStrip extends StatelessWidget {
                         child: offer.photoUrl == null
                             ? ColoredBox(color: c.fillSoft)
                             : Image.network(
+                                // В браузере фото с чужих серверов (Poster, R2) приходят без
+                                // разрешения CORS, и CanvasKit их не рисует. Сразу берём обычный <img>;
+                                // на iOS и Android это ничего не меняет.
+                                webHtmlElementStrategy:
+                                    WebHtmlElementStrategy.prefer,
+
                                 offer.photoUrl!,
                                 fit: BoxFit.cover,
                                 errorBuilder: (_, _, _) =>
@@ -827,7 +839,9 @@ class _PointsBlock extends StatelessWidget {
                 ),
               ),
               Text(
-                blockedByPromo ? S.unavailableShort : S.pointsAvailable(balance),
+                blockedByPromo
+                    ? S.unavailableShort
+                    : S.pointsAvailable(balance),
                 style: TextStyle(
                   fontSize: 12,
                   color: c.surface.withValues(alpha: 0.6),
@@ -1008,7 +1022,10 @@ class _Totals extends StatelessWidget {
 
   Widget _row(String label, String value, TextStyle l, TextStyle v) => Row(
     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-    children: [Text(label, style: l), Text(value, style: v)],
+    children: [
+      Text(label, style: l),
+      Text(value, style: v),
+    ],
   );
 }
 

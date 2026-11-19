@@ -191,9 +191,7 @@ class CatalogHeader extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      availability.isOpenNow
-                          ? S.deliveryClosed
-                          : S.closedNow,
+                      availability.isOpenNow ? S.deliveryClosed : S.closedNow,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontSize: 16.5,
                         color: c.surface,

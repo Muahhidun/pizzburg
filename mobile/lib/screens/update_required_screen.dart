@@ -35,14 +35,18 @@ class UpdateRequiredScreen extends StatelessWidget {
                   color: c.accent,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(Icons.system_update_rounded, color: c.surface, size: 30),
+                child: Icon(
+                  Icons.system_update_rounded,
+                  color: c.surface,
+                  size: 30,
+                ),
               ),
               const SizedBox(height: Gap.blockWide),
               Text(
                 S.updateTitle,
-                style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                  color: c.surface,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.displayMedium?.copyWith(color: c.surface),
               ),
               const SizedBox(height: Gap.md),
               Text(

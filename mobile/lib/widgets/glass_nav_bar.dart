@@ -251,16 +251,8 @@ class _GlassNavBarState extends State<GlassNavBar> {
                       // должна быть на тон отличной от того, на чём лежит.
                       // В тёмной теме `surface` светлый, и белая панель
                       // выехала бы поверх тёмного экрана.
-                      Color.lerp(
-                        c.page,
-                        c.ink,
-                        0.045,
-                      )!.withValues(alpha: 0.80),
-                      Color.lerp(
-                        c.page,
-                        c.ink,
-                        0.07,
-                      )!.withValues(alpha: 0.62),
+                      Color.lerp(c.page, c.ink, 0.045)!.withValues(alpha: 0.80),
+                      Color.lerp(c.page, c.ink, 0.07)!.withValues(alpha: 0.62),
                     ],
                   ),
                   border: Border.all(

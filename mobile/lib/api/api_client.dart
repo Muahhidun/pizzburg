@@ -81,11 +81,16 @@ class ApiClient {
     return CreatedOrder.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
   }
 
-  Future<KaspiPayment> createKaspiPayment(String orderId) async {
+  /// [qr] — сайт на компьютере: Kaspi выдаёт код для QR вместо ссылки,
+  /// которую на компьютере нечем открыть.
+  Future<KaspiPayment> createKaspiPayment(
+    String orderId, {
+    bool qr = false,
+  }) async {
     final res = await http.post(
       Uri.parse('$baseUrl/payments/orders/$orderId'),
       headers: _headers,
-      body: jsonEncode({'channel': 'MOBILE_LINK'}),
+      body: jsonEncode({'channel': qr ? 'WEB_QR' : 'MOBILE_LINK'}),
     );
     _ensureOk(res);
     return KaspiPayment.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));

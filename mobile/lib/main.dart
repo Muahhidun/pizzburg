@@ -27,6 +27,7 @@ import 'i18n/lang.dart';
 import 'theme/themes.dart';
 import 'theme/app_theme.dart';
 import 'utils/haptics.dart';
+import 'widgets/app_route.dart';
 
 final _navigatorKey = GlobalKey<NavigatorState>();
 final _messengerKey = GlobalKey<ScaffoldMessengerState>();
@@ -103,7 +104,7 @@ Future<void> main() async {
     // гадать, к чему было уведомление
     if (data['type'] == 'message') {
       _navigatorKey.currentState?.push(
-        MaterialPageRoute(builder: (_) => const MessagesScreen()),
+        AppRoute(builder: (_) => const MessagesScreen()),
       );
       return;
     }
@@ -114,7 +115,7 @@ Future<void> main() async {
       final reviewNumber = int.tryParse(data['orderNumber']?.toString() ?? '');
       if (reviewId == null || reviewNumber == null) return;
       _navigatorKey.currentState?.push(
-        MaterialPageRoute(
+        AppRoute(
           builder: (_) =>
               ReviewScreen(orderId: reviewId, orderNumber: reviewNumber),
         ),
@@ -135,7 +136,7 @@ Future<void> main() async {
       AppShell.showMenu();
     }
     _navigatorKey.currentState?.push(
-      MaterialPageRoute(
+      AppRoute(
         builder: (_) => OrderScreen(
           order: CreatedOrder(
             id: id,
@@ -280,8 +281,11 @@ class PizzBurgApp extends StatelessWidget {
                 ? const Color(0xFF0B0D12)
                 : const Color(0xFFF2F2F3),
             child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 460),
+              // Телефон — во всю ширину; планшет и компьютер — колонка до
+              // 1280 px. Меню внутри раскладывает карточки в 2–4 колонки,
+              // остальные экраны сами встают узкой колонкой (AppRoute).
+              child: NarrowColumn(
+                maxWidth: kAppMaxWidth,
                 // Тап мимо поля закрывает клавиатуру. Без этого её нечем
                 // убрать: «Имя» стоит посреди списка оформления, кнопка
                 // «Заказать» уходит под клавиатуру, и человек остаётся с

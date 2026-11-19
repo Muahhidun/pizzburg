@@ -112,13 +112,20 @@ class _AddAddressScreenState extends State<AddAddressScreen> {
             const SizedBox(height: Gap.md),
             Row(
               children: [
-                Expanded(child: FieldCard(label: S.flatLabel, controller: _flat)),
-                const SizedBox(width: Gap.sm),
                 Expanded(
-                  child: FieldCard(label: S.entranceLabel, controller: _entrance),
+                  child: FieldCard(label: S.flatLabel, controller: _flat),
                 ),
                 const SizedBox(width: Gap.sm),
-                Expanded(child: FieldCard(label: S.floorLabel, controller: _floor)),
+                Expanded(
+                  child: FieldCard(
+                    label: S.entranceLabel,
+                    controller: _entrance,
+                  ),
+                ),
+                const SizedBox(width: Gap.sm),
+                Expanded(
+                  child: FieldCard(label: S.floorLabel, controller: _floor),
+                ),
               ],
             ),
 
@@ -134,7 +141,10 @@ class _AddAddressScreenState extends State<AddAddressScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 alignment: Alignment.center,
-                decoration: BoxDecoration(color: c.accent, borderRadius: R.pill),
+                decoration: BoxDecoration(
+                  color: c.accent,
+                  borderRadius: R.pill,
+                ),
                 child: Text(
                   _saving ? S.saving : S.saveAddress,
                   style: TextStyle(

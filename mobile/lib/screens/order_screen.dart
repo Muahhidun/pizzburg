@@ -14,6 +14,7 @@ import '../widgets/motion.dart';
 import '../widgets/push_prompt.dart';
 import '../i18n/strings.dart';
 import 'kaspi_payment_screen.dart';
+import '../widgets/app_route.dart';
 
 /// Статус заказа. Экран целиком тёмный — по прототипу «Сигнал».
 ///
@@ -117,9 +118,7 @@ class _OrderScreenState extends State<OrderScreen> {
   Future<void> _pay() async {
     await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => KaspiPaymentScreen(order: widget.order),
-      ),
+      AppRoute(builder: (_) => KaspiPaymentScreen(order: widget.order)),
     );
     if (mounted) await _load();
   }

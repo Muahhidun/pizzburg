@@ -16,6 +16,7 @@ import 'messages_screen.dart';
 import 'legal_screen.dart';
 import '../i18n/lang.dart';
 import '../i18n/strings.dart';
+import '../widgets/app_route.dart';
 
 /// Профиль по прототипу «Сигнал».
 ///
@@ -77,9 +78,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   PressScale(
                     onTap: () => Navigator.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => const LoginScreen(),
-                      ),
+                      AppRoute(builder: (_) => const LoginScreen()),
                     ),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -105,9 +104,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   PressScale(
                     onTap: () => Navigator.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => const MessagesScreen(),
-                      ),
+                      AppRoute(builder: (_) => const MessagesScreen()),
                     ),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -339,7 +336,6 @@ class _PointsCard extends StatelessWidget {
   }
 }
 
-
 class _PointsRow extends StatelessWidget {
   final Map<String, dynamic> txn;
   const _PointsRow({required this.txn});
@@ -412,8 +408,7 @@ class _MessagesRowState extends State<_MessagesRow> {
       final readAt = DateTime.tryParse(
         prefs.getString(MessagesScreen.readAtKey) ?? '',
       );
-      final unread =
-          readAt == null || items.first.createdAt.isAfter(readAt);
+      final unread = readAt == null || items.first.createdAt.isAfter(readAt);
       if (mounted && unread != _unread) setState(() => _unread = unread);
     } catch (_) {
       // Лента — не критичный путь: без сети строка просто без точки
@@ -427,7 +422,7 @@ class _MessagesRowState extends State<_MessagesRow> {
       onTap: () async {
         await Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => const MessagesScreen()),
+          AppRoute(builder: (_) => const MessagesScreen()),
         );
         if (mounted) _check();
       },
@@ -480,7 +475,7 @@ class _LegalLinks extends StatelessWidget {
           PressScale(
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(
+              AppRoute(
                 builder: (_) => LegalDocumentScreen(type: type, title: label),
               ),
             ),
@@ -492,10 +487,7 @@ class _LegalLinks extends StatelessWidget {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      label,
-                      style: const TextStyle(fontSize: 13.5),
-                    ),
+                    child: Text(label, style: const TextStyle(fontSize: 13.5)),
                   ),
                   Icon(Icons.chevron_right, size: 18, color: c.muted),
                 ],
@@ -539,7 +531,7 @@ class _SettingsRow extends StatelessWidget {
         Haptics.tap();
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => const AppSettingsScreen()),
+          AppRoute(builder: (_) => const AppSettingsScreen()),
         );
       },
       child: Container(
@@ -617,8 +609,7 @@ class _LanguageCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (lang != AppLang.values.last)
-                  const SizedBox(width: Gap.sm),
+                if (lang != AppLang.values.last) const SizedBox(width: Gap.sm),
               ],
             ],
           ),
@@ -644,10 +635,7 @@ class _ThemeCard extends StatelessWidget {
         children: [
           Text(
             S.appearance,
-            style: const TextStyle(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
           ),
           Text(
             store.current.hint,

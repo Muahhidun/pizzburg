@@ -136,9 +136,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
             ),
             const SizedBox(height: Gap.sm),
             Text(
-              _done
-                  ? S.willReadAndFix
-                  : S.reviewIntro(widget.orderNumber),
+              _done ? S.willReadAndFix : S.reviewIntro(widget.orderNumber),
               style: Theme.of(context).textTheme.labelMedium,
             ),
 
@@ -172,8 +170,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
                             .cast<Map<String, dynamic>>())
                       _OptionChip(
                         label: option['label']?.toString() ?? '',
-                        selected:
-                            _answers[question['id']] == option['id'],
+                        selected: _answers[question['id']] == option['id'],
                         onTap: () {
                           Haptics.selection();
                           setState(

@@ -51,9 +51,7 @@ class RepeatOrderCard extends StatelessWidget {
       // здесь было бы враньём.
       if (added == 0) {
         await Haptics.warning();
-        messenger.showSnackBar(
-          SnackBar(content: Text(S.nothingFromThatOrder)),
-        );
+        messenger.showSnackBar(SnackBar(content: Text(S.nothingFromThatOrder)));
         return;
       }
 
@@ -66,7 +64,9 @@ class RepeatOrderCard extends StatelessWidget {
             content: Text(
               result.unavailable.length == 1
                   ? '${result.unavailable.first.name} — ${result.unavailable.first.reason}'
-                  : S.notMoved(result.unavailable.map((u) => u.name).join(', ')),
+                  : S.notMoved(
+                      result.unavailable.map((u) => u.name).join(', '),
+                    ),
             ),
           ),
         );
@@ -115,9 +115,9 @@ class RepeatOrderCard extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   formatTenge(order.total),
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontSize: 15,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleMedium?.copyWith(fontSize: 15),
                 ),
               ],
             ),
@@ -165,6 +165,11 @@ class _Thumb extends StatelessWidget {
         child: url == null || url!.isEmpty
             ? ColoredBox(color: colors.fillSoft)
             : Image.network(
+                // В браузере фото с чужих серверов (Poster, R2) приходят без
+                // разрешения CORS, и CanvasKit их не рисует. Сразу берём обычный <img>;
+                // на iOS и Android это ничего не меняет.
+                webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
+
                 url!,
                 fit: BoxFit.cover,
                 errorBuilder: (_, _, _) => ColoredBox(color: colors.fillSoft),

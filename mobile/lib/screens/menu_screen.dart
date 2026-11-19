@@ -23,6 +23,7 @@ import 'review_screen.dart';
 import 'add_address_screen.dart';
 import 'product_screen.dart';
 import '../i18n/strings.dart';
+import '../widgets/app_route.dart';
 
 /// Каталог — главный экран.
 ///
@@ -90,13 +91,22 @@ class _HeroRow extends _Row {
   const _HeroRow(this.categoryId, this.product);
 }
 
-/// Ряд сетки: две карточки, либо одна, если позиция последняя нечётная
+/// Ряд сетки: от двух карточек на телефоне до четырёх на компьютере.
+/// В последнем ряду их может быть меньше — тогда остаются пустые ячейки.
 class _PairRow extends _Row {
   final String categoryId;
-  final Product left;
-  final Product? right;
-  const _PairRow(this.categoryId, this.left, this.right);
+  final List<Product> items;
+  const _PairRow(this.categoryId, this.items);
 }
+
+/// Сколько карточек в ряду при данной ширине контента. Карточка держит
+/// примерно телефонный размер: на планшете их три, на компьютере четыре,
+/// а не две растянутые на весь монитор.
+int menuColumns(double width) => width < 600
+    ? 2
+    : width < 900
+    ? 3
+    : 4;
 
 /// Высота закреплённой строки категорий: поля по 12 вокруг тап-зоны 44.
 const _chipsExtent = Hit.min + Gap.md * 2;
@@ -378,10 +388,15 @@ class _MenuScreenState extends State<MenuScreen> {
   double _cardHeight = 0;
   double _heroHeight = 0;
 
+  /// Ширина, под которую посчитаны ряды. Окно браузера меняет размер на
+  /// ходу, телефон поворачивается — тогда ряды строятся заново.
+  double _rowsWidth = 0;
+  int _columns = 2;
+
   void _openProduct(Product product) {
     Navigator.push(
       context,
-      MaterialPageRoute(
+      AppRoute(
         builder: (_) =>
             ProductScreen(product: product, inStopList: !product.isAvailable),
       ),
@@ -401,13 +416,18 @@ class _MenuScreenState extends State<MenuScreen> {
   /// Ширина карточки в сетке при текущей ширине экрана
   double _cardWidth(BuildContext context) {
     final content = MediaQuery.sizeOf(context).width - Gap.screen * 2;
-    return (content - _gridGap) / 2;
+    return (content - _gridGap * (_columns - 1)) / _columns;
   }
 
   /// Высоты рядов зависят от ширины экрана, поэтому строим их с контекстом
   /// на руках, а не при загрузке меню.
   void _buildRows(BuildContext context, MenuResponse menu) {
-    if (_rows.isNotEmpty) return;
+    final width = MediaQuery.sizeOf(context).width;
+    if (_rows.isNotEmpty && width == _rowsWidth) return;
+    _rows.clear();
+    _offsets.clear();
+    _rowsWidth = width;
+    _columns = menuColumns(width - Gap.screen * 2);
     _categories = menu.categories;
 
     final card = _cardWidth(context);
@@ -431,23 +451,28 @@ class _MenuScreenState extends State<MenuScreen> {
       // Крупной делаем первый хит категории. Нет хита — нет и крупной
       // карточки: назначать её первой попавшейся значит обещать людям
       // особенное там, где его нет.
-      final heroAt = products.indexWhere((p) => p.isHit);
+      //
+      // Крупная карточка — телефонный приём: на широком экране она
+      // растянулась бы на весь монитор, там хит просто стоит в сетке
+      // со своей плашкой.
+      final heroAt = _columns == 2 ? products.indexWhere((p) => p.isHit) : -1;
       if (heroAt >= 0) {
         _rows.add(_HeroRow(category.id, products.removeAt(heroAt)));
         offset += heroHeight + _gridGap;
       }
-      for (var i = 0; i < products.length; i += 2) {
+      for (var i = 0; i < products.length; i += _columns) {
         _rows.add(
           _PairRow(
             category.id,
-            products[i],
-            i + 1 < products.length ? products[i + 1] : null,
+            products.sublist(i, (i + _columns).clamp(0, products.length)),
           ),
         );
         offset += cardHeight + _gridGap;
       }
     }
-    _activeCategory = menu.categories.isEmpty ? null : menu.categories.first.id;
+    _activeCategory ??= menu.categories.isEmpty
+        ? null
+        : menu.categories.first.id;
   }
 
   /// Сколько сверху занято закреплёнными слоями: под ними список не виден,
@@ -592,7 +617,7 @@ class _MenuScreenState extends State<MenuScreen> {
     if (picked == _addNewAddress) {
       final added = await Navigator.push<bool>(
         context,
-        MaterialPageRoute(builder: (_) => const AddAddressScreen()),
+        AppRoute(builder: (_) => const AddAddressScreen()),
       );
       if (added == true) _retry(); // перечитываем список адресов
       return;
@@ -666,7 +691,7 @@ class _MenuScreenState extends State<MenuScreen> {
                                 order: _activeOrder!,
                                 onTap: () => Navigator.push(
                                   context,
-                                  MaterialPageRoute(
+                                  AppRoute(
                                     builder: (_) => OrderScreen(
                                       order: CreatedOrder(
                                         id: _activeOrder!['id'].toString(),
@@ -691,7 +716,7 @@ class _MenuScreenState extends State<MenuScreen> {
                                   final api = context.read<ApiClient>();
                                   await Navigator.push(
                                     context,
-                                    MaterialPageRoute(
+                                    AppRoute(
                                       builder: (_) => ReviewScreen(
                                         orderId: _pendingReview!['id']
                                             .toString(),
@@ -810,7 +835,7 @@ class _MenuScreenState extends State<MenuScreen> {
                                           cart.decrementProduct(product),
                                       onTap: () => Navigator.push(
                                         context,
-                                        MaterialPageRoute(
+                                        AppRoute(
                                           builder: (_) => ProductScreen(
                                             product: product,
                                             inStopList: !product.isAvailable,
@@ -821,7 +846,7 @@ class _MenuScreenState extends State<MenuScreen> {
                                         if (product.hasChoices) {
                                           Navigator.push(
                                             context,
-                                            MaterialPageRoute(
+                                            AppRoute(
                                               builder: (_) => ProductScreen(
                                                 product: product,
                                                 inStopList:
@@ -938,16 +963,18 @@ class _MenuScreenState extends State<MenuScreen> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.stretch,
                                     children: [
-                                      Expanded(child: tile(pair.left)),
-                                      const SizedBox(width: _gridGap),
-                                      // Пустая ячейка вместо растянутой
-                                      // карточки: нечётная позиция не должна
-                                      // становиться вдвое шире соседей
-                                      Expanded(
-                                        child: pair.right == null
-                                            ? const SizedBox.shrink()
-                                            : tile(pair.right!),
-                                      ),
+                                      // Пустые ячейки вместо растянутых
+                                      // карточек: последняя позиция не должна
+                                      // становиться шире соседей
+                                      for (var c = 0; c < _columns; c++) ...[
+                                        if (c > 0)
+                                          const SizedBox(width: _gridGap),
+                                        Expanded(
+                                          child: c < pair.items.length
+                                              ? tile(pair.items[c])
+                                              : const SizedBox.shrink(),
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ),
@@ -1000,10 +1027,7 @@ class _MenuScreenState extends State<MenuScreen> {
 
   void _openCart() {
     Haptics.tap();
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const CartScreen()),
-    );
+    Navigator.push(context, AppRoute(builder: (_) => const CartScreen()));
   }
 }
 

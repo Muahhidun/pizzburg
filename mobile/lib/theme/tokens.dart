@@ -200,9 +200,7 @@ abstract final class Gap {
   /// бар не перекрыл последнюю строку. Считаем от системного отступа, а не
   /// константой: на iPhone с домашней полоской и без неё низ разный.
   static double navBarSpace(BuildContext context) =>
-      navBar +
-      math.max(MediaQuery.paddingOf(context).bottom + sm, lg) +
-      block;
+      navBar + math.max(MediaQuery.paddingOf(context).bottom + sm, lg) + block;
 }
 
 /// Радиусы из хендоффа. `pill` — капсула для всего интерактивного.

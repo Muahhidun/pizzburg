@@ -45,7 +45,10 @@ class AppConfig extends ChangeNotifier {
       _unpaidCancelMinutes =
           (c['unpaidCancelMinutes'] as num?)?.toInt() ?? _unpaidCancelMinutes;
       final required =
-          !kIsWeb && min != null && isOlder(_version!, min) && _storeUrl != null;
+          !kIsWeb &&
+          min != null &&
+          isOlder(_version!, min) &&
+          _storeUrl != null;
       if (required != _updateRequired) {
         _updateRequired = required;
       }
@@ -59,12 +62,8 @@ class AppConfig extends ChangeNotifier {
 /// `a` старше `b`: 1.0.0 < 1.0.1 < 1.1.0 < 2.0.0
 @visibleForTesting
 bool isOlder(String a, String b) {
-  List<int> parts(String v) => v
-      .split('+')
-      .first
-      .split('.')
-      .map((p) => int.tryParse(p) ?? 0)
-      .toList();
+  List<int> parts(String v) =>
+      v.split('+').first.split('.').map((p) => int.tryParse(p) ?? 0).toList();
   final x = parts(a), y = parts(b);
   for (var i = 0; i < 3; i++) {
     final l = i < x.length ? x[i] : 0;

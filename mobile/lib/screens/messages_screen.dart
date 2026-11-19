@@ -160,6 +160,11 @@ class _MessageCard extends StatelessWidget {
             ClipRRect(
               borderRadius: R.thumb,
               child: Image.network(
+                // В браузере фото с чужих серверов (Poster, R2) приходят без
+                // разрешения CORS, и CanvasKit их не рисует. Сразу берём обычный <img>;
+                // на iOS и Android это ничего не меняет.
+                webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
+
                 message.imageUrl!,
                 width: double.infinity,
                 height: 160,
@@ -223,9 +228,9 @@ class _Message extends StatelessWidget {
             const SizedBox(height: Gap.block),
             Text(
               title,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontSize: 20,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontSize: 20),
             ),
             const SizedBox(height: Gap.sm),
             Text(

@@ -17,6 +17,7 @@ import 'menu_screen.dart';
 import 'orders_screen.dart';
 import 'profile_screen.dart';
 import '../i18n/strings.dart';
+import '../widgets/app_route.dart';
 
 /// Оболочка с таб-баром: Меню / Избранное / Корзина / Заказы / Профиль.
 ///
@@ -185,33 +186,40 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                 MenuScreen(controller: _scrolls[0]),
                 PrimaryScrollController(
                   controller: _scrolls[1],
-                  child: FavoritesScreen(onOpenMenu: () => _go(0)),
+                  child: NarrowColumn(
+                    child: FavoritesScreen(onOpenMenu: () => _go(0)),
+                  ),
                 ),
                 PrimaryScrollController(
                   controller: _scrolls[2],
-                  child: const CartScreen(embedded: true),
+                  child: NarrowColumn(child: const CartScreen(embedded: true)),
                 ),
                 PrimaryScrollController(
                   controller: _scrolls[3],
-                  child: const OrdersScreen(),
+                  child: NarrowColumn(child: const OrdersScreen()),
                 ),
                 PrimaryScrollController(
                   controller: _scrolls[4],
-                  child: const ProfileScreen(),
+                  child: NarrowColumn(child: const ProfileScreen()),
                 ),
               ],
             ),
             Align(
               alignment: Alignment.bottomCenter,
-              child: Consumer<Cart>(
-                builder: (_, cart, _) => GlassNavBar(
-                  items: _tabs,
-                  index: _index,
-                  onChanged: _go,
-                  cartIndex: 2,
-                  cartTotal: cart.subtotal,
-                  cartCount: cart.count,
-                  cartSlotKey: _cartSlotKey,
+              // На широком окне бар остаётся телефонного размера по центру,
+              // а не растягивается на весь монитор
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: kNarrowMaxWidth),
+                child: Consumer<Cart>(
+                  builder: (_, cart, _) => GlassNavBar(
+                    items: _tabs,
+                    index: _index,
+                    onChanged: _go,
+                    cartIndex: 2,
+                    cartTotal: cart.subtotal,
+                    cartCount: cart.count,
+                    cartSlotKey: _cartSlotKey,
+                  ),
                 ),
               ),
             ),

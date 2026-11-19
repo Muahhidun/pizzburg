@@ -11,6 +11,7 @@ import '../utils/haptics.dart';
 import '../widgets/favorite_heart.dart';
 import '../widgets/motion.dart';
 import '../i18n/strings.dart';
+import '../widgets/app_route.dart';
 
 /// Карточка товара по прототипу «Сигнал».
 ///
@@ -79,9 +80,9 @@ class _ProductScreenState extends State<ProductScreen> {
       await favorites.toggle(widget.product.id);
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(S.saveFailed)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(S.saveFailed)));
     }
   }
 
@@ -96,7 +97,12 @@ class _ProductScreenState extends State<ProductScreen> {
       backgroundColor: c.page,
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(Gap.screen, Gap.md, Gap.screen, 24),
+          padding: const EdgeInsets.fromLTRB(
+            Gap.screen,
+            Gap.md,
+            Gap.screen,
+            24,
+          ),
           children: [
             Row(
               children: [
@@ -147,9 +153,10 @@ class _ProductScreenState extends State<ProductScreen> {
 
             ClipRRect(
               borderRadius: R.photo,
-              child: SizedBox(
-                height: 200,
-                width: double.infinity,
+              // Пропорция, а не высота 200: на телефоне выходит почти то
+              // же, а в широкой колонке сайта фото не сплющивается в ленту
+              child: AspectRatio(
+                aspectRatio: 1.6,
                 child: _Photo(
                   url: p.photoUrl,
                   grayscale: widget.inStopList,
@@ -222,14 +229,18 @@ class _ProductScreenState extends State<ProductScreen> {
                   onTap: _isComplete ? _addToCart : null,
                   child: Container(
                     padding: const EdgeInsets.fromLTRB(22, 12, 12, 12),
-                    decoration: BoxDecoration(color: c.panel, borderRadius: R.pill),
+                    decoration: BoxDecoration(
+                      color: c.panel,
+                      borderRadius: R.pill,
+                    ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         AnimatedMoney(
                           _total,
-                          style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(color: c.surface),
+                          style: Theme.of(
+                            context,
+                          ).textTheme.titleLarge?.copyWith(color: c.surface),
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -334,15 +345,18 @@ class _StopListBlock extends StatelessWidget {
               PressScale(
                 onTap: () {
                   Haptics.tap();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(S.willNotifyWhenBack)),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text(S.willNotifyWhenBack)));
                 },
                 child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   alignment: Alignment.center,
-                  decoration: BoxDecoration(color: c.panel, borderRadius: R.pill),
+                  decoration: BoxDecoration(
+                    color: c.panel,
+                    borderRadius: R.pill,
+                  ),
                   child: Text(
                     S.notifyMe,
                     style: TextStyle(
@@ -388,7 +402,7 @@ class _AltCard extends StatelessWidget {
     return PressScale(
       onTap: () => Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => ProductScreen(product: product)),
+        AppRoute(builder: (_) => ProductScreen(product: product)),
       ),
       child: Container(
         padding: const EdgeInsets.all(Gap.md),
@@ -444,6 +458,11 @@ class _Photo extends StatelessWidget {
   Widget build(BuildContext context) {
     if (url == null || url!.isEmpty) return ColoredBox(color: fallback);
     final image = Image.network(
+      // В браузере фото с чужих серверов (Poster, R2) приходят без
+      // разрешения CORS, и CanvasKit их не рисует. Сразу берём обычный <img>;
+      // на iOS и Android это ничего не меняет.
+      webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
+
       url!,
       fit: BoxFit.cover,
       errorBuilder: (_, _, _) => ColoredBox(color: fallback),

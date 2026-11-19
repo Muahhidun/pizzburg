@@ -454,6 +454,9 @@ class KaspiPayment {
   final String status;
   final int amount;
   final String? paymentLink;
+
+  /// Код для QR на сайте с компьютера (канал WEB_QR); на телефоне его нет
+  final String? qrToken;
   final int pollingIntervalSeconds;
   final int activationTimeoutSeconds;
   final int confirmationTimeoutSeconds;
@@ -465,6 +468,7 @@ class KaspiPayment {
     required this.status,
     required this.amount,
     this.paymentLink,
+    this.qrToken,
     required this.pollingIntervalSeconds,
     required this.activationTimeoutSeconds,
     required this.confirmationTimeoutSeconds,
@@ -480,6 +484,7 @@ class KaspiPayment {
     status: json['status']?.toString() ?? 'CREATED',
     amount: (json['amount'] as num?)?.toInt() ?? 0,
     paymentLink: json['paymentLink']?.toString(),
+    qrToken: json['qrToken']?.toString(),
     pollingIntervalSeconds:
         (json['statusPollingIntervalSec'] as num?)?.toInt() ?? 5,
     activationTimeoutSeconds:

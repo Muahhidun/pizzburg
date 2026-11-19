@@ -12,6 +12,7 @@ import '../widgets/motion.dart';
 import 'catalog_parts.dart';
 import 'product_screen.dart';
 import '../i18n/strings.dart';
+import '../widgets/app_route.dart';
 
 /// Избранное.
 ///
@@ -122,22 +123,22 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                       onAction: widget.onOpenMenu,
                     )
                   : _error != null
-                      ? _FavoritesEmpty(
-                          title: S.loadFailed,
-                          text: _error!,
-                          action: S.repeatAction,
-                          onAction: _load,
-                        )
-                      : items == null
-                          ? const Center(child: CircularProgressIndicator())
-                          : items.isEmpty
-                              ? _FavoritesEmpty(
-                                  title: S.nothingYet,
-                                  text: S.tapHeartHint,
-                                  action: S.openMenu,
-                                  onAction: widget.onOpenMenu,
-                                )
-                              : _list(items),
+                  ? _FavoritesEmpty(
+                      title: S.loadFailed,
+                      text: _error!,
+                      action: S.repeatAction,
+                      onAction: _load,
+                    )
+                  : items == null
+                  ? const Center(child: CircularProgressIndicator())
+                  : items.isEmpty
+                  ? _FavoritesEmpty(
+                      title: S.nothingYet,
+                      text: S.tapHeartHint,
+                      action: S.openMenu,
+                      onAction: widget.onOpenMenu,
+                    )
+                  : _list(items),
             ),
           ],
         ),
@@ -172,9 +173,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
               inCart: cart.qtyOf(product),
               onTap: () => Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => ProductScreen(product: product),
-                ),
+                AppRoute(builder: (_) => ProductScreen(product: product)),
               ),
               onAdd: () {
                 if (item.inStopList) return;
@@ -225,10 +224,9 @@ class _FavoritesEmpty extends StatelessWidget {
             Text(
               title,
               textAlign: TextAlign.center,
-              style: Theme.of(context)
-                  .textTheme
-                  .titleLarge
-                  ?.copyWith(fontSize: 20),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontSize: 20),
             ),
             const SizedBox(height: Gap.sm),
             Text(

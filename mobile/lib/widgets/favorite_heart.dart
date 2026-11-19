@@ -84,13 +84,17 @@ class _FavoriteHeartState extends State<FavoriteHeart>
               // к обычному размеру, иначе оно навсегда останется раздутым.
               scale: TweenSequence<double>([
                 TweenSequenceItem(
-                  tween: Tween(begin: 1.0, end: 1.28)
-                      .chain(CurveTween(curve: Motion.enter)),
+                  tween: Tween(
+                    begin: 1.0,
+                    end: 1.28,
+                  ).chain(CurveTween(curve: Motion.enter)),
                   weight: 40,
                 ),
                 TweenSequenceItem(
-                  tween: Tween(begin: 1.28, end: 1.0)
-                      .chain(CurveTween(curve: Motion.change)),
+                  tween: Tween(
+                    begin: 1.28,
+                    end: 1.0,
+                  ).chain(CurveTween(curve: Motion.change)),
                   weight: 60,
                 ),
               ]).animate(_pop),

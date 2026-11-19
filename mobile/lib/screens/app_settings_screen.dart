@@ -161,10 +161,7 @@ class _DeleteAccountRowState extends State<_DeleteAccountRow> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 15),
         alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: c.fillSoft,
-          borderRadius: R.pill,
-        ),
+        decoration: BoxDecoration(color: c.fillSoft, borderRadius: R.pill),
         child: Text(
           _busy ? S.deleting : S.deleteAccount,
           style: TextStyle(
@@ -238,14 +235,8 @@ class _PushRow extends StatelessWidget {
         S.pushQuietTitle,
         S.pushQuietHint,
       ),
-      PushNotificationsStatus.enabled => (
-        S.pushOnTitle,
-        S.pushOrderHint,
-      ),
-      PushNotificationsStatus.denied => (
-        S.pushOffTitle,
-        S.pushOffHint,
-      ),
+      PushNotificationsStatus.enabled => (S.pushOnTitle, S.pushOrderHint),
+      PushNotificationsStatus.denied => (S.pushOffTitle, S.pushOffHint),
       PushNotificationsStatus.requesting => (S.asking, S.justASecond),
       _ => (S.orderNotifications, S.pushOrderHint),
     };

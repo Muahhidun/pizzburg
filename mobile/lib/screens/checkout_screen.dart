@@ -22,6 +22,7 @@ import 'app_shell.dart';
 import 'order_screen.dart';
 import 'kaspi_payment_screen.dart';
 import '../i18n/strings.dart';
+import '../widgets/app_route.dart';
 
 /// Оформление заказа по прототипу «Сигнал».
 ///
@@ -222,9 +223,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (!mounted) return;
       final entered = await Navigator.push<bool>(
         context,
-        MaterialPageRoute(
-          builder: (_) => LoginScreen(initialPhone: _phone.text.trim()),
-        ),
+        AppRoute(builder: (_) => LoginScreen(initialPhone: _phone.text.trim())),
       );
       if (entered != true || !mounted) return;
       // Подставляем телефон, который человек только что подтвердил, но
@@ -272,7 +271,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         cart.clear();
         Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(builder: (_) => KaspiPaymentScreen(order: order)),
+          AppRoute(builder: (_) => KaspiPaymentScreen(order: order)),
           (route) => route.isFirst,
         );
         return;
@@ -298,7 +297,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       AppShell.showMenu();
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => OrderScreen(order: order)),
+        AppRoute(builder: (_) => OrderScreen(order: order)),
         (route) => route.isFirst,
       );
     } catch (e) {
@@ -1029,7 +1028,7 @@ class _ConsentText extends StatelessWidget {
         GestureDetector(
           onTap: () => Navigator.push(
             context,
-            MaterialPageRoute(
+            AppRoute(
               builder: (_) =>
                   LegalDocumentScreen(type: 'OFFER', title: S.publicOffer),
             ),
@@ -1043,7 +1042,7 @@ class _ConsentText extends StatelessWidget {
         GestureDetector(
           onTap: () => Navigator.push(
             context,
-            MaterialPageRoute(
+            AppRoute(
               builder: (_) =>
                   LegalDocumentScreen(type: 'PRIVACY', title: S.privacyPolicy),
             ),

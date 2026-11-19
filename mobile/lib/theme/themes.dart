@@ -103,8 +103,5 @@ const appThemes = <AppThemeVariant>[
   ),
 ];
 
-
-AppThemeVariant themeById(String? id) => appThemes.firstWhere(
-  (t) => t.id == id,
-  orElse: () => appThemes.first,
-);
+AppThemeVariant themeById(String? id) =>
+    appThemes.firstWhere((t) => t.id == id, orElse: () => appThemes.first);

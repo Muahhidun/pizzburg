@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../widgets/motion.dart';
 import '../i18n/strings.dart';
+import '../widgets/app_route.dart';
 
 /// Чтение одного документа.
 ///
@@ -189,7 +190,7 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
                                   trailing: const Icon(Icons.chevron_right),
                                   onTap: () => Navigator.push(
                                     context,
-                                    MaterialPageRoute(
+                                    AppRoute(
                                       builder: (_) => LegalDocumentScreen(
                                         type: doc.type,
                                         title: doc.displayTitle,

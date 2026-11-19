@@ -344,6 +344,16 @@ class S {
   static String get kaspiPaymentTitle => t('Оплата заказа', 'Тапсырысты төлеу');
   static String get kaspiOpen => t('Открыть Kaspi.kz', 'Kaspi.kz ашу');
   static String get kaspiOpening => t('Открываем Kaspi.kz', 'Kaspi.kz ашылуда');
+  static String get kaspiPayHint => t(
+    'Нажмите кнопку ниже — откроется Kaspi.kz для подтверждения.',
+    'Төмендегі батырманы басыңыз — растау үшін Kaspi.kz ашылады.',
+  );
+  static String get kaspiScanTitle =>
+      t('Отсканируйте QR в Kaspi.kz', 'QR-ды Kaspi.kz арқылы сканерлеңіз');
+  static String get kaspiScanHint => t(
+    'Откройте Kaspi.kz на телефоне, нажмите «Kaspi QR» и наведите камеру на код. Статус обновится сам.',
+    'Телефонда Kaspi.kz ашып, «Kaspi QR» батырмасын басыңыз да, камераны кодқа бағыттаңыз. Күй өзі жаңарады.',
+  );
   static String get kaspiWaiting =>
       t('Подтвердите оплату в Kaspi.kz', 'Kaspi.kz ішінде төлемді растаңыз');
   static String get kaspiWaitingHint => t(

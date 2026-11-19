@@ -140,7 +140,11 @@ class Cart extends ChangeNotifier {
         }
       }
 
-      final line = CartLine(product: product, modifiers: options, qty: item.qty);
+      final line = CartLine(
+        product: product,
+        modifiers: options,
+        qty: item.qty,
+      );
       final existing = _lines.indexWhere((l) => l.key == line.key);
       if (existing >= 0) {
         _lines[existing].qty += item.qty;

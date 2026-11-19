@@ -89,10 +89,7 @@ class _SplashScreenState extends State<SplashScreen>
   double _angle(double t, {required bool reverse}) {
     final end = reverse ? 0.94 : 0.81;
     final p = (t / end).clamp(0.0, 1.0);
-    return (reverse ? -1 : 1) *
-        Curves.easeOutQuart.transform(p) *
-        4 *
-        math.pi;
+    return (reverse ? -1 : 1) * Curves.easeOutQuart.transform(p) * 4 * math.pi;
   }
 
   @override

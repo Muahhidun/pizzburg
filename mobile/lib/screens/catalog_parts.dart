@@ -168,16 +168,8 @@ class GlassChipsBar extends StatelessWidget {
                       // должна быть на тон отличной от того, на чём лежит.
                       // В тёмной теме `surface` светлый, и белая панель
                       // выехала бы поверх тёмного экрана.
-                      Color.lerp(
-                        c.page,
-                        c.ink,
-                        0.045,
-                      )!.withValues(alpha: 0.80),
-                      Color.lerp(
-                        c.page,
-                        c.ink,
-                        0.07,
-                      )!.withValues(alpha: 0.62),
+                      Color.lerp(c.page, c.ink, 0.045)!.withValues(alpha: 0.80),
+                      Color.lerp(c.page, c.ink, 0.07)!.withValues(alpha: 0.62),
                     ],
                   ),
                   border: Border.all(
@@ -287,12 +279,15 @@ const double kCardTextHeight = 132;
 /// Поэтому константа теперь складывается из того, что реально занимает
 /// место, и менять вёрстку не меняя её нельзя.
 const double kHeroTextHeight =
-    Gap.sm * 2 // поля контейнера сверху и снизу
-    +
-    Gap.sm // отступ под фотографией
-    +
-    Hit.min // зона нажатия «+» — самый высокий элемент строки
-    +
+    Gap.sm *
+        2 // поля контейнера сверху и снизу
+        +
+    Gap
+        .sm // отступ под фотографией
+        +
+    Hit
+        .min // зона нажатия «+» — самый высокий элемент строки
+        +
     4; // нижнее поле текстового блока
 
 /// Карточка товара в сетке (DECISIONS §12.27).
@@ -338,10 +333,7 @@ class ProductCard extends StatelessWidget {
         opacity: inStopList ? 0.45 : 1,
         child: Container(
           padding: const EdgeInsets.all(Gap.sm),
-          decoration: BoxDecoration(
-            color: c.fillSoft,
-            borderRadius: R.block,
-          ),
+          decoration: BoxDecoration(color: c.fillSoft, borderRadius: R.block),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -461,10 +453,7 @@ class ProductHero extends StatelessWidget {
         opacity: inStopList ? 0.45 : 1,
         child: Container(
           padding: const EdgeInsets.all(Gap.sm),
-          decoration: BoxDecoration(
-            color: c.fillSoft,
-            borderRadius: R.block,
-          ),
+          decoration: BoxDecoration(color: c.fillSoft, borderRadius: R.block),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -806,6 +795,11 @@ class _Photo extends StatelessWidget {
   Widget build(BuildContext context) {
     if (url == null || url!.isEmpty) return ColoredBox(color: fallback);
     final image = Image.network(
+      // В браузере фото с чужих серверов (Poster, R2) приходят без
+      // разрешения CORS, и CanvasKit их не рисует. Сразу берём обычный <img>;
+      // на iOS и Android это ничего не меняет.
+      webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
+
       url!,
       fit: BoxFit.cover,
       errorBuilder: (_, _, _) => ColoredBox(color: fallback),

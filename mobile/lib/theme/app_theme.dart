@@ -181,7 +181,10 @@ class _SharedAxisTransitions extends PageTransitionsBuilder {
     Widget child,
   ) {
     final enter = CurvedAnimation(parent: animation, curve: Motion.enter);
-    final exit = CurvedAnimation(parent: secondaryAnimation, curve: Motion.change);
+    final exit = CurvedAnimation(
+      parent: secondaryAnimation,
+      curve: Motion.change,
+    );
 
     final visual = FadeTransition(
       opacity: enter,

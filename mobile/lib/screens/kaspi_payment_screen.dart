@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api/api_client.dart';
@@ -15,6 +17,7 @@ import '../utils/haptics.dart';
 import '../widgets/motion.dart';
 import 'app_shell.dart';
 import 'order_screen.dart';
+import '../widgets/app_route.dart';
 
 /// Второй предохранитель после серверного `payments.kaspiOnline`.
 ///
@@ -33,6 +36,13 @@ class KaspiPaymentScreen extends StatefulWidget {
   @override
   State<KaspiPaymentScreen> createState() => _KaspiPaymentScreenState();
 }
+
+/// Сайт открыт на компьютере: ссылку Kaspi открыть нечем, платим по QR.
+/// В браузере телефона `defaultTargetPlatform` — iOS или Android.
+bool get kaspiByQr =>
+    kIsWeb &&
+    defaultTargetPlatform != TargetPlatform.iOS &&
+    defaultTargetPlatform != TargetPlatform.android;
 
 class _KaspiPaymentScreenState extends State<KaspiPaymentScreen>
     with WidgetsBindingObserver {
@@ -111,6 +121,7 @@ class _KaspiPaymentScreenState extends State<KaspiPaymentScreen>
     try {
       final payment = await context.read<ApiClient>().createKaspiPayment(
         widget.order.id,
+        qr: kaspiByQr,
       );
       if (!mounted) return;
       setState(() {
@@ -121,7 +132,13 @@ class _KaspiPaymentScreenState extends State<KaspiPaymentScreen>
       if (payment.isProcessed) _maybeStartCountdown();
       // Экран обещает «Открываем Kaspi.kz» — открываем сами, без второго
       // нажатия. Кнопка остаётся на случай, если человек вернулся назад.
-      if (!_autoOpened && payment.paymentLink != null && !payment.isProcessed) {
+      //
+      // В браузере не открываем сами: окно без нажатия человека браузер
+      // блокирует как всплывающее. Там ждём нажатия на кнопку Kaspi.
+      if (!kIsWeb &&
+          !_autoOpened &&
+          payment.paymentLink != null &&
+          !payment.isProcessed) {
         _autoOpened = true;
         await _openKaspi();
       }
@@ -197,7 +214,7 @@ class _KaspiPaymentScreenState extends State<KaspiPaymentScreen>
     AppShell.showMenu();
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (_) => OrderScreen(order: widget.order)),
+      AppRoute(builder: (_) => OrderScreen(order: widget.order)),
       (route) => route.isFirst,
     );
   }
@@ -208,6 +225,10 @@ class _KaspiPaymentScreenState extends State<KaspiPaymentScreen>
     final payment = _payment;
     final success = payment?.isProcessed ?? false;
     final failed = payment?.isError ?? false;
+    // Что положить в QR: код Kaspi, а если его нет — платёжную ссылку
+    // (её тоже понимает камера телефона)
+    final qrData = payment?.qrToken ?? payment?.paymentLink;
+    final showQr = kaspiByQr && !success && !failed && qrData != null;
 
     final icon = success
         ? Icons.check_rounded
@@ -220,6 +241,8 @@ class _KaspiPaymentScreenState extends State<KaspiPaymentScreen>
         ? S.kaspiFailed
         : payment?.status == 'WAIT'
         ? S.kaspiWaiting
+        : showQr
+        ? S.kaspiScanTitle
         : S.kaspiPaymentTitle;
     final hint = success
         ? S.kaspiSuccessHint
@@ -227,6 +250,10 @@ class _KaspiPaymentScreenState extends State<KaspiPaymentScreen>
         ? S.kaspiFailedHint
         : payment?.status == 'WAIT'
         ? S.kaspiWaitingHint
+        : showQr
+        ? S.kaspiScanHint
+        : kIsWeb
+        ? S.kaspiPayHint
         : S.kaspiOpening;
 
     return Scaffold(
@@ -249,31 +276,57 @@ class _KaspiPaymentScreenState extends State<KaspiPaymentScreen>
                 ),
               ),
               const Spacer(),
-              AnimatedContainer(
-                duration: Motion.base,
-                width: 88,
-                height: 88,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: success
-                      ? c.benefit
-                      : failed
-                      ? c.danger.withValues(alpha: 0.12)
-                      : c.accentSoft,
+              if (showQr)
+                Container(
+                  padding: const EdgeInsets.all(Gap.lg),
+                  decoration: BoxDecoration(
+                    // QR всегда на белом: тёмная тема не должна мешать
+                    // камере Kaspi
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: c.line),
+                  ),
+                  child: QrImageView(
+                    data: qrData,
+                    size: 232,
+                    padding: EdgeInsets.zero,
+                    backgroundColor: Colors.white,
+                    eyeStyle: const QrEyeStyle(
+                      eyeShape: QrEyeShape.square,
+                      color: Color(0xFF0B0B14),
+                    ),
+                    dataModuleStyle: const QrDataModuleStyle(
+                      dataModuleShape: QrDataModuleShape.square,
+                      color: Color(0xFF0B0B14),
+                    ),
+                  ),
+                )
+              else
+                AnimatedContainer(
+                  duration: Motion.base,
+                  width: 88,
+                  height: 88,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: success
+                        ? c.benefit
+                        : failed
+                        ? c.danger.withValues(alpha: 0.12)
+                        : c.accentSoft,
+                  ),
+                  alignment: Alignment.center,
+                  child: _busy
+                      ? CircularProgressIndicator(color: c.accent)
+                      : Icon(
+                          icon,
+                          size: 42,
+                          color: success
+                              ? c.onBenefit
+                              : failed
+                              ? c.danger
+                              : c.accent,
+                        ),
                 ),
-                alignment: Alignment.center,
-                child: _busy
-                    ? CircularProgressIndicator(color: c.accent)
-                    : Icon(
-                        icon,
-                        size: 42,
-                        color: success
-                            ? c.onBenefit
-                            : failed
-                            ? c.danger
-                            : c.accent,
-                      ),
-              ),
               const SizedBox(height: Gap.block),
               Text(
                 title,
@@ -309,6 +362,9 @@ class _KaspiPaymentScreenState extends State<KaspiPaymentScreen>
                 )
               else if (failed)
                 _ActionButton(label: S.retry, onTap: _create)
+              else if (showQr)
+                // На компьютере кнопка Kaspi открыла бы пустую вкладку
+                const SizedBox.shrink()
               else if (!kKaspiBrandAssetsReady)
                 Container(
                   width: double.infinity,

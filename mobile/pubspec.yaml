@@ -45,6 +45,7 @@ dependencies:
   package_info_plus: ^10.2.2
   in_app_review: ^2.0.12
   firebase_crashlytics: ^5.4.1
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   flutter_test:

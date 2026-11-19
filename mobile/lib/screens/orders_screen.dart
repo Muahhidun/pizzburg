@@ -10,6 +10,7 @@ import '../utils/haptics.dart';
 import '../widgets/motion.dart';
 import 'order_screen.dart';
 import '../i18n/strings.dart';
+import '../widgets/app_route.dart';
 
 /// Экран «Заказы»: активный заказ крупно, ниже история с повтором.
 ///
@@ -84,7 +85,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
   Future<void> _open(Map<String, dynamic> order) async {
     await Navigator.push(
       context,
-      MaterialPageRoute(
+      AppRoute(
         builder: (_) => OrderScreen(
           order: CreatedOrder(
             id: order['id'].toString(),
