@@ -849,11 +849,15 @@ class _Chip extends StatelessWidget {
       child: AnimatedContainer(
         duration: Motion.base,
         curve: Motion.change,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+        // Высота и рамка одинаковые в обоих состояниях: без рамки
+        // выбранная кнопка становилась меньше соседних, а кнопка Kaspi с
+        // логотипами — выше остальных, и ряд оплаты прыгал по размерам.
+        height: 48,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
           color: selected ? c.panel : c.page,
           borderRadius: R.pill,
-          border: selected ? null : Border.all(color: c.border, width: 1.5),
+          border: Border.all(color: selected ? c.panel : c.border, width: 1.5),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

@@ -57,6 +57,19 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     _phone = TextEditingController(
       text: formatKzPhone(widget.initialPhone ?? ''),
     );
+    _code.addListener(_autoVerify);
+  }
+
+  /// Код, который уже отправляли сами: неверный не шлём по кругу
+  String? _autoSent;
+
+  /// Коды всегда из 6 цифр: набрал последнюю — входим без лишнего
+  /// нажатия «Войти». Кнопка остаётся для тех, кто вставил код иначе.
+  void _autoVerify() {
+    final code = _code.text.trim();
+    if (!_codeSent || _busy || code.length != 6 || code == _autoSent) return;
+    _autoSent = code;
+    _verify();
   }
 
   @override

@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../api/models.dart';
@@ -501,30 +499,8 @@ Future<void> showProductDialog(BuildContext context, Product product) {
   return showDialog<void>(
     context: context,
     barrierColor: Colors.black.withValues(alpha: 0.5),
-    builder: (context) {
-      final media = MediaQuery.of(context);
-      final height = math.min(880.0, media.size.height - 64);
-      const width = 560.0;
-      return Center(
-        child: ClipRRect(
-          borderRadius: R.block,
-          child: SizedBox(
-            width: width,
-            height: height,
-            child: MediaQuery(
-              data: media.copyWith(
-                size: Size(width, height),
-                padding: EdgeInsets.zero,
-                viewPadding: EdgeInsets.zero,
-              ),
-              child: ProductScreen(
-                product: product,
-                inStopList: !product.isAvailable,
-              ),
-            ),
-          ),
-        ),
-      );
-    },
+    builder: (context) => DesktopWindow(
+      child: ProductScreen(product: product, inStopList: !product.isAvailable),
+    ),
   );
 }

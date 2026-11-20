@@ -184,7 +184,9 @@ class _CartScreenState extends State<CartScreen> {
       body: SafeArea(
         bottom: false,
         child: cart.isEmpty
-            ? _Empty(embedded: widget.embedded)
+            ? (widget.embedded && WideLayout.of(context)
+                  ? const _PanelEmpty()
+                  : _Empty(embedded: widget.embedded))
             : ListView(
                 keyboardDismissBehavior:
                     ScrollViewKeyboardDismissBehavior.onDrag,
@@ -1048,6 +1050,65 @@ String? deliveryHint(CartPreview p) {
     );
   }
   return S.deliveryClosedHint;
+}
+
+/// Пустая корзина в панели справа на компьютере.
+///
+/// Без заголовка панель читалась как пустое место с картинкой: что это
+/// корзина, становилось ясно, только когда туда что-то падало. Поэтому
+/// заголовок стоит всегда, а подсказка говорит, как её наполнить, —
+/// повтор прошлого заказа здесь не к месту: меню и так рядом.
+class _PanelEmpty extends StatelessWidget {
+  const _PanelEmpty();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Gap.screen, Gap.lg, Gap.screen, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(S.cart, style: Theme.of(context).textTheme.headlineMedium),
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: c.accentSoft,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.shopping_bag_outlined,
+                      size: 28,
+                      color: c.accent,
+                    ),
+                  ),
+                  const SizedBox(height: Gap.lg),
+                  Text(
+                    S.cartEmpty,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.titleLarge?.copyWith(fontSize: 18),
+                  ),
+                  const SizedBox(height: Gap.sm),
+                  Text(
+                    S.cartPanelEmpty,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _Empty extends StatelessWidget {

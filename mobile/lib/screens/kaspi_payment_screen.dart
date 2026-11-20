@@ -276,6 +276,12 @@ class _KaspiPaymentScreenState extends State<KaspiPaymentScreen>
                 ),
               ),
               const Spacer(),
+              // Полный логотип над кодом: человек сразу видит, каким
+              // приложением сканировать. Официальный SVG, не меньше 112×28.
+              if (showQr) ...[
+                SvgPicture.asset('assets/kaspi/logo-kaspi.svg', height: 36),
+                const SizedBox(height: Gap.lg),
+              ],
               if (showQr)
                 Container(
                   padding: const EdgeInsets.all(Gap.lg),
@@ -344,6 +350,18 @@ class _KaspiPaymentScreenState extends State<KaspiPaymentScreen>
                 '${widget.order.total} ₸',
                 style: Theme.of(context).textTheme.displayMedium,
               ),
+              if (showQr) ...[
+                const SizedBox(height: Gap.md),
+                // Способы оплаты из гайда Kaspi: можно Gold и в рассрочку Red
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SvgPicture.asset('assets/kaspi/logo-gold.svg', height: 28),
+                    const SizedBox(width: 8),
+                    SvgPicture.asset('assets/kaspi/logo-red.svg', height: 28),
+                  ],
+                ),
+              ],
               if (_localError != null) ...[
                 const SizedBox(height: Gap.lg),
                 Text(

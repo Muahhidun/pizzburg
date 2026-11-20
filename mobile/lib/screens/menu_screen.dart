@@ -22,6 +22,7 @@ import 'catalog_parts.dart';
 import 'order_screen.dart';
 import 'review_screen.dart';
 import 'add_address_screen.dart';
+import 'login_screen.dart';
 import 'product_screen.dart';
 import '../i18n/strings.dart';
 import '../widgets/app_route.dart';
@@ -632,6 +633,34 @@ class _MenuScreenState extends State<MenuScreen> {
   /// набирать корзину. Ввод при этом один и тот же виджет, двух
   /// реализаций нет.
   Future<void> _pickAddress(List<SavedAddress> addresses) async {
+    // Адреса хранятся в профиле. Гость раньше заполнял всю форму и только
+    // на «Сохранить» узнавал, что нужен вход, — набранное пропадало.
+    // Теперь сначала вход, потом сразу его сохранённые адреса или форма.
+    if (!context.read<AuthState>().isAuthenticated) {
+      final signedIn = await Navigator.push<bool>(
+        context,
+        AppRoute(builder: (_) => const LoginScreen()),
+      );
+      if (!mounted || signedIn != true) return;
+      final fresh = _future = _load();
+      setState(() {
+        _attempt++;
+        _rows.clear();
+        _offsets.clear();
+      });
+      final data = await fresh;
+      if (!mounted) return;
+      addresses = data.addresses;
+      if (addresses.isEmpty) {
+        final added = await Navigator.push<bool>(
+          context,
+          AppRoute(builder: (_) => const AddAddressScreen()),
+        );
+        if (added == true) _retry();
+        return;
+      }
+    }
+    if (!mounted) return;
     final picked = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1307,7 +1336,7 @@ class _DesktopFrame extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: c.page,
                     borderRadius: R.block,
-                    border: Border.all(color: c.line),
+                    border: Border.all(color: c.border),
                   ),
                   child: LayoutBuilder(
                     builder: (context, constraints) {
