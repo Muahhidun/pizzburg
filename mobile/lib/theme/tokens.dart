@@ -199,8 +199,32 @@ abstract final class Gap {
   /// Сколько нужно оставить внизу прокручиваемого экрана, чтобы плавающий
   /// бар не перекрыл последнюю строку. Считаем от системного отступа, а не
   /// константой: на iPhone с домашней полоской и без неё низ разный.
-  static double navBarSpace(BuildContext context) =>
-      navBar + math.max(MediaQuery.paddingOf(context).bottom + sm, lg) + block;
+  static double navBarSpace(BuildContext context) => WideLayout.of(context)
+      ? block
+      : navBar +
+            math.max(MediaQuery.paddingOf(context).bottom + sm, lg) +
+            block;
+}
+
+/// Окно шире этого — раскладка для компьютера: шапка сверху вместо
+/// нижнего бара, категории слева, корзина справа.
+const double kDesktopMinWidth = 1024;
+
+/// Признак компьютерной раскладки для всего дерева.
+///
+/// Ширину окна экраны сами узнать не могут: колонки подменяют им
+/// MediaQuery на свою ширину. Поэтому решение принимается один раз
+/// наверху, по настоящему окну, и раздаётся вниз.
+class WideLayout extends InheritedWidget {
+  final bool desktop;
+  const WideLayout({super.key, required this.desktop, required super.child});
+
+  static bool of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<WideLayout>()?.desktop ??
+      false;
+
+  @override
+  bool updateShouldNotify(WideLayout old) => old.desktop != desktop;
 }
 
 /// Радиусы из хендоффа. `pill` — капсула для всего интерактивного.

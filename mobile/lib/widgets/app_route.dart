@@ -26,10 +26,15 @@ class NarrowColumn extends StatelessWidget {
   final Widget child;
   final double maxWidth;
 
+  /// Цвет полей; по умолчанию серый, чтобы колонка читалась отдельным
+  /// листом. Разделы сайта под шапкой лежат на белом, как обычная страница.
+  final Color? backdrop;
+
   const NarrowColumn({
     super.key,
     required this.child,
     this.maxWidth = kNarrowMaxWidth,
+    this.backdrop,
   });
 
   @override
@@ -39,7 +44,7 @@ class NarrowColumn extends StatelessWidget {
         if (constraints.maxWidth <= maxWidth) return child;
         final media = MediaQuery.of(context);
         return ColoredBox(
-          color: backdropColor(context),
+          color: backdrop ?? backdropColor(context),
           child: Center(
             child: SizedBox(
               width: maxWidth,

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../api/models.dart';
@@ -116,7 +118,14 @@ class _ProductScreenState extends State<ProductScreen> {
                       color: c.fillSoft,
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.arrow_back, size: 18, color: c.ink),
+                    // В окне поверх меню (компьютер) — крестик, а не «назад»
+                    child: Icon(
+                      ModalRoute.of(context) is PopupRoute
+                          ? Icons.close
+                          : Icons.arrow_back,
+                      size: 18,
+                      color: c.ink,
+                    ),
                   ),
                 ),
                 const Spacer(),
@@ -481,4 +490,41 @@ class _Photo extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Карточка блюда окном поверх меню — так на компьютере.
+///
+/// Отдельной страницей она уводила с меню и корзины справа: человек
+/// терял место в списке. Окно закрывается тем же «назад», и после
+/// добавления меню и корзина остаются как были.
+Future<void> showProductDialog(BuildContext context, Product product) {
+  return showDialog<void>(
+    context: context,
+    barrierColor: Colors.black.withValues(alpha: 0.5),
+    builder: (context) {
+      final media = MediaQuery.of(context);
+      final height = math.min(880.0, media.size.height - 64);
+      const width = 560.0;
+      return Center(
+        child: ClipRRect(
+          borderRadius: R.block,
+          child: SizedBox(
+            width: width,
+            height: height,
+            child: MediaQuery(
+              data: media.copyWith(
+                size: Size(width, height),
+                padding: EdgeInsets.zero,
+                viewPadding: EdgeInsets.zero,
+              ),
+              child: ProductScreen(
+                product: product,
+                inStopList: !product.isAvailable,
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
 }

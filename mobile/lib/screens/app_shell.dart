@@ -8,6 +8,7 @@ import '../state/cart.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../utils/haptics.dart';
+import '../widgets/desktop_bar.dart';
 import '../widgets/glass_nav_bar.dart';
 import '../widgets/motion.dart';
 import '../widgets/push_prompt.dart';
@@ -164,9 +165,79 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     setState(() => _index = index);
   }
 
+  /// Компьютер: шапка сверху, корзина живёт панелью справа от меню.
+  ///
+  /// Отдельной вкладки корзины здесь нет: второй экземпляр корзины в
+  /// стеке вкладок пересчитывал бы её на сервере параллельно с панелью.
+  Widget _desktop(BuildContext context) {
+    final colors = context.colors;
+    // Вкладка корзины могла остаться выбранной на узком окне
+    final index = _index == 2 ? 0 : _index;
+    return Scaffold(
+      backgroundColor: colors.page,
+      body: CartFlightTarget(
+        slotKey: _cartSlotKey,
+        child: Column(
+          children: [
+            Consumer<Cart>(
+              builder: (_, cart, _) => DesktopTopBar(
+                items: [
+                  (index: 0, label: S.tabMenu),
+                  (index: 1, label: S.tabFavorites),
+                  (index: 3, label: S.tabOrders),
+                  (index: 4, label: S.tabProfile),
+                ],
+                index: index,
+                onChanged: _go,
+                onCart: () => _go(0),
+                cartTotal: cart.subtotal,
+                cartCount: cart.count,
+                cartSlotKey: _cartSlotKey,
+              ),
+            ),
+            Expanded(
+              child: IndexedStack(
+                index: index,
+                children: [
+                  MenuScreen(controller: _scrolls[0]),
+                  PrimaryScrollController(
+                    controller: _scrolls[1],
+                    child: NarrowColumn(
+                      maxWidth: 900,
+                      backdrop: colors.page,
+                      child: FavoritesScreen(onOpenMenu: () => _go(0)),
+                    ),
+                  ),
+                  const SizedBox.shrink(),
+                  PrimaryScrollController(
+                    controller: _scrolls[3],
+                    child: NarrowColumn(
+                      maxWidth: 760,
+                      backdrop: colors.page,
+                      child: const OrdersScreen(),
+                    ),
+                  ),
+                  PrimaryScrollController(
+                    controller: _scrolls[4],
+                    child: NarrowColumn(
+                      maxWidth: 760,
+                      backdrop: colors.page,
+                      child: const ProfileScreen(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    if (WideLayout.of(context)) return _desktop(context);
 
     return Scaffold(
       backgroundColor: colors.page,

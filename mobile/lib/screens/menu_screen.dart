@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show SynchronousFuture;
+import 'package:flutter/foundation.dart'
+    show SynchronousFuture, ValueListenable;
 import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import '../api/api_client.dart';
@@ -118,6 +119,10 @@ const _productRowHeight = 101.0;
 /// Промежуток между рядами сетки
 const _gridGap = Gap.md;
 
+/// Колонки компьютерной раскладки по бокам меню
+const _sidebarWidth = 210.0;
+const _cartPanelWidth = 370.0;
+
 class _MenuScreenState extends State<MenuScreen> {
   late Future<_CatalogData> _future;
 
@@ -136,6 +141,13 @@ class _MenuScreenState extends State<MenuScreen> {
   /// Прямоугольник фиксированной высоты тут не годится — прокрученный
   /// список прозрачен, и чёрное просвечивало бы между строк.
   final _overscroll = ValueNotifier<double>(0);
+
+  /// Кнопка «наверх» на компьютере: у мыши нет жеста статус-бара
+  final _showTop = ValueNotifier<bool>(false);
+
+  /// Компьютерная раскладка (см. [WideLayout]); запоминаем в build, чтобы
+  /// знать её и в обработчике прокрутки
+  bool _desktop = false;
   final _chipsController = ScrollController();
 
   /// Маркер начала списка товаров и его позиция в прокрутке.
@@ -285,6 +297,7 @@ class _MenuScreenState extends State<MenuScreen> {
     SelectedAddress.revision.removeListener(_reloadSelectedAddress);
     _activeOrderTimer?.cancel();
     _overscroll.dispose();
+    _showTop.dispose();
     // Чужой контроллер не наш, его закроет оболочка
     _listController.removeListener(_onScroll);
     _ownedController?.dispose();
@@ -394,6 +407,10 @@ class _MenuScreenState extends State<MenuScreen> {
   int _columns = 2;
 
   void _openProduct(Product product) {
+    if (_desktop) {
+      showProductDialog(context, product);
+      return;
+    }
     Navigator.push(
       context,
       AppRoute(
@@ -413,16 +430,24 @@ class _MenuScreenState extends State<MenuScreen> {
     context.read<Cart>().add(product);
   }
 
+  /// Ширина колонки меню. На компьютере это середина между категориями
+  /// и корзиной, а не всё окно: по окну ряды выходили вдвое выше карточек.
+  double _viewWidth(BuildContext context) {
+    final window = MediaQuery.sizeOf(context).width;
+    if (!WideLayout.of(context)) return window;
+    return math.min(window, kAppMaxWidth) - _sidebarWidth - _cartPanelWidth;
+  }
+
   /// Ширина карточки в сетке при текущей ширине экрана
   double _cardWidth(BuildContext context) {
-    final content = MediaQuery.sizeOf(context).width - Gap.screen * 2;
+    final content = _viewWidth(context) - Gap.screen * 2;
     return (content - _gridGap * (_columns - 1)) / _columns;
   }
 
   /// Высоты рядов зависят от ширины экрана, поэтому строим их с контекстом
   /// на руках, а не при загрузке меню.
   void _buildRows(BuildContext context, MenuResponse menu) {
-    final width = MediaQuery.sizeOf(context).width;
+    final width = _viewWidth(context);
     if (_rows.isNotEmpty && width == _rowsWidth) return;
     _rows.clear();
     _offsets.clear();
@@ -436,8 +461,7 @@ class _MenuScreenState extends State<MenuScreen> {
     final cardHeight = photo + kCardTextHeight;
     _cardHeight = cardHeight;
     final heroPhoto =
-        (MediaQuery.sizeOf(context).width - Gap.screen * 2 - Gap.sm * 2) /
-        kHeroPhotoRatio;
+        (_viewWidth(context) - Gap.screen * 2 - Gap.sm * 2) / kHeroPhotoRatio;
     final heroHeight = heroPhoto + kHeroTextHeight;
     _heroHeight = heroHeight;
 
@@ -455,7 +479,9 @@ class _MenuScreenState extends State<MenuScreen> {
       // Крупная карточка — телефонный приём: на широком экране она
       // растянулась бы на весь монитор, там хит просто стоит в сетке
       // со своей плашкой.
-      final heroAt = _columns == 2 ? products.indexWhere((p) => p.isHit) : -1;
+      final heroAt = _columns == 2 && !_desktop
+          ? products.indexWhere((p) => p.isHit)
+          : -1;
       if (heroAt >= 0) {
         _rows.add(_HeroRow(category.id, products.removeAt(heroAt)));
         offset += heroHeight + _gridGap;
@@ -480,6 +506,8 @@ class _MenuScreenState extends State<MenuScreen> {
   /// Низ плавающего островка: под ним список не виден, поэтому заголовок
   /// категории при переходе должен вставать ровно под ним.
   double _pinnedTop() {
+    // На компьютере над списком ничего не плавает: категории слева
+    if (_desktop) return Gap.md;
     final top = MediaQuery.paddingOf(context).top + Gap.sm;
     if (_query.trim().isNotEmpty) return top;
     return top + Hit.min + Gap.sm * 2 + Gap.md;
@@ -503,6 +531,7 @@ class _MenuScreenState extends State<MenuScreen> {
 
   void _onScroll() {
     _overscroll.value = math.max(0, -_listController.offset);
+    _showTop.value = _listController.offset > 900;
     if (_programmaticScroll || _categories.isEmpty) return;
     _measureListTop();
     final offset = _listController.offset - _listTop + _pinnedTop() + 1;
@@ -632,6 +661,7 @@ class _MenuScreenState extends State<MenuScreen> {
     // и гостю кнопка обещала бы сохранение, которого не будет.
     final favorites = context.watch<Favorites>();
     final authed = context.watch<AuthState>().isAuthenticated;
+    final desktop = _desktop = WideLayout.of(context);
     return Scaffold(
       backgroundColor: colors.page,
       body: FutureBuilder<_CatalogData>(
@@ -654,7 +684,7 @@ class _MenuScreenState extends State<MenuScreen> {
           _buildRows(context, data.menu);
 
           // top: false — хедер сам заходит под статус-бар и красит его
-          return SafeArea(
+          final catalog = SafeArea(
             top: false,
             bottom: false,
             child: Stack(
@@ -685,6 +715,7 @@ class _MenuScreenState extends State<MenuScreen> {
                         availability: data.availability,
                         onModeChanged: (m) => setState(() => _mode = m),
                         deliveryAvailable: data.availability.deliveryAvailable,
+                        compact: desktop,
                         activeOrderBlock: _activeOrder == null
                             ? null
                             : _ActiveOrderCard(
@@ -738,7 +769,7 @@ class _MenuScreenState extends State<MenuScreen> {
                             ? RepeatOrderCard(
                                 order: data.lastOrder!,
                                 menu: _menu,
-                                onDark: true,
+                                onDark: !desktop,
                                 onRepeated: _openCart,
                               )
                             : null,
@@ -772,7 +803,8 @@ class _MenuScreenState extends State<MenuScreen> {
                     ),
                     // Пока идёт поиск, категории не нужны: они относятся
                     // к полному меню, а не к результатам.
-                    if (_query.trim().isEmpty)
+                    // На компьютере категории стоят колонкой слева
+                    if (_query.trim().isEmpty && !desktop)
                       SliverToBoxAdapter(
                         child: SizedBox(
                           key: _chipsAnchorKey,
@@ -833,31 +865,8 @@ class _MenuScreenState extends State<MenuScreen> {
                                       inCart: cart.qtyOf(product),
                                       onRemove: () =>
                                           cart.decrementProduct(product),
-                                      onTap: () => Navigator.push(
-                                        context,
-                                        AppRoute(
-                                          builder: (_) => ProductScreen(
-                                            product: product,
-                                            inStopList: !product.isAvailable,
-                                          ),
-                                        ),
-                                      ),
-                                      onAdd: () {
-                                        if (product.hasChoices) {
-                                          Navigator.push(
-                                            context,
-                                            AppRoute(
-                                              builder: (_) => ProductScreen(
-                                                product: product,
-                                                inStopList:
-                                                    !product.isAvailable,
-                                              ),
-                                            ),
-                                          );
-                                          return;
-                                        }
-                                        cart.add(product);
-                                      },
+                                      onTap: () => _openProduct(product),
+                                      onAdd: () => _addToCart(product),
                                     ),
                                   ),
                                 );
@@ -990,7 +999,7 @@ class _MenuScreenState extends State<MenuScreen> {
                   left: Gap.lg,
                   right: Gap.lg,
                   child: GlassChipsBar(
-                    visible: _chipsFloating,
+                    visible: _chipsFloating && !desktop,
                     child: CategoryChips(
                       categories: _categories,
                       activeId: _activeCategory,
@@ -999,8 +1008,30 @@ class _MenuScreenState extends State<MenuScreen> {
                     ),
                   ),
                 ),
+                if (desktop)
+                  Positioned(
+                    right: Gap.screen,
+                    bottom: Gap.blockWide,
+                    child: _ScrollTopButton(
+                      visible: _showTop,
+                      onTap: () => _listController.animateTo(
+                        0,
+                        duration: Motion.page,
+                        curve: Motion.enter,
+                      ),
+                    ),
+                  ),
               ],
             ),
+          );
+          if (!desktop) return catalog;
+          return _DesktopFrame(
+            sidebar: _CategorySidebar(
+              categories: _categories,
+              activeId: _activeCategory,
+              onTap: _jumpToCategory,
+            ),
+            catalog: catalog,
           );
         },
       ),
@@ -1223,6 +1254,200 @@ class _ReviewPrompt extends StatelessWidget {
             ),
             Icon(Icons.chevron_right, size: 20, color: c.muted),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Компьютер: категории слева, меню посередине, корзина справа.
+///
+/// Меню получает в MediaQuery ширину своей колонки: по ней оно считает
+/// число карточек в ряду и высоты рядов, а не по ширине всего окна.
+class _DesktopFrame extends StatelessWidget {
+  final Widget sidebar;
+  final Widget catalog;
+
+  const _DesktopFrame({required this.sidebar, required this.catalog});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: kAppMaxWidth),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(width: _sidebarWidth, child: sidebar),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final media = MediaQuery.of(context);
+                  return MediaQuery(
+                    data: media.copyWith(
+                      size: Size(constraints.maxWidth, media.size.height),
+                    ),
+                    child: catalog,
+                  );
+                },
+              ),
+            ),
+            SizedBox(
+              width: _cartPanelWidth,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  0,
+                  Gap.lg,
+                  Gap.blockWide,
+                  Gap.lg,
+                ),
+                child: Container(
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: c.page,
+                    borderRadius: R.block,
+                    border: Border.all(color: c.line),
+                  ),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final media = MediaQuery.of(context);
+                      return MediaQuery(
+                        data: media.copyWith(
+                          size: Size(
+                            constraints.maxWidth,
+                            constraints.maxHeight,
+                          ),
+                          padding: EdgeInsets.zero,
+                          viewPadding: EdgeInsets.zero,
+                        ),
+                        child: const CartScreen(embedded: true),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Категории колонкой слева. Стоят на месте, пока меню прокручивается,
+/// и подсвечивают ту, что сейчас на экране. Строка чипсов на мониторе
+/// не помещалась, а мышью её не прокрутить вбок.
+class _CategorySidebar extends StatelessWidget {
+  final List<MenuCategory> categories;
+  final String? activeId;
+  final ValueChanged<String> onTap;
+
+  const _CategorySidebar({
+    required this.categories,
+    required this.activeId,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return ListView(
+      primary: false,
+      padding: const EdgeInsets.fromLTRB(
+        Gap.blockWide,
+        Gap.blockWide,
+        0,
+        Gap.blockWide,
+      ),
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 0, 0, Gap.md),
+          child: Text(
+            S.tabMenu,
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
+        ),
+        for (final category in categories)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: PressScale.selection(
+              scale: 0.99,
+              onTap: () => onTap(category.id),
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: AnimatedContainer(
+                  duration: Motion.base,
+                  curve: Motion.change,
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 11,
+                  ),
+                  decoration: BoxDecoration(
+                    color: category.id == activeId
+                        ? c.accent
+                        : Colors.transparent,
+                    borderRadius: R.pill,
+                  ),
+                  child: Text(
+                    category.name,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: category.id == activeId
+                          ? FontWeight.w600
+                          : FontWeight.w500,
+                      color: category.id == activeId ? c.surface : c.ink,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// «Наверх» в углу меню, когда оно прокручено далеко
+class _ScrollTopButton extends StatelessWidget {
+  final ValueListenable<bool> visible;
+  final VoidCallback onTap;
+
+  const _ScrollTopButton({required this.visible, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return ValueListenableBuilder<bool>(
+      valueListenable: visible,
+      builder: (context, shown, _) => IgnorePointer(
+        ignoring: !shown,
+        child: AnimatedOpacity(
+          opacity: shown ? 1 : 0,
+          duration: Motion.fast,
+          child: PressScale(
+            onTap: onTap,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: c.ink,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: c.ink.withValues(alpha: 0.2),
+                      blurRadius: 18,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Icon(Icons.arrow_upward, size: 20, color: c.page),
+              ),
+            ),
+          ),
         ),
       ),
     );

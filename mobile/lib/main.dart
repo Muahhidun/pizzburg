@@ -27,6 +27,7 @@ import 'i18n/lang.dart';
 import 'theme/themes.dart';
 import 'theme/app_theme.dart';
 import 'utils/haptics.dart';
+import 'theme/tokens.dart';
 import 'widgets/app_route.dart';
 
 final _navigatorKey = GlobalKey<NavigatorState>();
@@ -281,11 +282,12 @@ class PizzBurgApp extends StatelessWidget {
                 ? const Color(0xFF0B0D12)
                 : const Color(0xFFF2F2F3),
             child: Center(
-              // Телефон — во всю ширину; планшет и компьютер — колонка до
-              // 1280 px. Меню внутри раскладывает карточки в 2–4 колонки,
-              // остальные экраны сами встают узкой колонкой (AppRoute).
-              child: NarrowColumn(
-                maxWidth: kAppMaxWidth,
+              // Телефон и планшет — во всю ширину, меню раскладывает
+              // карточки в 2–3 колонки. Компьютер — своя раскладка с шапкой
+              // (AppShell), её ширину до 1280 px держит сама оболочка.
+              // Остальные экраны встают узкой колонкой (AppRoute).
+              child: WideLayout(
+                desktop: MediaQuery.sizeOf(context).width >= kDesktopMinWidth,
                 // Тап мимо поля закрывает клавиатуру. Без этого её нечем
                 // убрать: «Имя» стоит посреди списка оформления, кнопка
                 // «Заказать» уходит под клавиатуру, и человек остаётся с

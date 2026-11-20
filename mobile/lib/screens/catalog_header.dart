@@ -45,10 +45,196 @@ class CatalogHeader extends StatelessWidget {
     this.activeOrderBlock,
     this.reviewBlock,
     this.onAddressTap,
+    this.compact = false,
   });
+
+  /// Компьютер: светлая строка над меню вместо акцентного хедера.
+  /// Хедер во всю ширину монитора превращался в синюю простыню.
+  final bool compact;
+
+  Widget _compact(BuildContext context) {
+    final c = context.colors;
+    final closed = !availability.deliveryAvailable || !availability.isOpenNow;
+    final block = activeOrderBlock ?? reviewBlock ?? repeatBlock;
+    final closedTitle = availability.isOpenNow ? S.deliveryClosed : S.closedNow;
+    final showClosed = closed && availability.message != null;
+    final blockTitle = activeOrderBlock != null
+        ? S.yourOrder
+        : reviewBlock != null
+        ? S.howWasIt
+        : S.sameOrderAgain;
+
+    Widget modeButton(String value, String label) {
+      final active = mode == value;
+      return PressScale.selection(
+        onTap: active || (value == 'DELIVERY' && !deliveryAvailable)
+            ? null
+            : () => onModeChanged(value),
+        child: AnimatedContainer(
+          duration: Motion.base,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+          decoration: BoxDecoration(
+            color: active ? c.accent : Colors.transparent,
+            borderRadius: R.pill,
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: active
+                  ? c.surface
+                  : (value == 'DELIVERY' && !deliveryAvailable
+                        ? c.muted.withValues(alpha: 0.5)
+                        : c.muted),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Gap.screen, Gap.lg, Gap.screen, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: c.fillSoft,
+                  borderRadius: R.pill,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    modeButton('DELIVERY', S.delivery),
+                    modeButton('PICKUP', S.pickup),
+                  ],
+                ),
+              ),
+              const SizedBox(width: Gap.lg),
+              Flexible(
+                child: PressScale(
+                  onTap: onAddressTap,
+                  scale: 0.98,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        mode == 'PICKUP' ? S.pickupFrom : S.deliveryTo,
+                        style: TextStyle(fontSize: 12.5, color: c.muted),
+                      ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              addressLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: c.ink,
+                              ),
+                            ),
+                          ),
+                          if (onAddressTap != null)
+                            Icon(
+                              Icons.keyboard_arrow_down,
+                              size: 18,
+                              color: c.ink,
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // «закрыто» уже сказано плашкой ниже
+              if (etaLabel.isNotEmpty && !showClosed) ...[
+                const SizedBox(width: Gap.lg),
+                Text(
+                  etaLabel,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w500,
+                    color: c.muted,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          if (showClosed) ...[
+            const SizedBox(height: Gap.md),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: Gap.lg,
+                vertical: Gap.md,
+              ),
+              decoration: BoxDecoration(
+                color: c.accentSoft,
+                borderRadius: R.field,
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.schedule, size: 18, color: c.accent),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          // Сообщение сервера часто само начинается
+                          // с «Сейчас закрыто» — заголовок тогда не повторяем
+                          if (!availability.message!.startsWith(closedTitle))
+                            TextSpan(
+                              text: '$closedTitle. ',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          TextSpan(text: availability.message!),
+                        ],
+                      ),
+                      style: TextStyle(fontSize: 13.5, color: c.ink),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (block != null) ...[
+            const SizedBox(height: Gap.blockWide),
+            Text(blockTitle, style: Theme.of(context).textTheme.headlineMedium),
+            const SizedBox(height: Gap.md),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              // Карточки заказа и отзыва рассчитаны на акцентный хедер и
+              // залиты цветом страницы — на светлом фоне им нужна рамка
+              child: BenefitReveal(
+                child: DecoratedBox(
+                  position: DecorationPosition.foreground,
+                  decoration: BoxDecoration(
+                    borderRadius: const BorderRadius.all(Radius.circular(24)),
+                    border: Border.all(color: c.line),
+                  ),
+                  child: block,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (compact) return _compact(context);
     final c = context.colors;
     final closed = !availability.deliveryAvailable || !availability.isOpenNow;
 

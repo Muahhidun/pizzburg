@@ -354,7 +354,9 @@ class _CartScreenState extends State<CartScreen> {
                   Gap.screen,
                   0,
                   Gap.screen,
-                  widget.embedded ? Gap.navBar + Gap.lg : Gap.md,
+                  widget.embedded && !WideLayout.of(context)
+                      ? Gap.navBar + Gap.lg
+                      : Gap.md,
                 ),
                 child: PressScale(
                   onTap: () async {
