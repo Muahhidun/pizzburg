@@ -1,10 +1,9 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import '../api/models.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../widgets/favorite_heart.dart';
+import '../widgets/frosted.dart';
 import '../widgets/motion.dart';
 import '../i18n/strings.dart';
 
@@ -155,8 +154,7 @@ class GlassChipsBar extends StatelessWidget {
           duration: Motion.fast,
           child: ClipRRect(
             borderRadius: R.pill,
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Frosted(
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   borderRadius: R.pill,
@@ -168,8 +166,16 @@ class GlassChipsBar extends StatelessWidget {
                       // должна быть на тон отличной от того, на чём лежит.
                       // В тёмной теме `surface` светлый, и белая панель
                       // выехала бы поверх тёмного экрана.
-                      Color.lerp(c.page, c.ink, 0.045)!.withValues(alpha: 0.80),
-                      Color.lerp(c.page, c.ink, 0.07)!.withValues(alpha: 0.62),
+                      Color.lerp(
+                        c.page,
+                        c.ink,
+                        0.045,
+                      )!.withValues(alpha: frostedAlpha(0.80)),
+                      Color.lerp(
+                        c.page,
+                        c.ink,
+                        0.07,
+                      )!.withValues(alpha: frostedAlpha(0.62)),
                     ],
                   ),
                   border: Border.all(

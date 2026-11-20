@@ -95,6 +95,10 @@ flutter_native_splash:
     icon_background_color: "#000000"
   android: true
   ios: true
+  # Сайт не трогаем: Safari 26 красит свои полосы фоном страницы в момент
+  # первой отрисовки, и чёрная заставка оставляла их чёрными навсегда.
+  # Фон сайта задан в web/index.html — белый.
+  web: false
   # fullscreen намеренно не включаем: на iOS он дописывает в Info.plist
   # UIStatusBarHidden и UIViewControllerBasedStatusBarAppearance=false,
   # а это гасит статус-бар не только на сплеше, но и во всём приложении

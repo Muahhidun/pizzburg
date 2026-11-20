@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'frosted.dart';
 import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
@@ -230,10 +231,9 @@ class _GlassNavBarState extends State<GlassNavBar> {
           // Сама панель
           ClipRRect(
             borderRadius: R.pill,
-            child: BackdropFilter(
-              // Размытие отвечает за читаемость подписей поверх
-              // проезжающего под баром списка.
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            // Размытие отвечает за читаемость подписей поверх
+            // проезжающего под баром списка.
+            child: Frosted(
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   borderRadius: R.pill,
@@ -251,8 +251,16 @@ class _GlassNavBarState extends State<GlassNavBar> {
                       // должна быть на тон отличной от того, на чём лежит.
                       // В тёмной теме `surface` светлый, и белая панель
                       // выехала бы поверх тёмного экрана.
-                      Color.lerp(c.page, c.ink, 0.045)!.withValues(alpha: 0.80),
-                      Color.lerp(c.page, c.ink, 0.07)!.withValues(alpha: 0.62),
+                      Color.lerp(
+                        c.page,
+                        c.ink,
+                        0.045,
+                      )!.withValues(alpha: frostedAlpha(0.80)),
+                      Color.lerp(
+                        c.page,
+                        c.ink,
+                        0.07,
+                      )!.withValues(alpha: frostedAlpha(0.62)),
                     ],
                   ),
                   border: Border.all(
