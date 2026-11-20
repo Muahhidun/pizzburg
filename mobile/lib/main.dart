@@ -27,6 +27,7 @@ import 'i18n/lang.dart';
 import 'theme/themes.dart';
 import 'theme/app_theme.dart';
 import 'utils/haptics.dart';
+import 'utils/page_chrome.dart';
 import 'theme/tokens.dart';
 import 'widgets/app_route.dart';
 
@@ -229,10 +230,15 @@ class PizzBurgApp extends StatelessWidget {
   }
 
   Widget _app(BuildContext context, AppThemeVariant variant) {
+    final page = variant.page ?? variant.surface;
+    // Сайт: статус-бар и нижнюю полосу Safari красит фоном страницы
+    setPageColor(page);
     return MaterialApp(
       navigatorKey: _navigatorKey,
       scaffoldMessengerKey: _messengerKey,
       title: 'PizzBurg',
+      // В браузере отсюда берётся theme-color — цвет полос Safari до iOS 26
+      color: page,
       debugShowCheckedModeBanner: false,
       // Направление «Сигнал» из design_handoff_pizzburg_app.
       // accent и benefit — параметры темы: платформа мультитенантная,

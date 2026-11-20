@@ -62,10 +62,10 @@ class ProductImage extends StatelessWidget {
     return Image.network(
       url!,
       fit: BoxFit.cover,
-      // Poster and the R2 staging domain do not allow CanvasKit's
-      // cross-origin image fetches. On the web, render a native <img>
-      // immediately; iOS/Android keep using the regular Flutter pipeline.
-      webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
+      // Web: draw on the Flutter canvas first; a native <img> moves apart
+      // from the canvas while scrolling. <img> is only the fallback for
+      // hosts without CORS (Poster).
+      webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
       errorBuilder: (context, error, stack) => const _ImagePlaceholder(),
       loadingBuilder: (context, child, progress) =>
           progress == null ? child : const _ImagePlaceholder(),

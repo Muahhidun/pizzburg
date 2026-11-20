@@ -795,11 +795,11 @@ class _Photo extends StatelessWidget {
   Widget build(BuildContext context) {
     if (url == null || url!.isEmpty) return ColoredBox(color: fallback);
     final image = Image.network(
-      // В браузере фото с чужих серверов (Poster, R2) приходят без
-      // разрешения CORS, и CanvasKit их не рисует. Сразу берём обычный <img>;
-      // на iOS и Android это ничего не меняет.
-      webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
-
+      // В браузере сначала рисуем фото на холсте Flutter. Обычный <img>
+      // ездит отдельно от холста: при прокрутке список «желейный», и на
+      // iPhone сайт кажется заторможенным. <img> — только запасной путь
+      // для серверов без CORS (Poster). На iOS и Android это ничего не меняет.
+      webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
       url!,
       fit: BoxFit.cover,
       errorBuilder: (_, _, _) => ColoredBox(color: fallback),

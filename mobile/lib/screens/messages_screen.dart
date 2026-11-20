@@ -160,10 +160,9 @@ class _MessageCard extends StatelessWidget {
             ClipRRect(
               borderRadius: R.thumb,
               child: Image.network(
-                // В браузере фото с чужих серверов (Poster, R2) приходят без
-                // разрешения CORS, и CanvasKit их не рисует. Сразу берём обычный <img>;
-                // на iOS и Android это ничего не меняет.
-                webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
+                // В браузере — на холсте Flutter, <img> только для серверов
+                // без CORS (Poster): см. _Photo в catalog_parts.dart.
+                webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
 
                 message.imageUrl!,
                 width: double.infinity,

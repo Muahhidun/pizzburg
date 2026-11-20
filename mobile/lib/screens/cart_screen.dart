@@ -454,10 +454,9 @@ class _CartRow extends StatelessWidget {
                       line.product.photoUrl!.isEmpty
                   ? ColoredBox(color: c.fillSoft)
                   : Image.network(
-                      // В браузере фото с чужих серверов (Poster, R2) приходят без
-                      // разрешения CORS, и CanvasKit их не рисует. Сразу берём обычный <img>;
-                      // на iOS и Android это ничего не меняет.
-                      webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
+                      // В браузере — на холсте Flutter, <img> только для серверов
+                      // без CORS (Poster): см. _Photo в catalog_parts.dart.
+                      webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
 
                       line.product.photoUrl!,
                       fit: BoxFit.cover,
@@ -665,11 +664,10 @@ class _UpsellStrip extends StatelessWidget {
                         child: offer.photoUrl == null
                             ? ColoredBox(color: c.fillSoft)
                             : Image.network(
-                                // В браузере фото с чужих серверов (Poster, R2) приходят без
-                                // разрешения CORS, и CanvasKit их не рисует. Сразу берём обычный <img>;
-                                // на iOS и Android это ничего не меняет.
+                                // В браузере — на холсте Flutter, <img> только для серверов
+                                // без CORS (Poster): см. _Photo в catalog_parts.dart.
                                 webHtmlElementStrategy:
-                                    WebHtmlElementStrategy.prefer,
+                                    WebHtmlElementStrategy.fallback,
 
                                 offer.photoUrl!,
                                 fit: BoxFit.cover,
