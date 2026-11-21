@@ -344,7 +344,9 @@ class ProductCard extends StatelessWidget {
             duration: Motion.fast,
             padding: const EdgeInsets.all(Gap.sm),
             decoration: BoxDecoration(
-              color: hovered ? c.page : c.fillSoft,
+              // Непрозрачный серый вместо полупрозрачного: переход от
+              // полупрозрачного к белому шёл через тёмную вспышку
+              color: hovered ? c.page : Color.alphaBlend(c.fillSoft, c.page),
               borderRadius: R.block,
               boxShadow: hovered
                   ? [

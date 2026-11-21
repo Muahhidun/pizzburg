@@ -1365,8 +1365,10 @@ class _DesktopFrame extends StatelessWidget {
                         ),
                       ),
                     ),
-                    // QR на приложение — под корзиной, всегда на месте
-                    const DesktopAppQr(),
+                    // QR на приложение — под корзиной, всегда на месте.
+                    // На низком окне корзине нужна вся высота — тогда без него
+                    if (MediaQuery.sizeOf(context).height >= 720)
+                      const DesktopAppQr(),
                   ],
                 ),
               ),
