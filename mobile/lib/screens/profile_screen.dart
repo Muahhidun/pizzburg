@@ -17,6 +17,7 @@ import 'legal_screen.dart';
 import '../i18n/lang.dart';
 import '../i18n/strings.dart';
 import '../widgets/app_route.dart';
+import '../widgets/app_promo.dart';
 
 /// Профиль по прототипу «Сигнал».
 ///
@@ -161,6 +162,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 level: auth.loyaltyLevel,
                 levelsTotal: auth.levelsTotal,
               ),
+              // Сайт: подарок за вход здесь не начисляется — объясняем где
+              const WebGiftCard(),
 
               if (auth.toNextLevel > 0 && auth.nextCashbackPct != null) ...[
                 const SizedBox(height: Gap.md),

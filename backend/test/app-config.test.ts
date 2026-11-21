@@ -21,3 +21,26 @@ test('мусор вместо версии требований не созда�
   assert.deepEqual(c.minVersion, { ios: null, android: null });
   assert.deepEqual(appConfigFrom(null).minVersion, { ios: null, android: null });
 });
+
+test('подарок за вход: виден до последнего дня акции, потом пропадает', () => {
+  const settings = {
+    loyalty: { welcomeBonus: { amount: 1000, until: '2026-12-31', spendUntil: '2027-01-31' } },
+  };
+  // 31.12 23:00 по Алматы (UTC+5) — ещё акция
+  assert.deepEqual(
+    appConfigFrom(settings, new Date('2026-12-31T18:00:00Z')).welcomeBonus,
+    { amount: 1000, until: '2026-12-31', spendUntil: '2027-01-31' },
+  );
+  // 1.01 00:30 по Алматы — уже нет
+  assert.equal(appConfigFrom(settings, new Date('2026-12-31T19:30:00Z')).welcomeBonus, null);
+  assert.equal(appConfigFrom({ loyalty: { welcomeBonus: { amount: 0 } } }).welcomeBonus, null);
+  assert.equal(appConfigFrom(null).welcomeBonus, null);
+});
+
+test('баннеры сайта включены, пока их явно не выключили', () => {
+  assert.deepEqual(appConfigFrom(null).webPromo, { popup: true, bar: true, qr: true });
+  assert.deepEqual(
+    appConfigFrom({ webPromo: { popup: false, qr: false } }).webPromo,
+    { popup: false, bar: true, qr: false },
+  );
+});

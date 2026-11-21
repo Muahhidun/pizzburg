@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -19,6 +20,7 @@ import 'orders_screen.dart';
 import 'profile_screen.dart';
 import '../i18n/strings.dart';
 import '../widgets/app_route.dart';
+import '../widgets/app_promo.dart';
 
 /// Оболочка с таб-баром: Меню / Избранное / Корзина / Заказы / Профиль.
 ///
@@ -79,6 +81,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     // человек должен увидеть меню, а не окно поверх заставки.
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) PushPrompt.maybeShowIntro(context);
+    });
+    // Сайт: окно «чем приложение лучше» — когда человек уже увидел меню
+    Future.delayed(const Duration(milliseconds: 2500), () {
+      if (mounted) AppPromo.maybeShowPopup(context);
     });
   }
 
@@ -274,6 +280,26 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                   child: NarrowColumn(child: const ProfileScreen()),
                 ),
               ],
+            ),
+            // Сайт на телефоне: полоска «скачайте приложение» над баром
+            Positioned(
+              left: Gap.lg,
+              right: Gap.lg,
+              bottom:
+                  Gap.navBar +
+                  math.max(
+                    MediaQuery.paddingOf(context).bottom + Gap.sm,
+                    Gap.lg,
+                  ) +
+                  Gap.sm,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: kNarrowMaxWidth - 32,
+                  ),
+                  child: const AppPromoBar(),
+                ),
+              ),
             ),
             Align(
               alignment: Alignment.bottomCenter,

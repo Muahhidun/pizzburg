@@ -1,4 +1,6 @@
 import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'models.dart';
 import '../i18n/strings.dart';
@@ -34,7 +36,13 @@ class ApiClient {
     // анкету и запоминает его у устройства для пушей (DECISIONS §12.30).
     'Accept-Language': L.current.code,
     if (token != null) 'Authorization': 'Bearer $token',
+    // Сайт помечает себя: подарок за вход даётся только в приложении
+    if (kIsWeb) 'X-Client': 'web',
   };
+
+  /// Одна ссылка «скачать приложение»: сама ведёт в App Store или Google
+  /// Play, на компьютере показывает страницу с обеими кнопками.
+  static String get appLink => '$baseUrl/app/$tenant';
 
   /// Настройки приложения с сервера: минимальная версия, сторы и
   /// числа, которые раньше были зашиты в сборку.

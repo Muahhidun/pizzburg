@@ -115,6 +115,15 @@ export class UpdateSettingsDto {
   /// Последний день акции YYYY-MM-DD включительно; null — без срока
   @IsOptional() @ValidateIf((_, v) => v !== null) @Matches(/^\d{4}-\d{2}-\d{2}$/)
   welcomeBonusUntil?: string | null;
+  /// До какого дня (включительно) подарок можно потратить; null — без срока
+  @IsOptional() @ValidateIf((_, v) => v !== null) @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  welcomeBonusSpendUntil?: string | null;
+
+  /// Баннеры сайта о приложении: окно при первом заходе, полоска внизу
+  /// на телефоне, QR под корзиной на компьютере
+  @IsOptional() @IsBoolean() webPromoPopup?: boolean;
+  @IsOptional() @IsBoolean() webPromoBar?: boolean;
+  @IsOptional() @IsBoolean() webPromoQr?: boolean;
 }
 
 /** Аварийный режим приёма заказов и сообщения клиенту */

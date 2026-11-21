@@ -231,7 +231,8 @@ export default function LoyaltyPage() {
           </section>
 
           <WelcomeBonusSection />
-      <MaxSpendSection />
+          <MaxSpendSection />
+          <WebPromoSection />
         </>
       )}
     </main>
@@ -324,7 +325,12 @@ function MaxSpendSection() {
 function WelcomeBonusSection() {
   const [amount, setAmount] = useState('');
   const [until, setUntil] = useState('');
-  const [saved, setSaved] = useState<{ amount: string; until: string } | null>(null);
+  const [spendUntil, setSpendUntil] = useState('');
+  const [saved, setSaved] = useState<{
+    amount: string;
+    until: string;
+    spendUntil: string;
+  } | null>(null);
   const [granted, setGranted] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -332,10 +338,15 @@ function WelcomeBonusSection() {
   const load = useCallback(async () => {
     const s = await api.get<Settings>('/admin/settings');
     const wb = s.settings.loyalty?.welcomeBonus ?? {};
-    const next = { amount: String(wb.amount ?? 0), until: wb.until ?? '' };
+    const next = {
+      amount: String(wb.amount ?? 0),
+      until: wb.until ?? '',
+      spendUntil: wb.spendUntil ?? '',
+    };
     setSaved(next);
     setAmount(next.amount);
     setUntil(next.until);
+    setSpendUntil(next.spendUntil);
     setGranted(s.welcomeBonusGranted ?? 0);
   }, []);
 
@@ -353,6 +364,7 @@ function WelcomeBonusSection() {
       await api.patch('/admin/settings', {
         welcomeBonusAmount: Number(amount),
         welcomeBonusUntil: until || null,
+        welcomeBonusSpendUntil: spendUntil || null,
       });
       await load();
     } catch (e) {
@@ -364,7 +376,10 @@ function WelcomeBonusSection() {
 
   if (saved === null) return null;
   const on = Number(saved.amount) > 0;
-  const changed = amount !== saved.amount || until !== saved.until;
+  const changed =
+    amount !== saved.amount ||
+    until !== saved.until ||
+    spendUntil !== saved.spendUntil;
 
   return (
     <section className="mt-8 rounded-2xl bg-white p-5 shadow-sm dark:bg-neutral-900">
@@ -380,8 +395,9 @@ function WelcomeBonusSection() {
       </div>
       <p className="mt-1 max-w-2xl text-sm text-neutral-500">
         Баллы начисляются сами, один раз на номер телефона: при входе в
-        приложение или при открытии профиля. Тратятся как обычные баллы —
-        в пределах потолка ниже. 0 — подарок выключен.
+        приложение или при открытии профиля. Вход на сайте подарок не даёт —
+        сайт зовёт в приложение. Тратятся как обычные баллы, в пределах
+        потолка ниже. 0 — подарок выключен.
       </p>
 
       <div className="mt-3 flex flex-wrap items-end gap-3">
@@ -397,11 +413,20 @@ function WelcomeBonusSection() {
           />
         </label>
         <label>
-          <span className="mb-1 block text-sm font-medium">Последний день</span>
+          <span className="mb-1 block text-sm font-medium">Получить до</span>
           <input
             type="date"
             value={until}
             onChange={(e) => setUntil(e.target.value)}
+            className="rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
+          />
+        </label>
+        <label>
+          <span className="mb-1 block text-sm font-medium">Потратить до</span>
+          <input
+            type="date"
+            value={spendUntil}
+            onChange={(e) => setSpendUntil(e.target.value)}
             className="rounded-xl border border-black/10 bg-transparent px-3 py-2 dark:border-white/15"
           />
         </label>
@@ -418,6 +443,96 @@ function WelcomeBonusSection() {
         {until ? `Включительно, по времени заведения.` : 'Без даты — пока не выключите.'}{' '}
         Получили подарок: {granted.toLocaleString('ru-RU')} клиентов.
       </p>
+      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+    </section>
+  );
+}
+
+/**
+ * Баннеры сайта о приложении.
+ *
+ * Сайт — тоже канал продаж, поэтому заказывать на нём не мешаем, а
+ * только объясняем, что даёт приложение. Каждый баннер выключается
+ * отдельно: окно при первом заходе можно убрать, а QR под корзиной
+ * оставить насовсем.
+ */
+function WebPromoSection() {
+  const [promo, setPromo] = useState<{ popup: boolean; bar: boolean; qr: boolean } | null>(
+    null,
+  );
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const s = await api.get<Settings>('/admin/settings');
+    const w = s.settings.webPromo ?? {};
+    setPromo({ popup: w.popup !== false, bar: w.bar !== false, qr: w.qr !== false });
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function toggle(key: 'popup' | 'bar' | 'qr', field: string) {
+    if (!promo) return;
+    setBusy(key);
+    setError(null);
+    try {
+      await api.patch('/admin/settings', { [field]: !promo[key] });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (promo === null) return null;
+  const rows: { key: 'popup' | 'bar' | 'qr'; field: string; title: string; hint: string }[] = [
+    {
+      key: 'popup',
+      field: 'webPromoPopup',
+      title: 'Окно при первом заходе',
+      hint: 'Показывается один раз; после закрытия — не раньше чем через 14 дней.',
+    },
+    {
+      key: 'bar',
+      field: 'webPromoBar',
+      title: 'Полоска внизу на телефоне',
+      hint: 'Узкая, над нижним меню. Закрыли — вернётся через 7 дней.',
+    },
+    {
+      key: 'qr',
+      field: 'webPromoQr',
+      title: 'QR под корзиной на компьютере',
+      hint: 'Стоит всегда, не закрывается.',
+    },
+  ];
+
+  return (
+    <section className="mt-8 rounded-2xl bg-white p-5 shadow-sm dark:bg-neutral-900">
+      <h2 className="font-semibold">Баннеры сайта о приложении</h2>
+      <p className="mt-1 max-w-2xl text-sm text-neutral-500">
+        Зовут с сайта в приложение: подарок за вход (пока идёт акция),
+        статус заказа и ответы на сообщения уведомлением.
+      </p>
+      <div className="mt-3 divide-y divide-black/5 dark:divide-white/10">
+        {rows.map((r) => (
+          <label key={r.key} className="flex items-start gap-3 py-3">
+            <input
+              type="checkbox"
+              checked={promo[r.key]}
+              disabled={busy !== null}
+              onChange={() => toggle(r.key, r.field)}
+              className="mt-1 h-4 w-4"
+            />
+            <span>
+              <span className="block text-sm font-medium">{r.title}</span>
+              <span className="block text-xs text-neutral-400">{r.hint}</span>
+            </span>
+          </label>
+        ))}
+      </div>
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
     </section>
   );

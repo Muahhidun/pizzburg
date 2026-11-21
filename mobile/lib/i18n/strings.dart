@@ -1,3 +1,4 @@
+import '../api/models.dart' show formatTenge;
 import 'lang.dart';
 
 /// Тексты интерфейса.
@@ -772,4 +773,65 @@ class S {
   static String get deleteAccountConfirm => t('Да, удалить', 'Иә, жою');
   static String get deleting => t('Удаляем…', 'Жойылуда…');
   static String get accountDeleted => t('Аккаунт удалён', 'Аккаунт жойылды');
+
+  // ── Сайт зовёт в приложение ──
+  // Казахский текст этого блока — черновик, проверить носителю языка
+  static String _n(int n) => formatTenge(n, withCurrency: false);
+  static String get promoTitle => t(
+    'Заказывайте в приложении PizzBurg',
+    'PizzBurg қосымшасында тапсырыс беріңіз',
+  );
+  static String promoTitleGift(int n) => t(
+    '${_n(n)} баллов за вход в приложение',
+    'Қосымшаға кіргені үшін ${_n(n)} балл',
+  );
+  static String get promoLead => t(
+    'Заказать можно и на сайте, а в приложении мы всегда на связи с вами.',
+    'Сайтта да тапсырыс беруге болады, ал қосымшада біз сізбен әрдайым байланыстамыз.',
+  );
+  static String promoWelcome(int n) =>
+      t('${_n(n)} баллов за вход', 'Кіргені үшін ${_n(n)} балл');
+  static String? promoGiftDates(String? until, String? spendUntil) {
+    if (until != null && spendUntil != null) {
+      return t(
+        'Получите до $until, потратьте до $spendUntil',
+        '$until дейін алыңыз, $spendUntil дейін жұмсаңыз',
+      );
+    }
+    if (until != null) return t('Акция до $until', 'Акция $until дейін');
+    return null;
+  }
+
+  static String get promoStatus =>
+      t('Статус заказа — уведомлением', 'Тапсырыс күйі — хабарламамен');
+  static String get promoChat => t(
+    'Ответы на сообщения — сразу на телефон',
+    'Хабарламаларға жауап — бірден телефонға',
+  );
+  static String get promoOffers =>
+      t('Акции и новинки — первыми', 'Акциялар мен жаңалықтар — бірінші болып');
+  static String get promoScan => t(
+    'Наведите камеру телефона на QR — откроется App Store или Google Play. Войдите по своему номеру.',
+    'Телефон камерасын QR-ға бағыттаңыз — App Store немесе Google Play ашылады. Өз нөміріңізбен кіріңіз.',
+  );
+  static String get promoDownload =>
+      t('Скачать приложение', 'Қосымшаны жүктеу');
+  static String get promoStay => t('Остаться на сайте', 'Сайтта қалу');
+  static String promoBarGift(int n) => promoTitleGift(n);
+  static String get promoBar => t(
+    'Уведомления о заказе — в приложении',
+    'Тапсырыс туралы хабарламалар — қосымшада',
+  );
+  static String get promoBarAction => t('Скачать', 'Жүктеу');
+  static String promoQrTitleGift(int n) => promoTitleGift(n);
+  static String get promoQrTitle =>
+      t('Приложение PizzBurg', 'PizzBurg қосымшасы');
+  static String get promoQrHint => t(
+    'Статус заказа и ответы — уведомлением. Наведите камеру на QR.',
+    'Тапсырыс күйі мен жауаптар — хабарламамен. Камераны QR-ға бағыттаңыз.',
+  );
+  static String promoProfileGift(int n) => t(
+    '${_n(n)} баллов ждут вас в приложении',
+    '${_n(n)} балл сізді қосымшада күтіп тұр',
+  );
 }

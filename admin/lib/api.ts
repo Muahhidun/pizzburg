@@ -530,8 +530,15 @@ export interface Settings {
       /// Доля стоимости товаров, которую можно закрыть баллами, %
       maxSpendPct?: number;
       /// Подарок за вход в приложение: amount 0 — выключен
-      welcomeBonus?: { amount?: number; until?: string | null };
+      welcomeBonus?: {
+        amount?: number;
+        until?: string | null;
+        /// До какого дня подарок можно потратить
+        spendUntil?: string | null;
+      };
     };
+    /// Баннеры сайта о приложении; не задано — включено
+    webPromo?: { popup?: boolean; bar?: boolean; qr?: boolean };
     ordering?: {
       mode?: OrderingMode;
       until?: string | null;

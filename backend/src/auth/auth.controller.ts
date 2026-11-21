@@ -163,16 +163,28 @@ export class AuthController {
   }
 
   @Post(':tenantSlug/verify')
-  async verify(@Param('tenantSlug') tenantSlug: string, @Body() dto: VerifyOtpDto) {
+  async verify(
+    @Param('tenantSlug') tenantSlug: string,
+    @Body() dto: VerifyOtpDto,
+    @Headers('x-client') client?: string,
+  ) {
     const result = await this.auth.verifyOtp(tenantSlug, dto.phone, dto.code);
     // Подарок за вход — сразу, чтобы баланс в ответе уже его включал
-    const bonus = await this.welcomeBonus(result.customer.id);
+    const bonus = await this.welcomeBonus(result.customer.id, client);
     if (bonus > 0) result.customer.pointsBalance += bonus;
     return result;
   }
 
-  /** Подарок за вход не должен ронять вход или профиль */
-  private async welcomeBonus(customerId: string) {
+  /**
+   * Подарок за вход не должен ронять вход или профиль.
+   *
+   * Только за вход в приложение: подарок — плата за канал связи (пуши об
+   * акциях), а сайт его не даёт. Сайт помечает запросы `X-Client: web`;
+   * без метки — приложение, в том числе уже вышедшие версии 1.0.x.
+   * Подделать метку можно, но выгоды в этом нет: подарок один на номер.
+   */
+  private async welcomeBonus(customerId: string, client?: string) {
+    if (client?.toLowerCase() === 'web') return 0;
     try {
       return await this.loyalty.grantWelcomeBonus(customerId);
     } catch (e) {
@@ -261,9 +273,9 @@ export class AuthController {
   /** Профиль + история заказов текущего клиента */
   @Get('me')
   @UseGuards(CustomerAuthGuard)
-  async me(@Req() req: any) {
+  async me(@Req() req: any, @Headers('x-client') client?: string) {
     // До чтения профиля: начисленный подарок сразу виден в балансе
-    await this.welcomeBonus(req.customer.sub);
+    await this.welcomeBonus(req.customer.sub, client);
     const customer = await this.prisma.customer.findUnique({
       where: { id: req.customer.sub },
       select: {

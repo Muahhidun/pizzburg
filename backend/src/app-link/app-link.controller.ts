@@ -94,7 +94,7 @@ export function appLinksFrom(settings: unknown): AppLinks {
 
 const VERSION = /^\d+\.\d+\.\d+$/;
 
-export function appConfigFrom(settings: unknown) {
+export function appConfigFrom(settings: unknown, now = new Date()) {
   const all = (settings ?? {}) as Record<string, unknown>;
   const update = (all.appUpdate ?? {}) as Record<string, unknown>;
   const version = (v: unknown) =>
@@ -104,7 +104,41 @@ export function appConfigFrom(settings: unknown) {
     minVersion: { ios: version(update.minIos), android: version(update.minAndroid) },
     store: { ios: links.ios ?? null, android: links.android ?? null },
     unpaidCancelMinutes: Math.round(UNPAID_CANCEL_AFTER_MS / 60_000),
+    welcomeBonus: welcomeBonusFrom(settings, now),
+    webPromo: webPromoFrom(settings),
   };
+}
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Подарок за вход — для баннеров сайта. null, когда акция выключена или
+ * кончилась: баннер тогда говорит о приложении без подарка.
+ */
+export function welcomeBonusFrom(settings: unknown, now = new Date()) {
+  const all = (settings ?? {}) as Record<string, any>;
+  const raw = (all.loyalty?.welcomeBonus ?? {}) as Record<string, unknown>;
+  const amount = Number(raw.amount);
+  if (!Number.isInteger(amount) || amount <= 0) return null;
+  const day = (v: unknown) => (typeof v === 'string' && DAY.test(v) ? v : null);
+  const until = day(raw.until);
+  const tz = typeof all.timezone === 'string' ? all.timezone : 'Asia/Almaty';
+  const today = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+  if (until && today > until) return null;
+  return { amount, until, spendUntil: day(raw.spendUntil) };
+}
+
+/** Какие баннеры о приложении показывать на сайте; по умолчанию все */
+export function webPromoFrom(settings: unknown) {
+  const all = (settings ?? {}) as Record<string, any>;
+  const raw = (all.webPromo ?? {}) as Record<string, unknown>;
+  const on = (v: unknown) => v !== false;
+  return { popup: on(raw.popup), bar: on(raw.bar), qr: on(raw.qr) };
 }
 
 /** Куда вести по User-Agent; undefined — показать страницу */

@@ -866,8 +866,18 @@ export class AdminService {
       maxSpendPct,
       welcomeBonusAmount,
       welcomeBonusUntil,
+      welcomeBonusSpendUntil,
+      webPromoPopup,
+      webPromoBar,
+      webPromoQr,
       ...deliveryPatch
     } = dto;
+    const webPromo = {
+      ...(current.webPromo ?? {}),
+      ...(webPromoPopup !== undefined ? { popup: webPromoPopup } : {}),
+      ...(webPromoBar !== undefined ? { bar: webPromoBar } : {}),
+      ...(webPromoQr !== undefined ? { qr: webPromoQr } : {}),
+    };
     const delivery = { ...(current.delivery ?? {}), ...deliveryPatch };
     const loyalty = {
       ...(current.loyalty ?? {}),
@@ -881,11 +891,18 @@ export class AdminService {
         : {}),
       ...(maxSpendPct !== undefined ? { maxSpendPct } : {}),
     };
-    if (welcomeBonusAmount !== undefined || welcomeBonusUntil !== undefined) {
+    if (
+      welcomeBonusAmount !== undefined ||
+      welcomeBonusUntil !== undefined ||
+      welcomeBonusSpendUntil !== undefined
+    ) {
       loyalty.welcomeBonus = {
         ...(current.loyalty?.welcomeBonus ?? {}),
         ...(welcomeBonusAmount !== undefined ? { amount: welcomeBonusAmount } : {}),
         ...(welcomeBonusUntil !== undefined ? { until: welcomeBonusUntil } : {}),
+        ...(welcomeBonusSpendUntil !== undefined
+          ? { spendUntil: welcomeBonusSpendUntil }
+          : {}),
       };
     }
     if (
@@ -899,7 +916,7 @@ export class AdminService {
     }
     return this.prisma.tenant.update({
       where: { id: tenant.id },
-      data: { settings: { ...current, delivery, loyalty } },
+      data: { settings: { ...current, delivery, loyalty, webPromo } },
       select: { settings: true },
     });
   }

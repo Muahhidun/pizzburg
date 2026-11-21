@@ -14,6 +14,7 @@ import '../state/auth.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../utils/haptics.dart';
+import '../widgets/app_promo.dart';
 import '../widgets/motion.dart';
 import '../widgets/repeat_order_card.dart';
 import 'cart_screen.dart';
@@ -1331,29 +1332,37 @@ class _DesktopFrame extends StatelessWidget {
                   Gap.blockWide,
                   Gap.lg,
                 ),
-                child: Container(
-                  clipBehavior: Clip.antiAlias,
-                  decoration: BoxDecoration(
-                    color: c.page,
-                    borderRadius: R.block,
-                    border: Border.all(color: c.border),
-                  ),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final media = MediaQuery.of(context);
-                      return MediaQuery(
-                        data: media.copyWith(
-                          size: Size(
-                            constraints.maxWidth,
-                            constraints.maxHeight,
-                          ),
-                          padding: EdgeInsets.zero,
-                          viewPadding: EdgeInsets.zero,
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        clipBehavior: Clip.antiAlias,
+                        decoration: BoxDecoration(
+                          color: c.page,
+                          borderRadius: R.block,
+                          border: Border.all(color: c.border),
                         ),
-                        child: const CartScreen(embedded: true),
-                      );
-                    },
-                  ),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final media = MediaQuery.of(context);
+                            return MediaQuery(
+                              data: media.copyWith(
+                                size: Size(
+                                  constraints.maxWidth,
+                                  constraints.maxHeight,
+                                ),
+                                padding: EdgeInsets.zero,
+                                viewPadding: EdgeInsets.zero,
+                              ),
+                              child: const CartScreen(embedded: true),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    // QR на приложение — под корзиной, всегда на месте
+                    const DesktopAppQr(),
+                  ],
                 ),
               ),
             ),
