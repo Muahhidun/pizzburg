@@ -727,6 +727,10 @@ model Order {
   cancelledBy        String?
   /// Напоминаний «заказ не принят» уже отправлено: 1 — кассе, 2 — руководству
   acceptReminders    Int           @default(0)
+  /// Сообщение «ждёт принятия» в группе кассиров: после принятия его
+  /// переписываем на «✅ принят через N мин». Пусто — переписывать нечего.
+  acceptReminderChatId    String?
+  acceptReminderMessageId Int?
   /// Сообщение о заказе в группе кассиров — на него ведут ссылки «№N»
   cashierChatId      String?
   cashierMessageId   Int?

@@ -79,11 +79,21 @@ export class AcceptReminderService {
       const kind = o.type === 'DELIVERY' ? 'доставка' : 'самовывоз';
       try {
         if (stage === 1) {
-          await this.telegram.notifyCashier(
+          const posted = await this.telegram.notifyCashier(
             o.tenantId,
             `⏰ <b>Заказ №${o.number} ждёт принятия ${minutes} мин</b> (${kind})\n` +
               'Клиент видит «Ждём подтверждения». Примите заказ на планшете.',
           );
+          // Запоминаем, чтобы после принятия переписать на «✅ принят»
+          if (posted?.messageId) {
+            await this.prisma.order.update({
+              where: { id: o.id },
+              data: {
+                acceptReminderChatId: posted.chatId,
+                acceptReminderMessageId: posted.messageId,
+              },
+            });
+          }
         } else {
           await this.telegram.notify(
             o.tenantId,
@@ -95,5 +105,80 @@ export class AcceptReminderService {
         this.logger.warn(`Напоминание о №${o.number} не отправлено: ${e}`);
       }
     }
+
+    await this.resolve();
   }
+
+  /**
+   * Переписывает «ждёт принятия» на итог, когда заказ приняли или отменили.
+   *
+   * Сообщение не удаляем: иначе отвлёкшийся кассир не поймёт, был ли
+   * заказ, а руководство теряет историю задержек. Правка не пищит в
+   * группе — звук остаётся только у того, что действительно ждёт.
+   *
+   * Время принятия — `updatedAt`: опрос Poster ставит ACCEPTED раз в
+   * минуту и больше заказ до этого крона не трогает (см. closeStale).
+   */
+  async resolve() {
+    const done = await this.prisma.order.findMany({
+      where: { acceptReminderMessageId: { not: null }, status: { not: 'NEW' } },
+      select: {
+        id: true,
+        number: true,
+        tenantId: true,
+        type: true,
+        status: true,
+        updatedAt: true,
+        cancelledAt: true,
+        acceptReminderChatId: true,
+        acceptReminderMessageId: true,
+        dispatches: { select: { status: true, sentAt: true } },
+      },
+    });
+    for (const o of done) {
+      // Захват: правим ровно один раз, даже при двух экземплярах сервера
+      const claimed = await this.prisma.order.updateMany({
+        where: { id: o.id, acceptReminderMessageId: o.acceptReminderMessageId },
+        data: { acceptReminderChatId: null, acceptReminderMessageId: null },
+      });
+      if (claimed.count === 0 || !o.acceptReminderChatId) continue;
+
+      const sentAt = o.dispatches
+        .filter((d) => d.status === 'SENT' && d.sentAt)
+        .map((d) => d.sentAt!.getTime())
+        .sort((a, b) => a - b)[0];
+      const kind = o.type === 'DELIVERY' ? 'доставка' : 'самовывоз';
+      const text = acceptResolvedText(o.number, kind, o.status, sentAt, o.cancelledAt ?? o.updatedAt);
+
+      try {
+        const { error } = await this.telegram.call(o.tenantId, 'editMessageText', {
+          chat_id: o.acceptReminderChatId,
+          message_id: o.acceptReminderMessageId,
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+          text: await this.telegram.linkOrders(o.tenantId, text),
+        });
+        if (error) this.logger.warn(`Не переписали напоминание №${o.number}: ${error}`);
+      } catch (e) {
+        this.logger.warn(`Не переписали напоминание №${o.number}: ${e}`);
+      }
+    }
+  }
+}
+
+/** Итог вместо «ждёт принятия»: принят через N мин или отменён */
+export function acceptResolvedText(
+  number: number,
+  kind: string,
+  status: string,
+  sentAt: number | undefined,
+  at: Date,
+): string {
+  if (status === 'CANCELLED') {
+    return `❌ <b>Заказ №${number} отменён</b>, так и не был принят (${kind})`;
+  }
+  const minutes = sentAt ? Math.max(0, Math.round((at.getTime() - sentAt) / 60_000)) : null;
+  return minutes === null
+    ? `✅ <b>Заказ №${number} принят</b> (${kind})`
+    : `✅ <b>Заказ №${number} принят через ${minutes} мин</b> (${kind})`;
 }
