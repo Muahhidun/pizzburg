@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import '../api/models.dart';
 import '../theme/app_theme.dart';
@@ -45,29 +46,56 @@ class PressScale extends StatefulWidget {
 class _PressScaleState extends State<PressScale> {
   bool _down = false;
 
+  /// Курсор над элементом (компьютер). Без отклика на наведение сайт
+  /// выглядел застывшим: не видно, что кликабельно и где сейчас мышь.
+  bool _hover = false;
+
   void _set(bool value) {
     if (_down != value) setState(() => _down = value);
+  }
+
+  void _setHover(bool value) {
+    if (_hover != value) setState(() => _hover = value);
   }
 
   @override
   Widget build(BuildContext context) {
     final enabled = widget.onTap != null;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: enabled ? (_) => _set(true) : null,
-      onTapCancel: enabled ? () => _set(false) : null,
-      onTapUp: enabled ? (_) => _set(false) : null,
-      onTap: enabled
-          ? () {
-              (widget.feedback ?? Haptics.tap)();
-              widget.onTap!();
+    // Наведение — чуть крупнее, нажатие — чуть меньше. Множитель
+    // наведения меньше сжатия: элемент «тянется» к курсору, не прыгает.
+    final hoverScale = 1 + (1 - widget.scale) / 2;
+    final scale = !enabled
+        ? 1.0
+        : _down
+        ? widget.scale
+        : _hover
+        ? hoverScale
+        : 1.0;
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: enabled
+          ? (e) {
+              if (e.kind == PointerDeviceKind.mouse) _setHover(true);
             }
           : null,
-      child: AnimatedScale(
-        scale: _down && enabled ? widget.scale : 1,
-        duration: Motion.fast,
-        curve: Motion.change,
-        child: widget.child,
+      onExit: enabled ? (_) => _setHover(false) : null,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: enabled ? (_) => _set(true) : null,
+        onTapCancel: enabled ? () => _set(false) : null,
+        onTapUp: enabled ? (_) => _set(false) : null,
+        onTap: enabled
+            ? () {
+                (widget.feedback ?? Haptics.tap)();
+                widget.onTap!();
+              }
+            : null,
+        child: AnimatedScale(
+          scale: scale,
+          duration: Motion.fast,
+          curve: Motion.change,
+          child: widget.child,
+        ),
       ),
     );
   }

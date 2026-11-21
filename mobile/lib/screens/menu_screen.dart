@@ -1340,6 +1340,11 @@ class _DesktopFrame extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: c.page,
                           borderRadius: R.block,
+                        ),
+                        // Рамка поверх содержимого: под ним её углы
+                        // перекрывал фон корзины, и скругления пропадали
+                        foregroundDecoration: BoxDecoration(
+                          borderRadius: R.block,
                           border: Border.all(color: c.border),
                         ),
                         child: LayoutBuilder(

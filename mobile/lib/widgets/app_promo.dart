@@ -340,7 +340,12 @@ class _AppPromoBarState extends State<AppPromoBar> {
   Widget build(BuildContext context) {
     final config = context.watch<AppConfig>();
     final promo = config.webPromo;
-    if (!kIsWeb || !_visible || !promo.bar || (promo.popup && !_popupSeen)) {
+    // В заход, когда показали окно, полоска его не повторяет
+    if (!kIsWeb ||
+        !_visible ||
+        !promo.bar ||
+        AppPromo._popupShown ||
+        (promo.popup && !_popupSeen)) {
       return const SizedBox.shrink();
     }
     final c = context.colors;
