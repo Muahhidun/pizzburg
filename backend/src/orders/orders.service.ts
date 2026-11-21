@@ -914,38 +914,19 @@ export class OrdersService {
       // Кассир должен понять с чека, что старый заказ надо отклонить, —
       // отдельного канала связи с планшетом у нас нет.
       const replaceNote = resending
-        ? ` | СОСТАВ ИЗМЕНЁН — ЧЕК №${d.posterOrderId ?? "—"} ОТКЛОНИТЬ, готовить этот`
+        ? `СОСТАВ ИЗМЕНЁН — ЧЕК №${d.posterOrderId ?? "—"} ОТКЛОНИТЬ, готовить этот`
         : "";
       const partNote =
         parts.length > 1
-          ? ` | ОБЩИЙ ЗАКАЗ №${order.number}: часть ${i + 1}/${parts.length} (${parts
+          ? `ОБЩИЙ ЗАКАЗ №${order.number}: часть ${i + 1}/${parts.length} (${parts
               .filter((p) => p.id !== d.id)
               .map((p) => p.posterAccount.name)
               .join(", ")})`
           : "";
+      const tz = (order.tenant?.settings as any)?.timezone ?? "Asia/Almaty";
       // Сдачу показываем только на первой части: разменивает один кассир,
       // а видеть строку на обоих планшетах — путаница.
-      const changeNote =
-        i === 0 && order.paymentMethod === "CASH" && order.changeFrom
-          ? ` (готовить сдачу с ${order.changeFrom} ₸)`
-          : "";
-      const payNote =
-        {
-          CASH: "Оплата: наличные курьеру",
-          CARD_ON_DELIVERY: "Оплата: карта курьеру (взять терминал)",
-          KASPI_ONLINE: "ОПЛАЧЕНО ОНЛАЙН (Kaspi)",
-        }[order.paymentMethod] + changeNote;
-
-      const scheduledNote = order.scheduledAt
-        ? ` | ПРЕДЗАКАЗ на ${new Intl.DateTimeFormat("ru-RU", {
-            timeZone:
-              (order.tenant?.settings as any)?.timezone ?? "Asia/Almaty",
-            day: "2-digit",
-            month: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
-          }).format(order.scheduledAt)}`
-        : "";
+      const pay = payStatus(order, { withChange: i === 0 });
 
       // «Личная интеграция» этой части: подарки + списанные баллы.
       const giftIntegrationSum = items
@@ -955,16 +936,13 @@ export class OrdersService {
       const integrationSum = giftIntegrationSum + prepaidIntegrationSum;
       const giftNote = items
         .filter((it) => it.isGift)
-        .map(
-          (it) =>
-            ` | ПОДАРОК ПО АКЦИИ: ${it.name} ×${it.qty} (оплачен интеграцией)`,
-        )
-        .join("");
+        .map((it) => `ПОДАРОК ПО АКЦИИ: ${it.name} ×${it.qty} (оплачен интеграцией)`)
+        .join(" | ");
       // Кассиру важно видеть, чем закрыта разница: баллами клиента или
       // скидкой по акции — это разные разговоры при спорах.
       const pointsNote =
         prepaidIntegrationSum > 0
-          ? ` | ${
+          ? `${
               order.promoDiscount > 0 && order.pointsSpent > 0
                 ? "БАЛЛЫ И СКИДКА"
                 : order.promoDiscount > 0
@@ -972,6 +950,14 @@ export class OrdersService {
                   : "БАЛЛЫ ПРИЛОЖЕНИЯ"
             }: ${prepaidIntegrationSum} ₸ (оплачено интеграцией)`
           : "";
+      const comment = posterComment({
+        number: order.number,
+        scheduledAt: order.scheduledAt,
+        tz,
+        pay,
+        wish: order.comment,
+        notes: [replaceNote, giftNote, pointsNote, partNote],
+      });
 
       const addr = order.address as any;
 
@@ -982,7 +968,7 @@ export class OrdersService {
             `${d.posterAccount.name}: ${items.map((x) => `${x.name}×${x.qty}`).join(", ")}${partNote}` +
             // Комментарий кассира целиком: по нему проверяем сдачу,
             // предзаказ и пометки подарков перед боевым тестом
-            `\n  комментарий в Poster: №${order.number}.${order.comment ? ` ПОЖЕЛАНИЕ: ${order.comment}.` : ""} — КАССЕ: ${payNote}.${replaceNote}${scheduledNote}${giftNote}${pointsNote}`,
+            `\n  комментарий в Poster:\n${comment}`,
         );
         await this.prisma.orderDispatch.update({
           where: { id: d.id },
@@ -1004,21 +990,11 @@ export class OrdersService {
             spot_id: 1,
             phone: order.customer?.phone ?? "",
             service_mode: order.type === "DELIVERY" ? 3 : 2,
-            // Порядок частей — не косметика. Poster отдаёт один-единственный
-            // текст комментария и на кассовый чек, и на бегунок повару,
-            // разделить их на стороне API нельзя. Поэтому первым идёт то,
-            // что нужно кухне — пожелание клиента, — а логистика кассира
-            // уходит за разделитель: повар читает свою строку сразу и не
-            // разбирает способ оплаты.
-            comment:
-              `№${order.number}.` +
-              (order.comment ? ` ПОЖЕЛАНИЕ: ${order.comment}.` : "") +
-              ` — КАССЕ: ${payNote}.` +
-              replaceNote +
-              scheduledNote +
-              giftNote +
-              pointsNote +
-              partNote,
+            // Один текст и на кассовый чек, и на бегунок повару (Poster
+            // не даёт их разделить). Первыми — время и оплата: кассиры
+            // пропускали предзаказ в конце строки, а кухне время важнее
+            // всего — заказ на 19:30 сейчас готовить не надо.
+            comment,
             client_address:
               order.type === "DELIVERY" && addr
                 ? {
@@ -1631,22 +1607,19 @@ export function newOrderMessage(
 ): string {
   const lines: string[] = [];
   const delivery = order.type === 'DELIVERY';
+  // Кассиру с первого взгляда нужно две вещи: когда готовить и оплачен ли
+  // заказ. Цвета текста в телеграме нет — выделяем значками и капсом.
+  const tz = (order.tenant?.settings as any)?.timezone ?? 'Asia/Almaty';
+  const pay = payStatus(order);
   lines.push(
-    `🆕 <b>Новое приложение · заказ №${order.number}</b>`,
-    delivery ? '🚗 Доставка' : '🏃 Самовывоз',
+    order.scheduledAt
+      ? `🟥🟥 <b>ПРЕДЗАКАЗ — НА ${preorderLabel(order.scheduledAt, tz)}</b> 🟥🟥`
+      : '🟩 <b>СРАЗУ</b>',
+    pay.paid
+      ? `✅ <b>ОПЛАЧЕН</b> · ${pay.how}`
+      : `❌ <b>НЕ ОПЛАЧЕН</b> · ${esc(pay.how)}`,
+    `🆕 Новое приложение · заказ №${order.number} · ${delivery ? '🚗 Доставка' : '🏃 Самовывоз'}`,
   );
-  if (order.scheduledAt) {
-    const tz = (order.tenant?.settings as any)?.timezone ?? 'Asia/Almaty';
-    lines.push(
-      `⏰ Предзаказ на ${new Intl.DateTimeFormat('ru-RU', {
-        timeZone: tz,
-        day: '2-digit',
-        month: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      }).format(order.scheduledAt)}`,
-    );
-  }
   const a = order.address as any;
   if (delivery && a) {
     const extra = [
@@ -1680,20 +1653,69 @@ export function newOrderMessage(
   if (order.deliveryFee > 0) lines.push(`Доставка: ${order.deliveryFee} ₸`);
   if (order.pointsSpent > 0) lines.push(`Баллами: ${order.pointsSpent} ₸`);
   if (order.promoDiscount > 0) lines.push(`Скидка: ${order.promoDiscount} ₸`);
-  const pay =
-    {
-      CASH: 'наличные',
-      CARD_ON_DELIVERY: 'карта (терминал)',
-      KASPI_ONLINE: 'Kaspi, оплачено',
-    }[order.paymentMethod] ?? order.paymentMethod;
   lines.push(
-    `💰 <b>К оплате: ${order.total} ₸</b> · ${pay}` +
-      (order.paymentMethod === 'CASH' && order.changeFrom
-        ? `, сдача с ${order.changeFrom} ₸`
-        : ''),
+    pay.paid
+      ? `💰 Сумма: ${order.total} ₸ (оплачено)`
+      : `💰 <b>Взять с клиента: ${order.total} ₸</b>`,
   );
   if (order.comment) lines.push(`💬 ${esc(order.comment)}`);
   return lines.join('\n');
+}
+
+/** «19:30 (21.11)» — время предзаказа по часам заведения */
+export function preorderLabel(at: Date, tz: string) {
+  const part = (o: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat('ru-RU', { timeZone: tz, ...o }).format(at);
+  return `${part({ hour: '2-digit', minute: '2-digit' })} (${part({ day: '2-digit', month: '2-digit' })})`;
+}
+
+/**
+ * Оплачен ли заказ и как брать деньги — одна строка для чека и группы.
+ * Kaspi до кассы доходит только оплаченным, остальное берут при выдаче.
+ */
+export function payStatus(
+  order: { paymentMethod: string; type: string; changeFrom?: number | null },
+  opts: { withChange?: boolean } = {},
+): { paid: boolean; how: string } {
+  const delivery = order.type === 'DELIVERY';
+  if (order.paymentMethod === 'KASPI_ONLINE') return { paid: true, how: 'Kaspi' };
+  if (order.paymentMethod === 'CARD_ON_DELIVERY') {
+    return {
+      paid: false,
+      how: delivery ? 'карта курьеру, взять терминал' : 'картой на кассе',
+    };
+  }
+  const change =
+    (opts.withChange ?? true) && order.changeFrom
+      ? `, сдача с ${order.changeFrom} ₸`
+      : '';
+  return {
+    paid: false,
+    how: (delivery ? 'наличные курьеру' : 'наличные на кассе') + change,
+  };
+}
+
+/**
+ * Комментарий чека Poster. Строки: предзаказ (если есть), оплата, номер с
+ * пожеланием, служебные пометки. Каждая кончается знаком препинания —
+ * если принтер склеит строки, текст всё равно читается.
+ */
+export function posterComment(p: {
+  number: number;
+  scheduledAt: Date | null;
+  tz: string;
+  pay: { paid: boolean; how: string };
+  wish?: string | null;
+  notes?: string[];
+}) {
+  return [
+    p.scheduledAt ? `!!! ПРЕДЗАКАЗ НА ${preorderLabel(p.scheduledAt, p.tz)} !!!` : '',
+    `${p.pay.paid ? 'ОПЛАЧЕН' : 'НЕ ОПЛАЧЕН'}: ${p.pay.how}.`,
+    `№${p.number}.` + (p.wish ? ` ПОЖЕЛАНИЕ: ${p.wish}.` : ''),
+    ...(p.notes ?? []).filter(Boolean).map((n) => `${n}.`),
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 /**

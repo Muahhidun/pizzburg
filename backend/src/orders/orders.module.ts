@@ -7,6 +7,7 @@ import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { StatusPollerService } from './status-poller.service';
 import { AcceptReminderService } from './accept-reminder.service';
+import { PreorderReminderService } from './preorder-reminder.service';
 import { CancelReasonsService } from './cancel-reasons.service';
 import { ShortageService } from './shortage.service';
 import { ServiceReceiptService } from './service-receipt.service';
@@ -34,6 +35,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     OrdersService,
     StatusPollerService,
     AcceptReminderService,
+    PreorderReminderService,
     UnpaidOrdersService,
     DailySummaryService,
     CancelReasonsService,
