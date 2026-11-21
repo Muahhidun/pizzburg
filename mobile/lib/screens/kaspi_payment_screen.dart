@@ -268,12 +268,42 @@ class _KaspiPaymentScreenState extends State<KaspiPaymentScreen>
           ),
           child: Column(
             children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  S.orderNo(widget.order.number),
-                  style: TextStyle(color: c.muted, fontWeight: FontWeight.w600),
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      S.orderNo(widget.order.number),
+                      style: TextStyle(
+                        color: c.muted,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  // Выход из оплаты: человек вспомнил, что забыл блюдо или
+                  // ошибся адресом. Ведёт на экран заказа — там его можно
+                  // отменить или вернуться к оплате кнопкой «Оплатить».
+                  if (!success)
+                    PressScale(
+                      onTap: _openOrder,
+                      child: Semantics(
+                        button: true,
+                        label: S.close,
+                        child: Container(
+                          width: Hit.min,
+                          height: Hit.min,
+                          decoration: BoxDecoration(
+                            color: c.fillSoft,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.close_rounded,
+                            size: 22,
+                            color: c.ink,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
               const Spacer(),
               // Полный логотип над кодом: человек сразу видит, каким

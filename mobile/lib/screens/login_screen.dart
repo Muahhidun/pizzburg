@@ -143,6 +143,11 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _verify() async {
+    // Код могут отправить двумя путями сразу: автовход по шестой цифре и
+    // «Готово» на клавиатуре (iOS при подстановке кода из смс жмёт его
+    // сам). Второй успешный ответ закрывал уже не вход, а экран под ним —
+    // и оставался белый лист.
+    if (_busy) return;
     if (_code.text.trim().length < 4) {
       setState(() => _error = S.enterSmsCode);
       return;
@@ -156,9 +161,17 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
       Haptics.success();
       // true — «вход состоялся»: оформление ждёт этого ответа, чтобы
       // продолжить прерванный заказ, а не начинать его заново.
-      if (mounted) Navigator.pop(context, true);
+      if (!mounted) return;
+      final route = ModalRoute.of(context);
+      if (route == null || route.isCurrent) {
+        Navigator.pop(context, true);
+      } else if (route.isActive) {
+        // Поверх входа успело открыться что-то ещё — убираем именно вход
+        Navigator.removeRoute(context, route);
+      }
     } catch (e) {
       Haptics.warning();
+      if (!mounted) return;
       setState(() {
         _error = _message(e);
         _busy = false;
