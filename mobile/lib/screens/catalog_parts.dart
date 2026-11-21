@@ -335,82 +335,99 @@ class ProductCard extends StatelessWidget {
     return PressScale(
       onTap: onTap,
       scale: 0.99,
-      child: Opacity(
-        opacity: inStopList ? 0.45 : 1,
-        child: Container(
-          padding: const EdgeInsets.all(Gap.sm),
-          decoration: BoxDecoration(color: c.fillSoft, borderRadius: R.block),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  ClipRRect(
-                    borderRadius: R.thumb,
-                    child: AspectRatio(
-                      aspectRatio: kCardPhotoRatio,
-                      child: _Photo(
-                        url: product.photoUrl,
-                        grayscale: inStopList,
-                        fallback: c.border,
+      hoverScale: 1.03,
+      // Под курсором карточка приподнимается: крупнее и с тенью
+      child: HoverBuilder(
+        builder: (context, hovered) => Opacity(
+          opacity: inStopList ? 0.45 : 1,
+          child: AnimatedContainer(
+            duration: Motion.fast,
+            padding: const EdgeInsets.all(Gap.sm),
+            decoration: BoxDecoration(
+              color: hovered ? c.page : c.fillSoft,
+              borderRadius: R.block,
+              boxShadow: hovered
+                  ? [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.12),
+                        blurRadius: 24,
+                        offset: const Offset(0, 10),
                       ),
-                    ),
-                  ),
-                  if (favorite != null && onToggleFavorite != null)
-                    Positioned(
-                      top: -4,
-                      right: -4,
-                      child: FavoriteHeart(
-                        active: favorite!,
-                        onTap: onToggleFavorite!,
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: Gap.sm),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        product.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyLarge,
-                      ),
-                      const SizedBox(height: 3),
-                      Expanded(
-                        child: Text(
-                          inStopList ? S.temporarilyUnavailable : subtitle,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.labelMedium,
+                    ]
+                  : const [],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    ClipRRect(
+                      borderRadius: R.thumb,
+                      child: AspectRatio(
+                        aspectRatio: kCardPhotoRatio,
+                        child: _Photo(
+                          url: product.photoUrl,
+                          grayscale: inStopList,
+                          fallback: c.border,
                         ),
                       ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Text(
-                            formatTenge(product.price, withCurrency: false),
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          _AddControl(
-                            inStopList: inStopList,
-                            inCart: inCart,
-                            onAdd: onAdd,
-                            onRemove: onRemove,
-                          ),
-                        ],
+                    ),
+                    if (favorite != null && onToggleFavorite != null)
+                      Positioned(
+                        top: -4,
+                        right: -4,
+                        child: FavoriteHeart(
+                          active: favorite!,
+                          onTap: onToggleFavorite!,
+                        ),
                       ),
-                    ],
+                  ],
+                ),
+                const SizedBox(height: Gap.sm),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          product.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyLarge,
+                        ),
+                        const SizedBox(height: 3),
+                        Expanded(
+                          child: Text(
+                            inStopList ? S.temporarilyUnavailable : subtitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.labelMedium,
+                          ),
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text(
+                              formatTenge(product.price, withCurrency: false),
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            _AddControl(
+                              inStopList: inStopList,
+                              inCart: inCart,
+                              onAdd: onAdd,
+                              onRemove: onRemove,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

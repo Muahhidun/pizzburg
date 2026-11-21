@@ -1415,35 +1415,48 @@ class _CategorySidebar extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: 2),
             child: PressScale.selection(
-              scale: 0.99,
+              scale: 0.98,
+              hoverScale: 1.0,
               onTap: () => onTap(category.id),
-              child: MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: AnimatedContainer(
-                  duration: Motion.base,
-                  curve: Motion.change,
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 11,
-                  ),
-                  decoration: BoxDecoration(
-                    color: category.id == activeId
-                        ? c.accent
-                        : Colors.transparent,
-                    borderRadius: R.pill,
-                  ),
-                  child: Text(
-                    category.name,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: category.id == activeId
-                          ? FontWeight.w600
-                          : FontWeight.w500,
-                      color: category.id == activeId ? c.surface : c.ink,
+              // Под курсором — подложка акцента и сдвиг вправо: видно,
+              // куда сейчас нажмёшь
+              child: HoverBuilder(
+                builder: (context, hovered) {
+                  final active = category.id == activeId;
+                  return AnimatedContainer(
+                    duration: Motion.fast,
+                    curve: Motion.change,
+                    width: double.infinity,
+                    padding: EdgeInsets.fromLTRB(
+                      hovered && !active ? 20 : 14,
+                      11,
+                      14,
+                      11,
                     ),
-                  ),
-                ),
+                    decoration: BoxDecoration(
+                      color: active
+                          ? c.accent
+                          : hovered
+                          ? c.accentSoft
+                          : Colors.transparent,
+                      borderRadius: R.pill,
+                    ),
+                    child: Text(
+                      category.name,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: active || hovered
+                            ? FontWeight.w600
+                            : FontWeight.w500,
+                        color: active
+                            ? c.surface
+                            : hovered
+                            ? c.accent
+                            : c.ink,
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
           ),

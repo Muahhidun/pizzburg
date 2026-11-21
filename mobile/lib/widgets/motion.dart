@@ -23,12 +23,17 @@ class PressScale extends StatefulWidget {
   /// `Haptics.selection`.
   final VoidCallback? feedback;
 
+  /// Насколько увеличивать под курсором; по умолчанию — заметно, но без
+  /// прыжка (кнопки ~1.03)
+  final double? hoverScale;
+
   const PressScale({
     super.key,
     required this.child,
     this.onTap,
     this.scale = 0.96,
     this.feedback,
+    this.hoverScale,
   });
 
   /// Вариант для чипсов и переключателей
@@ -37,6 +42,7 @@ class PressScale extends StatefulWidget {
     required this.child,
     this.onTap,
     this.scale = 0.97,
+    this.hoverScale,
   }) : feedback = Haptics.selection;
 
   @override
@@ -63,7 +69,7 @@ class _PressScaleState extends State<PressScale> {
     final enabled = widget.onTap != null;
     // Наведение — чуть крупнее, нажатие — чуть меньше. Множитель
     // наведения меньше сжатия: элемент «тянется» к курсору, не прыгает.
-    final hoverScale = 1 + (1 - widget.scale) / 2;
+    final hoverScale = widget.hoverScale ?? 1.03;
     final scale = !enabled
         ? 1.0
         : _down
@@ -99,6 +105,31 @@ class _PressScaleState extends State<PressScale> {
       ),
     );
   }
+}
+
+/// Состояние «курсор над элементом» для своей подсветки: фон пункта
+/// меню, тень карточки. Только мышь — касание пальцем не «наводится».
+class HoverBuilder extends StatefulWidget {
+  final Widget Function(BuildContext context, bool hovered) builder;
+  const HoverBuilder({super.key, required this.builder});
+
+  @override
+  State<HoverBuilder> createState() => _HoverBuilderState();
+}
+
+class _HoverBuilderState extends State<HoverBuilder> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+    onEnter: (e) {
+      if (e.kind == PointerDeviceKind.mouse) setState(() => _hover = true);
+    },
+    onExit: (_) {
+      if (_hover) setState(() => _hover = false);
+    },
+    child: widget.builder(context, _hover),
+  );
 }
 
 /// Число, которое перекатывается к новому значению.

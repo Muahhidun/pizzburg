@@ -408,7 +408,9 @@ class _AppPromoBarState extends State<AppPromoBar> {
 }
 
 /// QR на приложение под корзиной на компьютере. Не закрывается: он
-/// никому не мешает и всегда под рукой.
+/// никому не мешает и всегда под рукой. Оформлен как наши баннеры —
+/// кобальт, лаймовая плашка выгоды и телефон с экраном приложения, —
+/// чтобы бросался в глаза, а не сливался с корзиной.
 class DesktopAppQr extends StatelessWidget {
   const DesktopAppQr({super.key});
 
@@ -418,37 +420,142 @@ class DesktopAppQr extends StatelessWidget {
     if (!kIsWeb || !config.webPromo.qr) return const SizedBox.shrink();
     final c = context.colors;
     final gift = config.welcomeBonus;
+    const blue = Color(0xFF2B3BEE);
+    const lime = Color(0xFFD6F84C);
+    const ink = Color(0xFF0B0B14);
+    final dates = gift == null
+        ? null
+        : S.promoGiftDates(
+            gift.until == null ? null : _day(gift.until!),
+            gift.spendUntil == null ? null : _day(gift.spendUntil!),
+          );
+    final hint = TextStyle(
+      fontSize: 11.5,
+      color: Colors.white.withValues(alpha: 0.85),
+      height: 1.35,
+    );
     return Container(
       margin: const EdgeInsets.only(top: Gap.md),
-      padding: const EdgeInsets.all(Gap.md),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: c.page,
+        color: blue,
         borderRadius: R.block,
         border: Border.all(color: c.border),
       ),
-      child: Row(
+      child: Stack(
         children: [
-          const _Qr(size: 84),
-          const SizedBox(width: Gap.md),
-          Expanded(
+          // Телефон выглядывает справа снизу, чуть наклонён
+          Positioned(
+            right: -22,
+            bottom: -64,
+            child: Transform.rotate(
+              angle: 0.14,
+              child: Container(
+                width: 104,
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: ink,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black38,
+                      blurRadius: 18,
+                      offset: Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.asset(
+                    'assets/branding/promo-screen.jpg',
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            // Справа место под телефон
+            padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.lg, 92, Gap.lg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (gift != null) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: lime,
+                      borderRadius: R.pill,
+                    ),
+                    child: Text(
+                      S.promoWelcome(gift.amount),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: ink,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 Text(
-                  gift != null
-                      ? S.promoQrTitleGift(gift.amount)
-                      : S.promoQrTitle,
-                  style: TextStyle(
-                    fontSize: 14,
+                  S.promoQrTitle,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    fontFamily: 'Unbounded',
+                    fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    color: c.ink,
-                    height: 1.25,
+                    color: Colors.white,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  S.promoQrHint,
-                  style: TextStyle(fontSize: 12, color: c.muted, height: 1.35),
+                const SizedBox(height: Gap.md),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: QrImageView(
+                        data: ApiClient.appLink,
+                        size: 78,
+                        padding: EdgeInsets.zero,
+                        backgroundColor: Colors.white,
+                        eyeStyle: const QrEyeStyle(
+                          eyeShape: QrEyeShape.square,
+                          color: ink,
+                        ),
+                        dataModuleStyle: const QrDataModuleStyle(
+                          dataModuleShape: QrDataModuleShape.square,
+                          color: ink,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: Gap.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(S.promoQrHint, style: hint),
+                          if (dates != null) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              dates,
+                              style: hint.copyWith(
+                                color: lime,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

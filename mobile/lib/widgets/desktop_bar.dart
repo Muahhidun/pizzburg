@@ -138,21 +138,29 @@ class _NavLink extends StatelessWidget {
     final c = context.colors;
     return PressScale.selection(
       onTap: onTap,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: AnimatedContainer(
-          duration: Motion.base,
+      hoverScale: 1.0,
+      child: HoverBuilder(
+        builder: (context, hovered) => AnimatedContainer(
+          duration: Motion.fast,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           decoration: BoxDecoration(
-            color: active ? c.fillSoft : Colors.transparent,
+            color: active
+                ? c.fillSoft
+                : hovered
+                ? c.accentSoft
+                : Colors.transparent,
             borderRadius: R.pill,
           ),
           child: Text(
             label,
             style: TextStyle(
               fontSize: 15,
-              fontWeight: active ? FontWeight.w600 : FontWeight.w500,
-              color: active ? c.ink : c.muted,
+              fontWeight: active || hovered ? FontWeight.w600 : FontWeight.w500,
+              color: active
+                  ? c.ink
+                  : hovered
+                  ? c.accent
+                  : c.muted,
             ),
           ),
         ),
@@ -180,15 +188,28 @@ class _CartButton extends StatelessWidget {
     final filled = count > 0;
     return PressScale(
       onTap: onTap,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: AnimatedContainer(
-          duration: Motion.base,
+      hoverScale: 1.05,
+      child: HoverBuilder(
+        builder: (context, hovered) => AnimatedContainer(
+          duration: Motion.fast,
           height: 46,
           padding: const EdgeInsets.symmetric(horizontal: 20),
           decoration: BoxDecoration(
-            color: filled ? c.accent : c.fillSoft,
+            color: filled
+                ? c.accent
+                : hovered
+                ? c.accentSoft
+                : c.fillSoft,
             borderRadius: R.pill,
+            boxShadow: hovered
+                ? [
+                    BoxShadow(
+                      color: c.accent.withValues(alpha: 0.25),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
+                  ]
+                : const [],
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

@@ -6,4 +6,5 @@
 /// сверху и снизу поверх белого меню. После запуска фон берём из темы.
 library;
 
-export 'page_chrome_stub.dart' if (dart.library.js_interop) 'page_chrome_web.dart';
+export 'page_chrome_stub.dart'
+    if (dart.library.js_interop) 'page_chrome_web.dart';
