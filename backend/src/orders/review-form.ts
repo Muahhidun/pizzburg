@@ -66,13 +66,16 @@ export const REVIEW_QUESTIONS: ReviewQuestion[] = [
     ],
   },
   {
+    // Конкретный вопрос про общение: «Было неприятно» читали как про
+    // запах или внешний вид, и ни клиенту, ни кассе не было ясно, о чём
+    // речь. id ответов прежние — старые отзывы читаются по-новому.
     id: 'courier',
-    label: 'Курьер', labelKk: 'Курьер',
+    label: 'Курьер был вежлив?', labelKk: 'Курьер сыпайы болды ма?',
     deliveryOnly: true,
     options: [
-      { id: 'RUDE', label: 'Было неприятно', labelKk: 'Жағымсыз болды', weight: 1 },
+      { id: 'RUDE', label: 'Нет, грубил', labelKk: 'Жоқ, дөрекі болды', weight: 1 },
       { id: 'NORMAL', label: 'Обычно', labelKk: 'Әдеттегідей', weight: 4 },
-      { id: 'POLITE', label: 'Вежливый', labelKk: 'Сыпайы', weight: 5 },
+      { id: 'POLITE', label: 'Да, вежливый', labelKk: 'Иә, сыпайы', weight: 5 },
     ],
   },
 ];

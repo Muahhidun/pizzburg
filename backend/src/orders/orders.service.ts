@@ -1622,7 +1622,7 @@ export function newOrderMessage(
   const pay = payStatus(order);
   // Номер первым: по нему кассир ищет чек на планшете и переписывается
   lines.push(
-    `🆕 <b>Заказ №${order.number}</b> · ${delivery ? '🚗 Доставка' : '🏃 Самовывоз'} · новое приложение`,
+    `🆕 <b>Заказ №${order.number}</b> · ${delivery ? '🚗 Доставка' : '🏃 Самовывоз'}`,
     order.scheduledAt
       ? `🟥🟥 <b>ПРЕДЗАКАЗ — НА ${preorderLabel(order.scheduledAt, tz)}</b> 🟥🟥`
       : '🟩 <b>СРАЗУ</b>',
@@ -1663,16 +1663,9 @@ export function newOrderMessage(
   if (order.deliveryFee > 0) lines.push(`Доставка: ${order.deliveryFee} ₸`);
   if (order.pointsSpent > 0) lines.push(`Баллами: ${order.pointsSpent} ₸`);
   if (order.promoDiscount > 0) lines.push(`Скидка: ${order.promoDiscount} ₸`);
-  // Чем именно брать — в той же строке, что и сумма: «взять с клиента»
-  // при оплате картой читалось как «взять наличными»
-  const delivered = order.type === 'DELIVERY';
-  lines.push(
-    pay.paid
-      ? `💰 Сумма: ${order.total} ₸ (оплачено)`
-      : order.paymentMethod === 'CARD_ON_DELIVERY'
-        ? `💳 <b>Картой через терминал: ${order.total} ₸</b>`
-        : `💵 <b>Наличными${delivered ? ' с клиента' : ' на кассе'}: ${order.total} ₸</b>`,
-  );
+  // Только сумма заказа: как брать — в строке оплаты наверху. «Взять с
+  // клиента 4400» рядом с «у клиента 10000» путало, сколько брать.
+  lines.push(`💰 <b>Сумма заказа: ${order.total} ₸</b>` + (pay.paid ? ' (оплачено)' : ''));
   if (order.comment) lines.push(`💬 ${esc(order.comment)}`);
   return lines.join('\n');
 }
@@ -1701,41 +1694,37 @@ export function payStatus(
   },
   opts: { withChange?: boolean } = {},
 ): { paid: boolean; how: string; receipt: string } {
-  const delivery = order.type === 'DELIVERY';
   if (order.paymentMethod === 'KASPI_ONLINE') {
     return { paid: true, how: 'Kaspi', receipt: 'ОПЛАЧЕН Kaspi' };
   }
   if (order.paymentMethod === 'CARD_ON_DELIVERY') {
-    return delivery
-      ? {
-          paid: false,
-          how: 'картой, курьеру взять терминал',
-          receipt: 'НЕ ОПЛАЧЕН, картой. Взять терминал',
-        }
-      : { paid: false, how: 'картой на кассе', receipt: 'НЕ ОПЛАЧЕН, картой на кассе' };
+    return {
+      paid: false,
+      how: 'картой через терминал',
+      receipt: 'НЕ ОПЛАЧЕН, картой через терминал',
+    };
   }
-  const where = delivery ? 'наличными курьеру' : 'наличными на кассе';
   const change = changeOf(order, opts.withChange ?? true);
   return {
     paid: false,
     how:
-      where +
+      'наличными' +
       (change?.give
-        ? `, <b>положить сдачу ${change.give} ₸</b> (клиент даст ${change.from} ₸)`
+        ? `, <b>положить сдачу ${change.give} ₸</b> (у клиента ${change.from} ₸)`
         : change?.give === 0
           ? ', без сдачи'
           : change
-          ? `, сдача с ${change.from} ₸`
-          : ''),
+            ? `, у клиента ${change.from} ₸`
+            : ''),
     receipt:
       'НЕ ОПЛАЧЕН, наличными' +
       (change?.give
-        ? `. ПОЛОЖИТЬ СДАЧУ ${change.give} тг (с ${change.from})`
+        ? `. ПОЛОЖИТЬ СДАЧУ ${change.give} тг (у клиента ${change.from})`
         : change?.give === 0
           ? ', без сдачи'
           : change
-          ? `, сдача с ${change.from} тг`
-          : ''),
+            ? `, у клиента ${change.from} тг`
+            : ''),
   };
 }
 
