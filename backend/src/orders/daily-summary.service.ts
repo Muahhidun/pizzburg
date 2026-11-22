@@ -47,12 +47,15 @@ type SummaryRefund = {
   order: { number: number };
 };
 
+/// Кто отменил — словами для группы
 const WHO: Record<string, string> = {
-  CUSTOMER: "клиент",
-  ADMIN: "кассир",
-  POSTER: "касса Poster",
-  SYSTEM: "не оплачен",
+  CUSTOMER: "отменил клиент",
+  ADMIN: "отменили в админке",
+  POSTER: "отклонили на планшете",
+  SYSTEM: "не оплатил Kaspi",
+  AUTO: "не приняли за 3 часа",
 };
+const whoOf = (by: string | null) => WHO[by ?? ""] ?? "кто отменил — не записано";
 
 function plural(n: number) {
   const d = n % 10;
@@ -98,20 +101,19 @@ export function buildDailySummary(
   } else {
     const byWho = new Map<string, number>();
     for (const o of cancelled) {
-      const who = WHO[o.cancelledBy ?? ""] ?? "—";
+      const who = whoOf(o.cancelledBy);
       byWho.set(who, (byWho.get(who) ?? 0) + 1);
     }
     lines.push(
       "",
-      `🚫 <b>Отмен: ${cancelled.length}</b> (` +
-        [...byWho].map(([who, n]) => `${who} — ${n}`).join(", ") +
-        ")",
+      `🚫 <b>Отмен: ${cancelled.length}</b>`,
+      ...[...byWho].map(([who, n]) => `   ${who}: ${n}`),
     );
     for (const o of cancelled) {
       const money = moneyLine(o).replace(/^\n/, "").replace(/<\/?b>/g, "");
       lines.push(
-        `• №${o.number}, ${o.total} ₸, ${WHO[o.cancelledBy ?? ""] ?? "—"}` +
-          (o.cancelReason ? ` — ${escapeHtml(o.cancelReason)}` : "") +
+        `• №${o.number}, ${o.total} ₸ — ${whoOf(o.cancelledBy)}` +
+          (o.cancelReason ? `, причина: «${escapeHtml(o.cancelReason)}»` : "") +
           (money ? `. ${money}` : ""),
       );
     }

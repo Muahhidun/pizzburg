@@ -257,6 +257,30 @@ export class AvailabilityService {
     return profile?.hours?.[weekday] ?? [];
   }
 
+  /**
+   * Открыто ли заведение в момент `at` и с какой минуты идёт текущая смена.
+   * Без расписания считаем, что открыто всегда (`since: null`).
+   */
+  openSince(tenantSettings: unknown, at = new Date()): { open: boolean; since: Date | null } {
+    const s = this.settingsOf(tenantSettings);
+    const profiles: ScheduleProfile[] = Array.isArray(s.schedule?.profiles)
+      ? s.schedule.profiles
+      : [];
+    if (profiles.length === 0) return { open: true, since: null };
+    const { weekday, minutes, ymd } = this.localParts(at, s.timezone ?? DEFAULT_TIMEZONE);
+    const hours: HoursInterval[] = this.activeProfile(profiles, ymd)?.hours?.[weekday] ?? [];
+    const iv = hours.find(
+      ([from, to]) => this.toMinutes(from) <= minutes && minutes < this.toMinutes(to),
+    );
+    if (!iv) return { open: false, since: null };
+    const sinceMs =
+      at.getTime() -
+      (minutes - this.toMinutes(iv[0])) * 60_000 -
+      at.getSeconds() * 1000 -
+      at.getMilliseconds();
+    return { open: true, since: new Date(sinceMs) };
+  }
+
   /** Полное состояние приёма заказов на момент `now` */
   getState(tenantSettings: unknown, now = new Date()): AvailabilityState {
     const s = this.settingsOf(tenantSettings);

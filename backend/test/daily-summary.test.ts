@@ -47,7 +47,8 @@ test('сводка дня собирает заказы, отмены и воз�
     /Kaspi онлайн \(приложение\): 2 заказа на 11000 ₸, возвращено 5000 ₸, итого 6000 ₸/,
   );
   assert.match(text, /Отмен: 2/);
-  assert.match(text, /кассир — 1/);
+  assert.match(text, /отменили в админке: 1/);
+  assert.doesNotMatch(text, /, —/);
   assert.match(text, /Нет &lt;курьеров&gt;/);
   assert.match(text, /Вернули: 1 на 5000 ₸/);
   assert.match(text, /Повторить.*№9 \(700 ₸\)/);

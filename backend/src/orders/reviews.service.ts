@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
-import { TelegramService } from '../telegram/telegram.service';
+import { TelegramService, esc } from '../telegram/telegram.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Lang, pick } from '../i18n/lang';
 import { questionsFor, scoreReview } from './review-form';
@@ -100,10 +100,11 @@ export class ReviewsService {
     // четырёх пятёрках всё равно поднимает смену: соус надо привезти.
     if (hasWorst) {
       const message =
-        `⚠️ Заказ №${order.number}: ${rating}/5\n\n` +
+        `⚠️ <b>Плохой отзыв клиента на заказ №${order.number}</b>\n` +
+        `Оценка ${rating} из 5. Ответы клиента:\n\n` +
         lines.join('\n') +
-        (text ? `\n\n«${text}»` : '') +
-        `\n\n${order.customer?.phone ?? ''}`;
+        (text ? `\n\nКомментарий: «${esc(text)}»` : '') +
+        (order.customer?.phone ? `\n\n📞 Клиент: ${order.customer.phone}` : '');
       await Promise.all([
         this.telegram.notifyCashier(order.tenantId, message),
         this.telegram.notify(order.tenantId, message),

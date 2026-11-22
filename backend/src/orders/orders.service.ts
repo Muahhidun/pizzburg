@@ -1189,7 +1189,9 @@ export class OrdersService {
       orderStatus = "ACCEPTED";
     }
     if (orderStatus !== order.status)
-      await this.setStatus(orderId, orderStatus as OrderStatus);
+      await this.setStatus(orderId, orderStatus as OrderStatus, undefined, {
+        cancelledBy: "POSTER",
+      });
 
     return {
       orderId,
@@ -1346,7 +1348,9 @@ export class OrdersService {
     tenantId?: string,
     /// `notify: false` — молчаливое закрытие: автозакрытие через три часа
     /// не повод писать клиенту, он к этому времени давно поел.
-    options?: { notify?: boolean; refund?: OperatorCancelRefund },
+    /// `cancelledBy` — кто отменил, если вызывающий не записал это сам:
+    /// без него в итогах дня отмена шла с прочерком.
+    options?: { notify?: boolean; refund?: OperatorCancelRefund; cancelledBy?: string },
   ) {
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, ...(tenantId ? { tenantId } : {}) },
@@ -1375,7 +1379,12 @@ export class OrdersService {
     }
     const updated = await this.prisma.order.update({
       where: { id: order.id },
-      data: { status: next },
+      data: {
+        status: next,
+        ...(next === "CANCELLED" && !order.cancelledBy && options?.cancelledBy
+          ? { cancelledBy: options.cancelledBy }
+          : {}),
+      },
     });
     // Отменённый заказ больше никого ни о чём не спрашивает.
     //
@@ -1611,14 +1620,15 @@ export function newOrderMessage(
   // заказ. Цвета текста в телеграме нет — выделяем значками и капсом.
   const tz = (order.tenant?.settings as any)?.timezone ?? 'Asia/Almaty';
   const pay = payStatus(order);
+  // Номер первым: по нему кассир ищет чек на планшете и переписывается
   lines.push(
+    `🆕 <b>Заказ №${order.number}</b> · ${delivery ? '🚗 Доставка' : '🏃 Самовывоз'} · новое приложение`,
     order.scheduledAt
       ? `🟥🟥 <b>ПРЕДЗАКАЗ — НА ${preorderLabel(order.scheduledAt, tz)}</b> 🟥🟥`
       : '🟩 <b>СРАЗУ</b>',
     pay.paid
       ? `✅ <b>ОПЛАЧЕН</b> · ${pay.how}`
-      : `❌ <b>НЕ ОПЛАЧЕН</b> · ${esc(pay.how)}`,
-    `🆕 Новое приложение · заказ №${order.number} · ${delivery ? '🚗 Доставка' : '🏃 Самовывоз'}`,
+      : `❌ <b>НЕ ОПЛАЧЕН</b> · ${pay.how}`,
   );
   const a = order.address as any;
   if (delivery && a) {
@@ -1653,10 +1663,15 @@ export function newOrderMessage(
   if (order.deliveryFee > 0) lines.push(`Доставка: ${order.deliveryFee} ₸`);
   if (order.pointsSpent > 0) lines.push(`Баллами: ${order.pointsSpent} ₸`);
   if (order.promoDiscount > 0) lines.push(`Скидка: ${order.promoDiscount} ₸`);
+  // Чем именно брать — в той же строке, что и сумма: «взять с клиента»
+  // при оплате картой читалось как «взять наличными»
+  const delivered = order.type === 'DELIVERY';
   lines.push(
     pay.paid
       ? `💰 Сумма: ${order.total} ₸ (оплачено)`
-      : `💰 <b>Взять с клиента: ${order.total} ₸</b>`,
+      : order.paymentMethod === 'CARD_ON_DELIVERY'
+        ? `💳 <b>Картой через терминал: ${order.total} ₸</b>`
+        : `💵 <b>Наличными${delivered ? ' с клиента' : ' на кассе'}: ${order.total} ₸</b>`,
   );
   if (order.comment) lines.push(`💬 ${esc(order.comment)}`);
   return lines.join('\n');
@@ -1670,52 +1685,97 @@ export function preorderLabel(at: Date, tz: string) {
 }
 
 /**
- * Оплачен ли заказ и как брать деньги — одна строка для чека и группы.
- * Kaspi до кассы доходит только оплаченным, остальное берут при выдаче.
+ * Оплачен ли заказ и как брать деньги — для группы (`how`) и чека
+ * (`receipt`). Kaspi до кассы доходит только оплаченным, остальное берут
+ * при выдаче.
+ *
+ * Сдачу пишем готовой суммой: «положить сдачу 5600», а не «сдача с
+ * 10000» — кассиру не нужно считать в уме, что положить курьеру.
  */
 export function payStatus(
-  order: { paymentMethod: string; type: string; changeFrom?: number | null },
+  order: {
+    paymentMethod: string;
+    type: string;
+    total?: number;
+    changeFrom?: number | null;
+  },
   opts: { withChange?: boolean } = {},
-): { paid: boolean; how: string } {
+): { paid: boolean; how: string; receipt: string } {
   const delivery = order.type === 'DELIVERY';
-  if (order.paymentMethod === 'KASPI_ONLINE') return { paid: true, how: 'Kaspi' };
-  if (order.paymentMethod === 'CARD_ON_DELIVERY') {
-    return {
-      paid: false,
-      how: delivery ? 'карта курьеру, взять терминал' : 'картой на кассе',
-    };
+  if (order.paymentMethod === 'KASPI_ONLINE') {
+    return { paid: true, how: 'Kaspi', receipt: 'ОПЛАЧЕН Kaspi' };
   }
-  const change =
-    (opts.withChange ?? true) && order.changeFrom
-      ? `, сдача с ${order.changeFrom} ₸`
-      : '';
+  if (order.paymentMethod === 'CARD_ON_DELIVERY') {
+    return delivery
+      ? {
+          paid: false,
+          how: 'картой, курьеру взять терминал',
+          receipt: 'НЕ ОПЛАЧЕН, картой. Взять терминал',
+        }
+      : { paid: false, how: 'картой на кассе', receipt: 'НЕ ОПЛАЧЕН, картой на кассе' };
+  }
+  const where = delivery ? 'наличными курьеру' : 'наличными на кассе';
+  const change = changeOf(order, opts.withChange ?? true);
   return {
     paid: false,
-    how: (delivery ? 'наличные курьеру' : 'наличные на кассе') + change,
+    how:
+      where +
+      (change?.give
+        ? `, <b>положить сдачу ${change.give} ₸</b> (клиент даст ${change.from} ₸)`
+        : change?.give === 0
+          ? ', без сдачи'
+          : change
+          ? `, сдача с ${change.from} ₸`
+          : ''),
+    receipt:
+      'НЕ ОПЛАЧЕН, наличными' +
+      (change?.give
+        ? `. ПОЛОЖИТЬ СДАЧУ ${change.give} тг (с ${change.from})`
+        : change?.give === 0
+          ? ', без сдачи'
+          : change
+          ? `, сдача с ${change.from} тг`
+          : ''),
   };
 }
 
+/** Сколько сдачи положить курьеру; null — клиент про сдачу не писал */
+function changeOf(
+  order: { total?: number; changeFrom?: number | null },
+  withChange: boolean,
+): { from: number; give: number | null } | null {
+  if (!withChange || !order.changeFrom) return null;
+  const give =
+    order.total != null && order.changeFrom >= order.total
+      ? order.changeFrom - order.total
+      : null;
+  return { from: order.changeFrom, give };
+}
+
 /**
- * Комментарий чека Poster. Строки: предзаказ (если есть), оплата, номер с
- * пожеланием, служебные пометки. Каждая кончается знаком препинания —
- * если принтер склеит строки, текст всё равно читается.
+ * Комментарий чека Poster: предзаказ (если есть), оплата, номер с
+ * пожеланием, служебные пометки. Принтер печатает его сплошным текстом,
+ * переносы строк склеивает — поэтому одна строка, части через точку.
+ * Знаков ₸ и × в шрифте принтера нет: на чеке они пропадали.
  */
 export function posterComment(p: {
   number: number;
   scheduledAt: Date | null;
   tz: string;
-  pay: { paid: boolean; how: string };
+  pay: { receipt: string };
   wish?: string | null;
   notes?: string[];
 }) {
   return [
     p.scheduledAt ? `!!! ПРЕДЗАКАЗ НА ${preorderLabel(p.scheduledAt, p.tz)} !!!` : '',
-    `${p.pay.paid ? 'ОПЛАЧЕН' : 'НЕ ОПЛАЧЕН'}: ${p.pay.how}.`,
-    `№${p.number}.` + (p.wish ? ` ПОЖЕЛАНИЕ: ${p.wish}.` : ''),
+    `${p.pay.receipt}.`,
+    `№${p.number}.` + (p.wish ? ` ПОЖЕЛАНИЕ: ${p.wish.replace(/[.\s]+$/, '')}.` : ''),
     ...(p.notes ?? []).filter(Boolean).map((n) => `${n}.`),
   ]
     .filter(Boolean)
-    .join('\n');
+    .join(' ')
+    .replace(/₸/g, 'тг')
+    .replace(/×/g, 'x');
 }
 
 /**

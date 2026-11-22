@@ -22,16 +22,19 @@ test('сообщение о новом заказе: адрес, состав, �
   const text = newOrderMessage(base, [
     { name: 'Комбо Донер', qty: 2, price: 2290, isGift: false, modifiers: [{ name: 'Sprite' }] },
   ]);
-  assert.match(text, /заказ №42/);
   assert.match(text, /Доставка/);
   assert.match(text, /Ауэзова, 47Б, кв\. 12/);
   assert.match(text, /&lt;не работает&gt;/);
   assert.match(text, /Комбо Донер ×2\n {3}Sprite/);
-  // Первые строки — когда готовить и оплачен ли
-  const [when, paid] = text.split('\n');
+  // Первые строки — номер, когда готовить и оплачен ли
+  const [head, when, paid] = text.split('\n');
+  assert.match(head, /^🆕 <b>Заказ №42<\/b> · 🚗 Доставка/);
   assert.match(when, /СРАЗУ/);
-  assert.match(paid, /НЕ ОПЛАЧЕН<\/b> · наличные курьеру, сдача с 10000 ₸/);
-  assert.match(text, /Взять с клиента: 5290 ₸/);
+  assert.match(
+    paid,
+    /НЕ ОПЛАЧЕН<\/b> · наличными курьеру, <b>положить сдачу 4710 ₸<\/b> \(клиент даст 10000 ₸\)/,
+  );
+  assert.match(text, /💵 <b>Наличными с клиента: 5290 ₸<\/b>/);
   assert.match(text, /Без лука/);
 });
 
@@ -44,6 +47,7 @@ test('самовывоз без адреса', () => {
   assert.doesNotMatch(text, /📍/);
   assert.match(text, /Пепси ×1 \(подарок\)/);
   assert.match(text, /НЕ ОПЛАЧЕН<\/b> · картой на кассе/);
+  assert.match(text, /💳 <b>Картой через терминал: 5290 ₸<\/b>/);
 });
 
 test('предзаказ и оплата Kaspi — первыми строками', () => {
@@ -57,27 +61,27 @@ test('предзаказ и оплата Kaspi — первыми строкам
     },
     [{ name: 'Пепси', qty: 1, price: 500, isGift: false, modifiers: [] }],
   );
-  const [when, paid] = text.split('\n');
+  const [, when, paid] = text.split('\n');
   assert.match(when, /ПРЕДЗАКАЗ — НА 19:30 \(21\.11\)/);
   assert.match(paid, /✅ <b>ОПЛАЧЕН<\/b> · Kaspi/);
   assert.match(text, /Сумма: 5290 ₸ \(оплачено\)/);
 });
 
-test('комментарий чека: предзаказ и оплата в начале, по строкам', () => {
+test('комментарий чека: предзаказ и оплата в начале, одной строкой', () => {
   const c = posterComment({
     number: 143,
     scheduledAt: new Date('2026-11-21T14:30:00Z'),
     tz: 'Asia/Almaty',
-    pay: payStatus({ paymentMethod: 'CASH', type: 'DELIVERY', changeFrom: 5000 }),
-    wish: 'без лука',
-    notes: ['', 'ОБЩИЙ ЗАКАЗ №143: часть 1/2 (Sunday)'],
+    pay: payStatus({ paymentMethod: 'CASH', type: 'DELIVERY', total: 4400, changeFrom: 10000 }),
+    wish: 'без лука.',
+    notes: ['', 'ПОДАРОК ПО АКЦИИ: Маргарита ×1 (оплачен интеграцией)'],
   });
   assert.equal(
     c,
-    '!!! ПРЕДЗАКАЗ НА 19:30 (21.11) !!!\n' +
-      'НЕ ОПЛАЧЕН: наличные курьеру, сдача с 5000 ₸.\n' +
-      '№143. ПОЖЕЛАНИЕ: без лука.\n' +
-      'ОБЩИЙ ЗАКАЗ №143: часть 1/2 (Sunday).',
+    '!!! ПРЕДЗАКАЗ НА 19:30 (21.11) !!! ' +
+      'НЕ ОПЛАЧЕН, наличными. ПОЛОЖИТЬ СДАЧУ 5600 тг (с 10000). ' +
+      '№143. ПОЖЕЛАНИЕ: без лука. ' +
+      'ПОДАРОК ПО АКЦИИ: Маргарита x1 (оплачен интеграцией).',
   );
   // Без предзаказа первой строкой идёт оплата; сдача — только на первой части
   const c2 = posterComment({
@@ -86,5 +90,15 @@ test('комментарий чека: предзаказ и оплата в н�
     tz: 'Asia/Almaty',
     pay: payStatus({ paymentMethod: 'CASH', type: 'PICKUP', changeFrom: 5000 }, { withChange: false }),
   });
-  assert.equal(c2, 'НЕ ОПЛАЧЕН: наличные на кассе.\n№7.');
+  assert.equal(c2, 'НЕ ОПЛАЧЕН, наличными. №7.');
+  // Картой при доставке — напомнить про терминал
+  assert.equal(
+    payStatus({ paymentMethod: 'CARD_ON_DELIVERY', type: 'DELIVERY' }).receipt,
+    'НЕ ОПЛАЧЕН, картой. Взять терминал',
+  );
+  // Купюра ровно на сумму — «без сдачи», а не «положить 0»
+  assert.match(
+    payStatus({ paymentMethod: 'CASH', type: 'DELIVERY', total: 5000, changeFrom: 5000 }).how,
+    /, без сдачи$/,
+  );
 });

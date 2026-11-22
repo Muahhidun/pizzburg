@@ -588,7 +588,7 @@ export class AdminService {
 
   async updateOrderStatus(id: string, status: OrderStatus) {
     const tenant = await this.tenant();
-    return this.orderService.setStatus(id, status, tenant.id);
+    return this.orderService.setStatus(id, status, tenant.id, { cancelledBy: 'ADMIN' });
   }
 
   async cancelOrder(

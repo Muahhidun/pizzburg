@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { AvailabilityService } from '../src/availability/availability.service';
 import {
   AcceptReminderService,
   acceptResolvedText,
@@ -42,7 +43,11 @@ function setup(order: Record<string, unknown>, claim = 1, resolved: unknown[] = 
     },
   };
   return {
-    service: new AcceptReminderService(prisma as never, telegram as never),
+    service: new AcceptReminderService(
+      prisma as never,
+      telegram as never,
+      new AvailabilityService(),
+    ),
     cashier,
     owner,
     claims,
@@ -164,4 +169,58 @@ test('отменённый без принятия — отдельный тек
     acceptResolvedText(5, 'доставка', 'CANCELLED', undefined, now),
     /❌ <b>Заказ №5 отменён<\/b>/,
   );
+});
+
+/** Открыто 10:00–22:00 по Алматы (UTC+5) */
+const hours = {
+  timezone: 'Asia/Almaty',
+  schedule: {
+    profiles: [
+      {
+        id: 'base',
+        name: 'Рабочее время',
+        hours: Object.fromEntries(
+          ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((d) => [d, [['10:00', '22:00']]]),
+        ),
+      },
+    ],
+  },
+};
+// Заказ ушёл на планшет в 03:00 по местному (22:00 UTC накануне)
+const nightOrder = {
+  ...base,
+  tenant: { settings: hours },
+  dispatches: [{ status: 'SENT', sentAt: new Date('2026-11-21T22:00:00Z'), posterStatus: null }],
+};
+
+test('ночной заказ: пока закрыто — не напоминаем', async () => {
+  const s = setup(nightOrder);
+  await s.service.run(new Date('2026-11-22T03:00:00Z')); // 08:00
+  assert.equal(s.cashier.length + s.owner.length, 0);
+});
+
+test('ночной заказ: минуты считаем с открытия в 10:00', async () => {
+  const early = setup(nightOrder);
+  await early.service.run(new Date('2026-11-22T05:03:00Z')); // 10:03
+  assert.equal(early.cashier.length + early.owner.length, 0);
+
+  const s = setup(nightOrder);
+  await s.service.run(new Date('2026-11-22T05:06:00Z')); // 10:06
+  assert.match(s.cashier[0], /ждёт принятия 6 мин/);
+  assert.equal(s.owner.length, 0);
+});
+
+test('ночной заказ принят в 10:04 — «принят через 4 мин»', async () => {
+  const s = setup({ ...base, dispatches: [] }, 1, [
+    {
+      ...nightOrder,
+      status: 'ACCEPTED',
+      updatedAt: new Date('2026-11-22T05:04:00Z'),
+      cancelledAt: null,
+      acceptReminderChatId: '-100',
+      acceptReminderMessageId: 77,
+    },
+  ]);
+  await s.service.run(new Date('2026-11-22T05:05:00Z'));
+  assert.match(s.edits[0].payload.text, /принят через 4 мин/);
 });

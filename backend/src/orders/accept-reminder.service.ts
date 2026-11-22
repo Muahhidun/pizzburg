@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramService } from '../telegram/telegram.service';
+import { AvailabilityService } from '../availability/availability.service';
 
 /** Через сколько минут после отправки на планшет напоминаем кассе */
 export const ACCEPT_REMIND_CASHIER_MIN = 5;
@@ -17,7 +18,9 @@ export const ACCEPT_REMIND_OWNER_MIN = 10;
  * помогло, на кассе что-то не так.
  *
  * Счёт идёт от отправки чека на планшет, а не от оформления: окно
- * бесплатной отмены и ожидание оплаты Kaspi — не вина кассы.
+ * бесплатной отмены и ожидание оплаты Kaspi — не вина кассы. Заказ,
+ * пришедший ночью, ждёт открытия: пока закрыто, не напоминаем, а
+ * минуты считаем с начала смены — «не принят 317 мин» в 10:05 врёт.
  */
 @Injectable()
 export class AcceptReminderService {
@@ -26,7 +29,15 @@ export class AcceptReminderService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly telegram: TelegramService,
+    private readonly availability: AvailabilityService,
   ) {}
+
+  /** С какого момента касса могла принять заказ: отправка или открытие */
+  private waitStart(settings: unknown, sentAt: number, at: Date): number | null {
+    const shift = this.availability.openSince(settings, at);
+    if (!shift.open) return null;
+    return Math.max(sentAt, shift.since?.getTime() ?? sentAt);
+  }
 
   @Cron('*/1 * * * *')
   async run(now = new Date()) {
@@ -52,6 +63,7 @@ export class AcceptReminderService {
         type: true,
         scheduledAt: true,
         acceptReminders: true,
+        tenant: { select: { settings: true } },
         dispatches: { select: { status: true, sentAt: true, posterStatus: true } },
       },
     });
@@ -65,7 +77,11 @@ export class AcceptReminderService {
         .map((d) => d.sentAt!.getTime())
         .sort((a, b) => a - b)[0];
       if (!sentAt) continue;
-      const minutes = Math.floor((now.getTime() - sentAt) / 60_000);
+      // Пока закрыто — молчим; после открытия считаем от начала смены
+      const start = this.waitStart(o.tenant?.settings, sentAt, now);
+      if (start === null) continue;
+      const minutes = Math.floor((now.getTime() - start) / 60_000);
+      if (minutes < ACCEPT_REMIND_CASHIER_MIN) continue;
       const stage = minutes >= ACCEPT_REMIND_OWNER_MIN ? 2 : 1;
       if (stage <= o.acceptReminders) continue;
 
@@ -132,6 +148,7 @@ export class AcceptReminderService {
         cancelledAt: true,
         acceptReminderChatId: true,
         acceptReminderMessageId: true,
+        tenant: { select: { settings: true } },
         dispatches: { select: { status: true, sentAt: true } },
       },
     });
@@ -148,7 +165,9 @@ export class AcceptReminderService {
         .map((d) => d.sentAt!.getTime())
         .sort((a, b) => a - b)[0];
       const kind = o.type === 'DELIVERY' ? 'доставка' : 'самовывоз';
-      const text = acceptResolvedText(o.number, kind, o.status, sentAt, o.cancelledAt ?? o.updatedAt);
+      const at = o.cancelledAt ?? o.updatedAt;
+      const start = sentAt ? (this.waitStart(o.tenant?.settings, sentAt, at) ?? sentAt) : undefined;
+      const text = acceptResolvedText(o.number, kind, o.status, start, at);
 
       try {
         const { error } = await this.telegram.call(o.tenantId, 'editMessageText', {

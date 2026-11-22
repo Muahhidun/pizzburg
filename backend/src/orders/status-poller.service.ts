@@ -169,7 +169,10 @@ export class StatusPollerService {
       const delivered = o.status !== 'NEW';
       const next = (delivered ? 'DELIVERED' : 'CANCELLED') as OrderStatus;
       try {
-        await this.orders.setStatus(o.id, next, o.tenantId, { notify: false });
+        await this.orders.setStatus(o.id, next, o.tenantId, {
+          notify: false,
+          cancelledBy: "AUTO",
+        });
         this.logger.log(
           `Заказ №${o.number} закрыт автоматически как ${next}: ` +
             `${AUTO_CLOSE_HOURS} ч без движения`,
