@@ -24,6 +24,8 @@ export interface ReviewQuestion {
   labelKk?: string;
   /** Только для доставки: у самовывоза курьера нет */
   deliveryOnly?: boolean;
+  /** Формулировка для самовывоза: «привезли» и «успели» там не к месту */
+  pickup?: { label: string; labelKk?: string };
   options: ReviewOption[];
 }
 
@@ -31,6 +33,7 @@ export const REVIEW_QUESTIONS: ReviewQuestion[] = [
   {
     id: 'timing',
     label: 'Успели вовремя?', labelKk: 'Уақытында үлгердік пе?',
+    pickup: { label: 'Заказ был готов вовремя?', labelKk: 'Тапсырыс уақытында дайын болды ма?' },
     options: [
       { id: 'VERY_LATE', label: 'Сильно опоздали', labelKk: 'Қатты кешіктік', weight: 1 },
       { id: 'LATE', label: 'Чуть дольше', labelKk: 'Сәл ұзағырақ', weight: 3 },
@@ -41,6 +44,8 @@ export const REVIEW_QUESTIONS: ReviewQuestion[] = [
   {
     id: 'complete',
     label: 'Всё привезли?', labelKk: 'Бәрін әкелдік пе?',
+    // Пропажу замечают уже дома, разбирая пакет
+    pickup: { label: 'Всё было в пакете?', labelKk: 'Пакетте бәрі болды ма?' },
     options: [
       { id: 'MISSING', label: 'Кое-чего не было', labelKk: 'Бірдеңе жетіспеді', weight: 1 },
       { id: 'FULL', label: 'Да, всё на месте', labelKk: 'Иә, бәрі орнында', weight: 5 },
@@ -80,9 +85,10 @@ export const REVIEW_QUESTIONS: ReviewQuestion[] = [
   },
 ];
 
-export function questionsFor(type: 'DELIVERY' | 'PICKUP') {
-  return REVIEW_QUESTIONS.filter(
-    (q) => type === 'DELIVERY' || !q.deliveryOnly,
+export function questionsFor(type: 'DELIVERY' | 'PICKUP'): ReviewQuestion[] {
+  if (type === 'DELIVERY') return REVIEW_QUESTIONS;
+  return REVIEW_QUESTIONS.filter((q) => !q.deliveryOnly).map(({ pickup, ...q }) =>
+    pickup ? { ...q, label: pickup.label, labelKk: pickup.labelKk } : q,
   );
 }
 
