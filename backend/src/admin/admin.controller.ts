@@ -382,6 +382,11 @@ export class AdminController {
     return this.admin.telegramTest(target === 'cashier' ? 'CASHIER' : 'OWNER');
   }
 
+  @Get('settings/telegram/courier-link')
+  telegramCourierLink() {
+    return this.admin.telegramCourierLink();
+  }
+
   @Get('promotions')
   promotions() {
     return this.admin.promotions();

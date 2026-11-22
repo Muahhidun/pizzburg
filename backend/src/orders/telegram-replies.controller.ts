@@ -15,6 +15,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { esc, TelegramService } from '../telegram/telegram.service';
+import { TelegramUpdatesService } from '../telegram/telegram-updates.service';
 import { OrderMessagesService, QUICK_REPLIES } from './order-messages.service';
 
 /**
@@ -197,6 +198,7 @@ export class TelegramRepliesController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly replies: TelegramRepliesService,
+    private readonly updates: TelegramUpdatesService,
   ) {}
 
   @Post('webhook/:tenantSlug')
@@ -218,6 +220,8 @@ export class TelegramRepliesController {
       throw new ForbiddenException();
     }
     try {
+      // Сперва другие модули (регистрация курьеров), потом ответы кассира
+      if (await this.updates.dispatch(tenant.id, update as any)) return { ok: true };
       await this.replies.handle(tenant.id, update);
     } catch (e) {
       // Телеграм повторяет апдейт, пока не получит 200, — ошибку

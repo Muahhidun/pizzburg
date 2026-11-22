@@ -222,6 +222,8 @@ export default function SettingsPage() {
 
       <TelegramSection />
 
+      <DispatchDevicesSection />
+
       <WoltDriveSection />
 
       <section className="rounded-2xl bg-white p-5 shadow-sm dark:bg-neutral-900">
@@ -383,6 +385,132 @@ function AddAccount({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
  * владелец меняет бота из админки, без деплоя. Обратно форме токен не
  * отдаётся — только хвост, чтобы сверить, что вставлен нужный.
  */
+interface DispatchDeviceRow {
+  id: string;
+  name: string;
+  venue: string;
+  isActive: boolean;
+  lastSeenAt: string | null;
+}
+
+/**
+ * Планшеты раздачи (курьерский модуль). Ссылка подключения показывается
+ * один раз: в базе лежит только хеш токена.
+ */
+function DispatchDevicesSection() {
+  const [rows, setRows] = useState<DispatchDeviceRow[] | null>(null);
+  const [name, setName] = useState('Раздача');
+  const [link, setLink] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setRows(await api.get<DispatchDeviceRow[]>('/admin/dispatch-devices'));
+  }, []);
+
+  useEffect(() => {
+    load().catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  }, [load]);
+
+  async function create() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api.post<{ token: string }>('/admin/dispatch-devices', { name });
+      // Токен в #фрагменте: он не уходит на сервер с запросом страницы
+      // и не оседает в логах
+      setLink(`${window.location.origin}/dispatch#token=${res.token}`);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggle(row: DispatchDeviceRow) {
+    if (row.isActive && !confirm(`Отключить «${row.name}»? Планшет перестанет показывать заказы.`)) {
+      return;
+    }
+    await api.patch(`/admin/dispatch-devices/${row.id}`, { isActive: !row.isActive });
+    await load();
+  }
+
+  if (!rows) return null;
+
+  return (
+    <section className="rounded-2xl bg-white p-5 shadow-sm dark:bg-neutral-900">
+      <h2 className="mb-1 font-semibold">Планшеты раздачи</h2>
+      <p className="mb-3 text-sm text-neutral-500">
+        Планшет на стене у раздачи: заказы на доставку и самовывоз, кнопка «Готов»,
+        очередь курьеров и QR для отметки «Я на месте». Откройте ссылку подключения
+        на самом планшете один раз, дальше он работает без входа.
+      </p>
+
+      {rows.length > 0 && (
+        <ul className="mb-3 space-y-1.5">
+          {rows.map((r) => (
+            <li
+              key={r.id}
+              className="flex items-center gap-3 rounded-xl bg-black/[.03] px-3 py-2 dark:bg-white/5"
+            >
+              <span className="flex-1">
+                <span className="font-medium">{r.name}</span>
+                <span className="ml-2 text-xs text-neutral-400">
+                  {r.venue} ·{' '}
+                  {r.lastSeenAt
+                    ? `на связи ${new Date(r.lastSeenAt).toLocaleString('ru-RU')}`
+                    : 'ещё не подключался'}
+                </span>
+              </span>
+              <button
+                onClick={() => toggle(r)}
+                className={`text-xs ${r.isActive ? 'text-emerald-600' : 'text-neutral-400'}`}
+              >
+                {r.isActive ? 'активен · отключить' : 'отключён · включить'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="rounded-xl border border-black/10 bg-transparent px-3 py-1.5 text-sm dark:border-white/15"
+        />
+        <button
+          onClick={create}
+          disabled={busy || !name.trim()}
+          className="rounded-lg bg-black px-3 py-1.5 text-sm text-white disabled:opacity-50 dark:bg-white dark:text-black"
+        >
+          {busy ? 'Создаём…' : 'Подключить планшет'}
+        </button>
+      </div>
+
+      {link && (
+        <div className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+          <p className="mb-1">
+            Откройте эту ссылку на планшете. Она показывается один раз; потеряли — отключите
+            планшет и создайте новый.
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 break-all text-xs">{link}</code>
+            <button
+              onClick={() => navigator.clipboard?.writeText(link)}
+              className="rounded-lg border border-black/10 px-2 py-1 text-xs dark:border-white/15"
+            >
+              Копировать
+            </button>
+          </div>
+        </div>
+      )}
+      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+    </section>
+  );
+}
+
 function TelegramSection() {
   const [state, setState] = useState<TelegramSettings | null>(null);
   const [token, setToken] = useState('');
@@ -391,6 +519,7 @@ function TelegramSection() {
   const [note, setNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [courierLink, setCourierLink] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const s = await api.get<TelegramSettings>('/admin/settings/telegram');
@@ -566,7 +695,45 @@ function TelegramSection() {
         >
           {busy === 'testCashier' ? 'Отправляем…' : 'Проверить кассу'}
         </button>
+        <button
+          onClick={() =>
+            run('courierLink', async () => {
+              const res = await api.get<{ courierLink: string }>(
+                '/admin/settings/telegram/courier-link',
+              );
+              setCourierLink(res.courierLink);
+              return null;
+            })
+          }
+          disabled={busy !== null || !state.botTokenSet}
+          className="rounded-lg border border-black/10 px-3 py-1.5 text-sm disabled:opacity-50 dark:border-white/15"
+        >
+          {busy === 'courierLink' ? 'Получаем…' : 'Ссылка для курьеров'}
+        </button>
       </div>
+
+      {courierLink && (
+        <div className="mt-3 rounded-xl bg-black/[.03] px-3 py-2 text-sm dark:bg-white/5">
+          Курьер открывает ссылку, жмёт «Старт» и проходит регистрацию. Заявка придёт
+          карточкой в чат кассы.
+          <div className="mt-1 flex items-center gap-2">
+            <a
+              href={courierLink}
+              target="_blank"
+              rel="noreferrer"
+              className="flex-1 break-all text-blue-600 underline"
+            >
+              {courierLink}
+            </a>
+            <button
+              onClick={() => navigator.clipboard?.writeText(courierLink)}
+              className="rounded-lg border border-black/10 px-2 py-1 text-xs dark:border-white/15"
+            >
+              Копировать
+            </button>
+          </div>
+        </div>
+      )}
 
       {note && <p className="mt-3 text-sm text-emerald-600">{note}</p>}
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}

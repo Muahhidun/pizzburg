@@ -43,6 +43,14 @@ model Tenant {
   woltDriveWebhookEvents WoltDriveWebhookEvent[]
   staffUsers             StaffUser[]
   adminAuditLogs         AdminAuditLog[]
+  couriers               Courier[]
+  courierShifts          CourierShift[]
+  deliveryTasks          DeliveryTask[]
+  deliveryTaskEvents     DeliveryTaskEvent[]
+  courierCashEntries     CourierCashEntry[]
+  courierPayoutLines     CourierPayoutLine[]
+  dispatchDevices        DispatchDevice[]
+  courierSettlements     CourierSettlement[]
 }
 
 /// Отдельный доступ каждого сотрудника в админку.
@@ -121,6 +129,9 @@ model Venue {
 
   deliveryZones DeliveryZone[]
   orders        Order[]
+  courierShifts   CourierShift[]
+  deliveryTasks   DeliveryTask[]
+  dispatchDevices DispatchDevice[]
 
   @@index([tenantId])
 }
@@ -771,6 +782,7 @@ model Order {
   paymentAttempts   PaymentAttempt[]
   paymentRefunds    PaymentRefund[]
   woltDriveDelivery WoltDriveDelivery?
+  deliveryTasks     DeliveryTask[]
 
   @@unique([tenantId, number])
   @@index([tenantId, status])
@@ -1242,4 +1254,361 @@ model AppEvent {
   @@index([tenantId, type, at])
   @@index([tenantId, at])
   @@index([customerId, at])
+}
+
+// ─── Курьерский модуль (docs/COURIER_SYSTEM_SPEC.md, DECISIONS §14) ─────
+//
+// Этапы 1–3 ничего не меняют в Order.status: всё, что видит раздача и
+// курьер, живёт здесь. Клиентские статусы включаются на этапе 4.
+
+enum CourierStatus {
+  /// Проходит регистрацию в боте: шаг — в registrationStep
+  DRAFT
+  /// Зарегистрировался в боте, ждёт проверки удостоверения кассиром
+  PENDING
+  ACTIVE
+  REJECTED
+  /// Отключён админом: кнопки бота перестают работать, история остаётся
+  DISABLED
+}
+
+/// Курьер. Личность — Telegram-аккаунт; телефон приходит только через
+/// «Поделиться контактом», поэтому принадлежит этому аккаунту.
+/// Фото удостоверения не храним: его в первый приезд сверяет кассир.
+model Courier {
+  id               String        @id @default(cuid())
+  tenantId         String
+  tenant           Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// Telegram user id строкой: до 2^52, в JS number упирается в точность
+  telegramUserId   String
+  fullName         String        @default("")
+  /// Пусто, пока курьер не поделился контактом
+  phone            String?
+  /// file_id селфи в Telegram. Копию у себя не храним: бот пересылает
+  /// фото кассиру по file_id, а при отключении курьера поле очищается
+  selfieFileId     String?
+  status           CourierStatus @default(DRAFT)
+  /// Шаг регистрации: CONSENT → NAME → PHONE → SELFIE; пусто после неё
+  registrationStep String?
+  /// Согласие на обработку персональных данных при регистрации
+  consentAt        DateTime?
+  /// Кто подтвердил: имя из Telegram кассира, нажавшего кнопку
+  approvedBy       String?
+  approvedAt       DateTime?
+  disabledAt       DateTime?
+  /// Закрытые смены; первые NEWBIE_SHIFTS курьер считается новичком
+  completedShifts  Int           @default(0)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  shifts      CourierShift[]
+  tasks       DeliveryTask[]
+  cashEntries CourierCashEntry[]
+  payoutLines CourierPayoutLine[]
+  settlements CourierSettlement[]
+
+  @@unique([tenantId, telegramUserId])
+  @@unique([tenantId, phone])
+  @@index([tenantId, status])
+}
+
+enum CourierQueueState {
+  /// В очереди у раздачи, ждёт назначения
+  WAITING
+  /// Назначен заказ, ещё не отметил «Забрал»
+  ASSIGNED
+  /// Везёт заказ (или связку)
+  ON_DELIVERY
+  /// Отвёз и ещё не отметился снова; после RETURN_WINDOW_MIN — вне смены
+  RETURNING
+  ON_PAUSE
+  /// Вне смены: пропустил назначение или не вернулся вовремя
+  AWAY
+}
+
+/// Рабочая сессия курьера: от первого скана QR до «Закончить смену».
+/// Открытая смена у курьера одна — это держит частичный уникальный
+/// индекс в миграции (Prisma такие не описывает).
+model CourierShift {
+  id              String            @id @default(cuid())
+  tenantId        String
+  tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  venueId         String
+  venue           Venue             @relation(fields: [venueId], references: [id])
+  courierId       String
+  courier         Courier           @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  startedAt       DateTime          @default(now())
+  endedAt         DateTime?
+  /// COURIER | ADMIN | AUTO — кто закрыл смену
+  endedBy         String?
+  state           CourierQueueState @default(WAITING)
+  /// Время последнего скана «Я на месте» — по нему порядок в очереди
+  queuedAt        DateTime?
+  /// Из утверждённого графика: в очереди стоит впереди (этап 2)
+  scheduled       Boolean           @default(false)
+  pauseUntil      DateTime?
+  pausesUsed      Int               @default(0)
+  /// Последняя доставка — от неё считается окно возвращения
+  lastDeliveredAt DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  tasks  DeliveryTask[]
+  events DeliveryTaskEvent[]
+
+  @@index([venueId, endedAt, state, queuedAt])
+  @@index([courierId, startedAt])
+}
+
+enum DeliveryTaskKind {
+  DELIVERY
+  /// Самовывоз: на планшете для «Готов» и «Выдан», без курьера
+  PICKUP
+  /// Довоз к уже доставленному заказу (забыли позицию и т. п.)
+  EXTRA_TRIP
+}
+
+enum DeliveryTaskStatus {
+  /// Плитка в колонке «Новый», раздача собирает
+  NEW
+  /// Раздача нажала «Готов», курьера ещё нет
+  READY
+  ASSIGNED
+  PICKED_UP
+  DELIVERED
+  /// Самовывоз выдан клиенту
+  HANDED_OVER
+  /// Курьер не смог доставить (не отвечает, неверный адрес, отказ)
+  FAILED
+  /// Заказ отменён
+  CANCELLED
+}
+
+enum PickupMethod {
+  /// Скан QR на планшете раздачи
+  SCAN
+  /// «Забрал без скана» — засчитывается с пометкой
+  MANUAL
+}
+
+enum HandoffMethod {
+  /// Этапы 1–3: курьер жмёт «Доставлен»
+  BUTTON
+  /// Этап 4: введён код клиента
+  CODE
+  /// Этап 4: «Выдал без кода»
+  NO_CODE
+}
+
+/// Одна плитка на планшете раздачи: доставка, самовывоз или довоз.
+/// У заказа одна основная задача (DELIVERY или PICKUP — частичный
+/// уникальный индекс в миграции) и сколько угодно довозов.
+model DeliveryTask {
+  id            String             @id @default(cuid())
+  tenantId      String
+  tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  venueId       String
+  venue         Venue              @relation(fields: [venueId], references: [id])
+  orderId       String
+  order         Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  kind          DeliveryTaskKind
+  status        DeliveryTaskStatus @default(NEW)
+  readyAt       DateTime?
+  /// Текущий курьер; при переназначении меняется, история — в событиях
+  courierId     String?
+  courier       Courier?           @relation(fields: [courierId], references: [id], onDelete: SetNull)
+  shiftId       String?
+  shift         CourierShift?      @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  assignedAt    DateTime?
+  pickedUpAt    DateTime?
+  pickupMethod  PickupMethod?
+  deliveredAt   DateTime?
+  handoffMethod HandoffMethod?
+  /// Где был курьер при «Доставлен» — дополнительная, некритичная проверка
+  handoffLat    Float?
+  handoffLng    Float?
+  failedReason  String?
+  /// Связка из двух заказов: общий id и порядок доставки (1, 2)
+  batchId       String?
+  batchSeq      Int?
+  /// Пометки процесса: MANUAL_PICKUP, BATCH_ORDER, NO_CODE, PICKUP_TIMEOUT…
+  flags         String[]           @default([])
+  /// Сколько наличных курьер берёт с клиента (0 — онлайн или терминал)
+  cashToCollect Int                @default(0)
+  /// Оплата картой при получении: курьеру напоминаем взять терминал
+  needsTerminal Boolean            @default(false)
+  /// Довоз: причина и кто создал
+  extraReason   String?
+  createdBy     String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  events      DeliveryTaskEvent[]
+  cashEntries CourierCashEntry[]
+  payoutLines CourierPayoutLine[]
+
+  @@index([venueId, status, createdAt])
+  @@index([courierId, status])
+  @@index([orderId])
+  @@index([batchId])
+}
+
+/// Журнал всего, что происходит на раздаче и у курьеров. Из него
+/// строятся отчёты по времени и считается присутствие для гарантии.
+model DeliveryTaskEvent {
+  id        String        @id @default(cuid())
+  tenantId  String
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  taskId    String?
+  task      DeliveryTask? @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  shiftId   String?
+  shift     CourierShift? @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  courierId String?
+  /// READY, READY_UNDONE, ASSIGNED, PICKUP_TIMEOUT, PICKED_UP, DELIVERED,
+  /// FAILED, CHECK_IN, PAUSE_START, PAUSE_END, AWAY, SHIFT_END…
+  type      String
+  /// DEVICE:<id> | COURIER:<id> | TG:<telegram user> | SYSTEM
+  actor     String
+  meta      Json?
+  at        DateTime      @default(now())
+
+  @@index([tenantId, at])
+  @@index([taskId, at])
+  @@index([shiftId, at])
+}
+
+enum CourierCashType {
+  /// Получил наличные с клиента: долг курьера растёт
+  COLLECTED
+  /// Сдал кассиру: долг уменьшается после подтверждения
+  HANDED_IN
+  /// Взаимозачёт с заработком в конце смены
+  PAYOUT_OFFSET
+  /// Ручная поправка админа
+  ADJUSTMENT
+}
+
+enum CourierCashStatus {
+  /// Курьер нажал «Сдаю», кассир ещё не подтвердил
+  PENDING
+  CONFIRMED
+  /// Кассир нажал «Не получил»
+  REJECTED
+}
+
+/// Движение наличных курьера. Баланс = сумма CONFIRMED.
+/// amount со знаком: плюс — курьер должен кассе, минус — долг уменьшился.
+model CourierCashEntry {
+  id            String            @id @default(cuid())
+  tenantId      String
+  tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  courierId     String
+  courier       Courier           @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  taskId        String?
+  task          DeliveryTask?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  type          CourierCashType
+  status        CourierCashStatus @default(CONFIRMED)
+  amount        Int
+  /// Сумма, которую курьер заявил при «Сдаю», если кассир принял другую
+  claimedAmount Int?
+  /// Кто подтвердил или отклонил (кассир в Telegram, админ)
+  resolvedBy    String?
+  resolvedAt    DateTime?
+  note          String?
+  /// Карточка «примите наличку» в чате кассы — чтобы вписать в неё итог
+  cardChatId    String?
+  cardMessageId Int?
+  /// Подсказка «сколько приняли?» после «Другая сумма»: на неё отвечают числом
+  promptMessageId Int?
+  /// Когда напомнили о неподтверждённой сдаче
+  remindedAt    DateTime?
+  createdAt     DateTime          @default(now())
+
+  @@index([courierId, status, createdAt])
+  @@index([tenantId, createdAt])
+}
+
+enum CourierSettlementStatus {
+  /// Карточка в чате кассы, расчёта ещё не было
+  PENDING
+  /// Кассир нажал «Рассчитались»
+  CONFIRMED
+  /// Кассир нажал «Не сошлось» — разбирается руководство
+  DISPUTED
+}
+
+/// Расчёт с курьером в конце смены (взаимозачёт, §8 ТЗ).
+///
+/// Курьер держит наличку, заведение должно ему за доставки. Вместо двух
+/// передач денег — одна: кто должен больше, тот и отдаёт разницу.
+model CourierSettlement {
+  id            String                  @id @default(cuid())
+  tenantId      String
+  tenant        Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  courierId     String
+  courier       Courier                 @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  shiftId       String?
+  /// Заработано и ещё не выплачено, ₸
+  earned        Int
+  /// Наличных на руках у курьера, ₸
+  cashHeld      Int
+  /// Курьер отдаёт кассе (cashHeld − earned), если больше нуля
+  courierPays   Int
+  /// Касса платит курьеру (earned − cashHeld), если больше нуля
+  venuePays     Int
+  deliveries    Int
+  status        CourierSettlementStatus @default(PENDING)
+  resolvedBy    String?
+  resolvedAt    DateTime?
+  cardChatId    String?
+  cardMessageId Int?
+  createdAt     DateTime                @default(now())
+
+  @@index([courierId, status])
+  @@index([tenantId, createdAt])
+}
+
+enum CourierPayoutType {
+  DELIVERY
+  EXTRA_TRIP
+  FAILED_TRIP
+  ADJUSTMENT
+}
+
+/// Начисление курьеру. Итог смены = сумма строк смены; выплачено —
+/// когда проставлен settledAt.
+model CourierPayoutLine {
+  id        String            @id @default(cuid())
+  tenantId  String
+  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  courierId String
+  courier   Courier           @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  shiftId   String?
+  taskId    String?
+  task      DeliveryTask?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  type      CourierPayoutType
+  amount    Int
+  note      String?
+  settledAt DateTime?
+  createdAt DateTime          @default(now())
+
+  @@index([courierId, createdAt])
+  @@index([shiftId])
+}
+
+/// Планшет раздачи. Входит долгоживущим токеном устройства (хранится
+/// только sha256), отзывается выключением isActive.
+model DispatchDevice {
+  id         String    @id @default(cuid())
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  venueId    String
+  venue      Venue     @relation(fields: [venueId], references: [id])
+  name       String
+  tokenHash  String    @unique
+  isActive   Boolean   @default(true)
+  lastSeenAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([venueId, isActive])
 }

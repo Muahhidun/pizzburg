@@ -14,6 +14,8 @@ import { AdminStaffController } from './admin-staff.controller';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminAuditService } from './admin-audit.service';
 import { WoltDriveModule } from '../wolt-drive/wolt-drive.module';
+import { CouriersModule } from '../couriers/couriers.module';
+import { AdminDispatchController } from './admin-dispatch.controller';
 
 @Module({
   imports: [
@@ -25,8 +27,14 @@ import { WoltDriveModule } from '../wolt-drive/wolt-drive.module';
     MessagesModule,
     StopListModule,
     WoltDriveModule,
+    CouriersModule,
   ],
-  controllers: [AdminController, AdminAuthController, AdminStaffController],
+  controllers: [
+    AdminController,
+    AdminAuthController,
+    AdminStaffController,
+    AdminDispatchController,
+  ],
   providers: [AdminService, AdminGuard, AdminAuthService, AdminAuditService],
 })
 export class AdminModule {}

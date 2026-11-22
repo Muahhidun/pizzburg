@@ -1,0 +1,682 @@
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { api } from '@/lib/api';
+
+/**
+ * Планшет раздачи (docs/COURIER_SYSTEM_SPEC.md §4).
+ *
+ * Висит на стене, поэтому без админского входа: у устройства свой токен,
+ * который один раз приходит ссылкой `/dispatch#token=…`. Единственное
+ * действие раздачи — нажать на плитку, когда пакет собран.
+ *
+ * Доску опрашиваем каждые 3 секунды. WebSocket не нужен: заказов десятки,
+ * а опрос переживает обрыв Wi-Fi без всякой логики переподключения.
+ *
+ * Раз в несколько часов, когда никто ничего не нажимает, страница
+ * перезагружается сама: дешёвый планшет круглые сутки на одной вкладке
+ * иначе копит память браузера.
+ */
+
+const TOKEN_KEY = 'pizzburg_dispatch_token';
+const POLL_MS = 3000;
+const RELOAD_AFTER_MS = 6 * 60 * 60_000;
+const RELOAD_IDLE_MS = 2 * 60_000;
+
+type TaskStatus =
+  | 'NEW'
+  | 'READY'
+  | 'ASSIGNED'
+  | 'PICKED_UP'
+  | 'DELIVERED'
+  | 'HANDED_OVER'
+  | 'FAILED'
+  | 'CANCELLED';
+
+interface Task {
+  id: string;
+  kind: 'DELIVERY' | 'PICKUP' | 'EXTRA_TRIP';
+  status: TaskStatus;
+  number: number;
+  createdAt: string;
+  scheduledAt: string | null;
+  readyAt: string | null;
+  pickedUpAt: string | null;
+  doneAt: string | null;
+  courier: string | null;
+  cash: number;
+  needsTerminal: boolean;
+  extraReason: string | null;
+  alert: 'NO_COURIER' | 'NOT_READY' | 'ON_WAY' | null;
+  items: { name: string; qty: number; modifiers: string[] }[];
+}
+
+const ALERT_TEXT: Record<NonNullable<Task['alert']>, string> = {
+  NO_COURIER: 'нет курьера',
+  NOT_READY: 'курьер ждёт',
+  ON_WAY: 'долго в пути',
+};
+
+interface Courier {
+  shiftId: string;
+  name: string;
+  state: 'WAITING' | 'ASSIGNED' | 'ON_DELIVERY' | 'RETURNING' | 'ON_PAUSE' | 'AWAY';
+  queuedAt: string | null;
+  pauseUntil: string | null;
+}
+
+interface Board {
+  now: string;
+  device: { name: string };
+  readyUndoSec: number;
+  qr: { svg: string; refreshInMs: number };
+  checkIns: { id: string; name: string; at: string }[];
+  cashAlerts: { id: string; text: string }[];
+  couriers: Courier[];
+  tasks: Task[];
+}
+
+function readToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+async function call<T>(path: string, token: string, method = 'GET', body?: unknown): Promise<T> {
+  const res = await fetch(`${api.raw}${path}`, {
+    method,
+    headers: {
+      'X-Device-Token': token,
+      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 401) throw new Error('UNAUTHORIZED');
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message ?? `Ошибка ${res.status}`);
+  }
+  return res.json();
+}
+
+const minutes = (fromIso: string, nowMs: number) =>
+  Math.max(0, Math.floor((nowMs - new Date(fromIso).getTime()) / 60_000));
+
+const clock = (iso: string) =>
+  new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
+const tenge = (n: number) => `${n.toLocaleString('ru-RU')} ₸`;
+
+export default function DispatchPage() {
+  const [token, setToken] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
+  const [board, setBoard] = useState<Board | null>(null);
+  const [offline, setOffline] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [undo, setUndo] = useState<{ id: string; number: number; until: number } | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [extraOpen, setExtraOpen] = useState(false);
+  // Разница часов планшета и сервера: таймеры считаем по серверу
+  const skew = useRef(0);
+
+  // Токен из ссылки подключения → localStorage, а из адреса убираем
+  useEffect(() => {
+    const m = window.location.hash.match(/token=([A-Za-z0-9_-]+)/);
+    if (m) {
+      try {
+        localStorage.setItem(TOKEN_KEY, m[1]);
+      } catch {
+        /* приватный режим: работаем до перезагрузки */
+      }
+      history.replaceState(null, '', window.location.pathname);
+      setToken(m[1]);
+    } else {
+      setToken(readToken());
+    }
+    setReady(true);
+  }, []);
+
+  const load = useCallback(async () => {
+    if (!token) return;
+    try {
+      const b = await call<Board>('/dispatch/board', token);
+      skew.current = new Date(b.now).getTime() - Date.now();
+      setBoard(b);
+      setOffline(false);
+    } catch (e) {
+      if (e instanceof Error && e.message === 'UNAUTHORIZED') {
+        try {
+          localStorage.removeItem(TOKEN_KEY);
+        } catch {
+          /* ничего */
+        }
+        setToken(null);
+        return;
+      }
+      setOffline(true);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    load();
+    const t = setInterval(load, POLL_MS);
+    return () => clearInterval(t);
+  }, [load]);
+
+  useEffect(() => {
+    const t = setInterval(() => setNowMs(Date.now() + skew.current), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Плановая перезагрузка: только после долгой работы и паузы в нажатиях
+  const lastTouch = useRef(Date.now());
+  useEffect(() => {
+    const started = Date.now();
+    const touch = () => (lastTouch.current = Date.now());
+    window.addEventListener('pointerdown', touch);
+    const t = setInterval(() => {
+      const now = Date.now();
+      if (now - started > RELOAD_AFTER_MS && now - lastTouch.current > RELOAD_IDLE_MS) {
+        window.location.reload();
+      }
+    }, 60_000);
+    return () => {
+      window.removeEventListener('pointerdown', touch);
+      clearInterval(t);
+    };
+  }, []);
+
+  // Экран не гаснет, пока страница открыта (где браузер это умеет)
+  useEffect(() => {
+    let lock: { release: () => Promise<void> } | null = null;
+    const request = async () => {
+      try {
+        lock = await (navigator as any).wakeLock?.request('screen');
+      } catch {
+        /* не поддерживается — настройте сон в самом планшете */
+      }
+    };
+    request();
+    const onVisible = () => document.visibilityState === 'visible' && request();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      lock?.release().catch(() => undefined);
+    };
+  }, []);
+
+  async function act(task: Task, action: 'ready' | 'undo-ready' | 'handed-over') {
+    if (!token) return;
+    setError(null);
+    try {
+      await call(`/dispatch/tasks/${task.id}/${action}`, token, 'POST');
+      if (action === 'ready' && board) {
+        setUndo({ id: task.id, number: task.number, until: Date.now() + board.readyUndoSec * 1000 });
+      }
+      if (action === 'undo-ready') setUndo(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function createExtraTrip(number: number, reason: string) {
+    if (!token) return;
+    setError(null);
+    try {
+      await call('/dispatch/extra-trips', token, 'POST', { number, reason });
+      setExtraOpen(false);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  useEffect(() => {
+    if (!undo) return;
+    const left = undo.until - Date.now();
+    const t = setTimeout(() => setUndo(null), Math.max(0, left));
+    return () => clearTimeout(t);
+  }, [undo]);
+
+  if (!ready) return null;
+
+  if (!token) {
+    return (
+      <Screen>
+        <div className="m-auto max-w-md text-center">
+          <h1 className="mb-3 text-3xl font-bold">Планшет не подключён</h1>
+          <p className="text-lg text-neutral-500">
+            Владелец открывает в админке «Настройки → Планшеты раздачи», нажимает
+            «Подключить планшет» и открывает полученную ссылку на этом устройстве.
+          </p>
+        </div>
+      </Screen>
+    );
+  }
+
+  if (!board) {
+    return (
+      <Screen>
+        <p className="m-auto text-2xl text-neutral-500">
+          {offline ? 'Нет связи с сервером…' : 'Загружаем…'}
+        </p>
+      </Screen>
+    );
+  }
+
+  const byStatus = (statuses: TaskStatus[]) =>
+    board.tasks.filter((t) => statuses.includes(t.status));
+  const fresh = byStatus(['NEW']);
+  const readyCol = byStatus(['READY', 'ASSIGNED']);
+  const onWay = byStatus(['PICKED_UP']);
+  const done = byStatus(['DELIVERED', 'HANDED_OVER', 'FAILED']);
+  const waiting = board.couriers.filter((c) => c.state === 'WAITING');
+  const others = board.couriers.filter((c) => c.state !== 'WAITING');
+
+  return (
+    <Screen>
+      <header className="flex items-center gap-4 border-b border-black/10 px-5 py-3">
+        <div className="text-3xl font-bold tabular-nums">
+          {new Date(nowMs).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+        </div>
+        <div className="flex flex-1 flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold uppercase tracking-wide text-neutral-500">
+            На месте
+          </span>
+          {waiting.length === 0 && <span className="text-lg text-neutral-400">никого</span>}
+          {waiting.map((c, i) => (
+            <span
+              key={c.shiftId}
+              className="rounded-full bg-emerald-100 px-3 py-1 text-lg font-semibold text-emerald-900"
+            >
+              {i + 1}. {c.name}
+              {c.queuedAt && (
+                <span className="ml-1 font-normal text-emerald-700">
+                  {minutes(c.queuedAt, nowMs)} мин
+                </span>
+              )}
+            </span>
+          ))}
+          {others.map((c) => (
+            <span key={c.shiftId} className="rounded-full bg-neutral-100 px-3 py-1 text-base text-neutral-600">
+              {c.name} · {COURIER_STATE[c.state]}
+            </span>
+          ))}
+        </div>
+        {board.cashAlerts.map((a) => (
+          <span key={a.id} className="rounded-lg bg-amber-400 px-3 py-1 text-base font-semibold text-amber-950">
+            💵 {a.text}
+          </span>
+        ))}
+        {offline && (
+          <span className="rounded-lg bg-red-600 px-3 py-1 text-sm font-semibold text-white">
+            нет связи
+          </span>
+        )}
+        <button
+          onClick={() => setExtraOpen(true)}
+          className="rounded-xl bg-amber-500 px-4 py-2 text-lg font-semibold text-white"
+        >
+          + Довоз
+        </button>
+      </header>
+
+      <div className="flex min-h-0 flex-1">
+        <div className="grid min-h-0 flex-1 grid-cols-3 gap-3 p-3">
+          <Column title="Новый" hint="нажмите, когда пакет собран" count={fresh.length}>
+            {fresh.map((t) =>
+              t.kind === 'PICKUP' ? (
+                <Tile key={t.id} task={t} nowMs={nowMs}>
+                  <TileButton onClick={() => act(t, 'ready')}>Готов</TileButton>
+                  <TileButton tone="muted" onClick={() => act(t, 'handed-over')}>
+                    Выдан
+                  </TileButton>
+                </Tile>
+              ) : (
+                <Tile key={t.id} task={t} nowMs={nowMs} onClick={() => act(t, 'ready')} />
+              ),
+            )}
+          </Column>
+          <Column title="Готов" count={readyCol.length}>
+            {readyCol.map((t) => (
+              <Tile key={t.id} task={t} nowMs={nowMs}>
+                {t.kind === 'PICKUP' ? (
+                  <TileButton onClick={() => act(t, 'handed-over')}>Выдан клиенту</TileButton>
+                ) : t.courier ? (
+                  <div className="text-xl font-bold text-emerald-700">→ {t.courier}</div>
+                ) : (
+                  <div className="text-base text-amber-700">ждёт курьера</div>
+                )}
+              </Tile>
+            ))}
+          </Column>
+          <Column title="В пути" count={onWay.length}>
+            {onWay.map((t) => (
+              <Tile key={t.id} task={t} nowMs={nowMs}>
+                <div className="text-lg font-semibold">
+                  {t.courier}
+                  {t.pickedUpAt && (
+                    <span className="ml-2 font-normal text-neutral-500">
+                      {minutes(t.pickedUpAt, nowMs)} мин в пути
+                    </span>
+                  )}
+                </div>
+              </Tile>
+            ))}
+          </Column>
+        </div>
+
+        <aside className="flex w-72 shrink-0 flex-col items-center border-l border-black/10 p-4 text-center">
+          <div className="text-lg font-semibold">Курьер приехал?</div>
+          <p className="mb-3 text-sm text-neutral-500">
+            В боте нажмите «Я на месте» и наведите камеру
+          </p>
+          <div
+            className="w-full rounded-xl bg-white p-2"
+            // SVG от нашего же сервера (библиотека qrcode), не от пользователя
+            dangerouslySetInnerHTML={{ __html: board.qr.svg }}
+          />
+          <p className="mt-2 text-xs text-neutral-400">код меняется каждые 10 секунд</p>
+
+          {/* Кто отметился за последнюю минуту — рядом с QR, не поверх
+              заказов: раздача видит, если «отметился» тот, кого у стойки нет */}
+          {board.checkIns
+            .filter((c, i, all) => all.findIndex((x) => x.name === c.name) === i)
+            .map((c) => (
+              <div
+                key={c.id}
+                className="mt-2 w-full rounded-xl bg-emerald-600 px-3 py-2 text-base font-semibold text-white"
+              >
+                {c.name} отметился
+              </div>
+            ))}
+
+          {/* Закрытые за последние 5 минут — коротким списком: колонка под
+              них отнимала бы место у живых заказов */}
+          <div className="mt-4 flex min-h-0 w-full flex-1 flex-col text-left">
+            <div className="mb-1 text-sm font-semibold text-neutral-500">
+              Доставлено и выдано{done.length > 0 && ` · ${done.length}`}
+            </div>
+            <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto">
+              {done
+                .slice()
+                .reverse()
+                .map((t) => (
+                  <li key={t.id} className="flex items-baseline gap-2 text-sm">
+                    <span className="font-bold tabular-nums">№{t.number}</span>
+                    <span className="truncate text-neutral-500">
+                      {t.status === 'FAILED'
+                        ? 'не удалось доставить'
+                        : t.status === 'HANDED_OVER'
+                          ? 'выдан'
+                          : `${t.kind === 'EXTRA_TRIP' ? 'довоз · ' : ''}${t.courier ?? 'доставлен'}`}
+                    </span>
+                    {t.doneAt && (
+                      <span className="ml-auto text-xs text-neutral-400 tabular-nums">
+                        {clock(t.doneAt)}
+                      </span>
+                    )}
+                  </li>
+                ))}
+            </ul>
+          </div>
+          <div className="mt-2 text-xs text-neutral-400">{board.device.name}</div>
+        </aside>
+      </div>
+
+      {extraOpen && (
+        <ExtraTripDialog onClose={() => setExtraOpen(false)} onCreate={createExtraTrip} />
+      )}
+
+      {(undo || error) && (
+        <div className="fixed inset-x-0 bottom-4 flex justify-center px-4">
+          {undo ? (
+            <div className="flex items-center gap-4 rounded-2xl bg-neutral-900 px-5 py-3 text-lg text-white shadow-xl">
+              №{undo.number} готов
+              <button
+                onClick={() => {
+                  const t = board.tasks.find((x) => x.id === undo.id);
+                  if (t) act(t, 'undo-ready');
+                }}
+                className="rounded-xl bg-white px-4 py-2 font-semibold text-neutral-900"
+              >
+                Отменить
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setError(null)}
+              className="rounded-2xl bg-red-600 px-5 py-3 text-lg text-white shadow-xl"
+            >
+              {error}
+            </button>
+          )}
+        </div>
+      )}
+    </Screen>
+  );
+}
+
+const COURIER_STATE: Record<Courier['state'], string> = {
+  WAITING: 'ждёт',
+  ASSIGNED: 'идёт к раздаче',
+  ON_DELIVERY: 'везёт',
+  RETURNING: 'возвращается',
+  ON_PAUSE: 'пауза',
+  AWAY: 'вне смены',
+};
+
+function Screen({ children }: { children: React.ReactNode }) {
+  // Поверх общей разметки админки: у планшета нет меню и отступов
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-neutral-50 text-neutral-900">{children}</div>
+  );
+}
+
+function Column({
+  title,
+  hint,
+  count,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  count: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="flex min-h-0 flex-col rounded-2xl bg-black/[.04]">
+      <h2 className="flex items-baseline gap-2 px-3 pb-1 pt-3">
+        <span className="text-xl font-bold">{title}</span>
+        <span className="text-lg text-neutral-400">{count}</span>
+      </h2>
+      {hint && <p className="px-3 pb-2 text-xs text-neutral-500">{hint}</p>}
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">{children}</div>
+    </section>
+  );
+}
+
+function Tile({
+  task,
+  nowMs,
+  onClick,
+  faded,
+  children,
+}: {
+  task: Task;
+  nowMs: number;
+  onClick?: () => void;
+  faded?: boolean;
+  children?: React.ReactNode;
+}) {
+  const preorder = task.scheduledAt && new Date(task.scheduledAt).getTime() > nowMs;
+  const age = minutes(task.createdAt, nowMs);
+  const ageTone = preorder
+    ? 'text-neutral-500'
+    : age >= 40
+      ? 'text-red-600'
+      : age >= 25
+        ? 'text-amber-600'
+        : 'text-emerald-700';
+  const pickup = task.kind === 'PICKUP';
+
+  const body = (
+    <>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-4xl font-black tabular-nums">№{task.number}</span>
+        <span className={`text-lg font-semibold tabular-nums ${ageTone}`}>
+          {preorder ? `к ${clock(task.scheduledAt!)}` : `${age} мин`}
+        </span>
+      </div>
+      <div className="mt-1 flex flex-wrap gap-1 text-xs font-semibold uppercase">
+        {pickup && <span className="rounded bg-violet-600 px-1.5 py-0.5 text-white">самовывоз</span>}
+        {task.kind === 'EXTRA_TRIP' && (
+          <span className="rounded bg-amber-500 px-1.5 py-0.5 text-white">довоз</span>
+        )}
+        {task.cash > 0 && (
+          <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-white">нал {tenge(task.cash)}</span>
+        )}
+        {task.needsTerminal && (
+          <span className="rounded bg-sky-600 px-1.5 py-0.5 text-white">терминал</span>
+        )}
+        {task.alert && (
+          <span className="rounded bg-red-600 px-1.5 py-0.5 text-white">⚠ {ALERT_TEXT[task.alert]}</span>
+        )}
+      </div>
+      {task.extraReason && (
+        <div className="mt-1.5 text-base font-semibold text-amber-700">{task.extraReason}</div>
+      )}
+      <ul className="mt-1.5 space-y-0.5 text-base leading-snug">
+        {task.items.map((i, idx) => (
+          <li key={idx}>
+            {i.qty > 1 && <b>{i.qty}× </b>}
+            {i.name}
+            {i.modifiers.length > 0 && (
+              <span className="text-neutral-500"> · {i.modifiers.join(', ')}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+      {children && <div className="mt-2 flex flex-wrap items-center gap-2">{children}</div>}
+    </>
+  );
+
+  const frame = `rounded-xl p-3 text-left shadow-sm ${
+    task.alert
+      ? 'bg-red-50 ring-2 ring-red-500'
+      : pickup
+        ? 'bg-violet-50 ring-2 ring-violet-300'
+        : 'bg-white'
+  } ${faded ? 'opacity-60' : ''}`;
+
+  return onClick ? (
+    <button onClick={onClick} className={`${frame} active:scale-[.98]`}>
+      {body}
+    </button>
+  ) : (
+    <div className={frame}>{body}</div>
+  );
+}
+
+function TileButton({
+  onClick,
+  tone = 'primary',
+  children,
+}: {
+  onClick: () => void;
+  tone?: 'primary' | 'muted';
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-lg px-4 py-2 text-base font-semibold ${
+        tone === 'primary' ? 'bg-neutral-900 text-white' : 'bg-black/5 text-neutral-700'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+const EXTRA_REASONS = ['Забыли позицию', 'Перепутали позицию', 'Не та добавка или соус'];
+
+/**
+ * Довоз по номеру заказа. Цифры крупными кнопками: у раздачи руки заняты,
+ * а системная клавиатура на планшете закрывает пол-экрана.
+ */
+function ExtraTripDialog({
+  onClose,
+  onCreate,
+}: {
+  onClose: () => void;
+  onCreate: (number: number, reason: string) => void;
+}) {
+  const [digits, setDigits] = useState('');
+  const [reason, setReason] = useState(EXTRA_REASONS[0]);
+  const [what, setWhat] = useState('');
+  const number = Number(digits);
+  const fullReason = what.trim() ? `${reason}: ${what.trim()}` : reason;
+
+  return (
+    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="w-[560px] rounded-2xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
+        <h2 className="mb-3 text-2xl font-bold">Довоз к заказу</h2>
+        <div className="mb-3 rounded-xl bg-neutral-100 px-4 py-3 text-4xl font-black tabular-nums">
+          №{digits || <span className="text-neutral-300">___</span>}
+        </div>
+        <div className="mb-4 grid grid-cols-6 gap-2">
+          {['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map((d) => (
+            <button
+              key={d}
+              onClick={() => setDigits((v) => (v + d).slice(0, 7))}
+              className="rounded-xl bg-neutral-100 py-3 text-2xl font-bold"
+            >
+              {d}
+            </button>
+          ))}
+          <button
+            onClick={() => setDigits((v) => v.slice(0, -1))}
+            className="col-span-2 rounded-xl bg-neutral-100 py-3 text-xl"
+          >
+            ⌫
+          </button>
+        </div>
+        <div className="mb-3 flex flex-wrap gap-2">
+          {EXTRA_REASONS.map((r) => (
+            <button
+              key={r}
+              onClick={() => setReason(r)}
+              className={`rounded-xl px-3 py-2 text-base ${
+                reason === r ? 'bg-amber-500 text-white' : 'bg-neutral-100'
+              }`}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+        <input
+          value={what}
+          onChange={(e) => setWhat(e.target.value)}
+          placeholder="Что везём (например: кола 1 л)"
+          className="mb-4 w-full rounded-xl border border-black/10 px-3 py-2 text-lg"
+        />
+        <div className="flex gap-2">
+          <button onClick={onClose} className="flex-1 rounded-xl bg-neutral-100 py-3 text-lg">
+            Отмена
+          </button>
+          <button
+            disabled={!number}
+            onClick={() => onCreate(number, fullReason)}
+            className="flex-1 rounded-xl bg-neutral-900 py-3 text-lg font-semibold text-white disabled:opacity-40"
+          >
+            Создать довоз
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

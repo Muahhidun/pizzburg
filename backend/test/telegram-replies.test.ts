@@ -36,7 +36,9 @@ function setup(message: Record<string, unknown> | null) {
     },
   };
   const service = new TelegramRepliesService(prisma as never, telegram as never, messages as never);
-  const controller = new TelegramRepliesController(prisma as never, service);
+  // Курьерский модуль апдейты не берёт — всё идёт в ответы кассира
+  const moduleUpdates = { dispatch: async () => false };
+  const controller = new TelegramRepliesController(prisma as never, service, moduleUpdates as never);
   return { controller, answers, calls, updates };
 }
 

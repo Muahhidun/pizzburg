@@ -711,6 +711,12 @@ export class AdminService {
     return this.telegram.sendTest(tenant.id, target);
   }
 
+  /** Ссылка регистрации курьеров (курьерский модуль, DECISIONS §14) */
+  async telegramCourierLink() {
+    const tenant = await this.tenant();
+    return { courierLink: await this.telegram.courierLink(tenant.id) };
+  }
+
   async promotions() {
     const tenant = await this.tenant();
     const promos = await this.prisma.promotion.findMany({

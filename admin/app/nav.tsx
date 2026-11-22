@@ -98,12 +98,16 @@ export function Nav() {
   // поверх страницы, ради которой его и открывали.
   useEffect(() => setOpen(false), [pathname]);
 
-  useEffect(() => {
-    if (pathname === '/') return;
-    api.get<AdminProfile>('/admin/auth/me').then(setMe).catch(() => undefined);
-  }, [pathname]);
+  // Планшет раздачи и Mini App курьера живут без админского входа
+  const bare =
+    pathname === '/' || pathname.startsWith('/dispatch') || pathname.startsWith('/courier');
 
-  if (pathname === '/') return null;
+  useEffect(() => {
+    if (bare) return;
+    api.get<AdminProfile>('/admin/auth/me').then(setMe).catch(() => undefined);
+  }, [pathname, bare]);
+
+  if (bare) return null;
 
   const visibleGroups = !me
     ? []

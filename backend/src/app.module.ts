@@ -23,6 +23,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TelegramModule } from './telegram/telegram.module';
 import { PaymentsModule } from './payments/payments.module';
+import { CouriersModule } from './couriers/couriers.module';
 
 @Controller()
 class RootController {
@@ -81,6 +82,7 @@ class RootController {
     AuthModule,
     LoyaltyModule,
     AdminModule,
+    CouriersModule,
   ],
   controllers: [RootController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

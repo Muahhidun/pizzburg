@@ -228,6 +228,36 @@ export class TelegramService {
     return this.request(s.botToken, method, payload);
   }
 
+  /** Чаты, кнопки из которых считаются действиями кассы и руководства */
+  async staffChatIds(tenantId: string): Promise<string[]> {
+    const s = await this.settings(tenantId);
+    return [s.cashierChatId, s.chatId].filter((id) => id.length > 0);
+  }
+
+  /** Куда слать карточки для кассы: чат кассы, иначе чат руководства */
+  async cashierTargetChat(tenantId: string): Promise<string | null> {
+    const s = await this.settings(tenantId);
+    return s.cashierChatId || s.chatId || null;
+  }
+
+  private readonly botUsernames = new Map<string, string>();
+
+  /** Ссылка регистрации курьера: t.me/<бот>?start=courier */
+  async courierLink(tenantId: string): Promise<string> {
+    const { botToken } = await this.settings(tenantId);
+    if (!botToken) throw new BadRequestException('Не задан токен бота');
+    let username = this.botUsernames.get(botToken);
+    if (!username) {
+      const { error, result } = await this.request(botToken, 'getMe', {});
+      if (error || !result?.username) {
+        throw new BadRequestException(`Телеграм не ответил: ${error ?? 'нет имени бота'}`);
+      }
+      username = String(result.username);
+      this.botUsernames.set(botToken, username);
+    }
+    return `https://t.me/${username}?start=courier`;
+  }
+
   /**
    * Подключить приём нажатий кнопок и ответов кассира.
    *
