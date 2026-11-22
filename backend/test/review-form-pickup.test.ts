@@ -6,11 +6,11 @@ test('самовывоз: свои формулировки, без курьер
   const labels = questionsFor('PICKUP').map((q) => q.label);
   assert.deepEqual(labels, [
     'Заказ был готов вовремя?',
-    'Всё было в пакете?',
+    'Всё было на месте?',
     'Еда была горячей?',
     'Вкус',
   ]);
   assert.equal(questionsFor('DELIVERY')[1].label, 'Всё привезли?');
   const r = scoreReview({ complete: 'MISSING' }, 'PICKUP');
-  assert.deepEqual(r.lines, ['Всё было в пакете? — Кое-чего не было']);
+  assert.deepEqual(r.lines, ['Всё было на месте? — Кое-чего не было']);
 });

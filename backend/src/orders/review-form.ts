@@ -44,8 +44,8 @@ export const REVIEW_QUESTIONS: ReviewQuestion[] = [
   {
     id: 'complete',
     label: 'Всё привезли?', labelKk: 'Бәрін әкелдік пе?',
-    // Пропажу замечают уже дома, разбирая пакет
-    pickup: { label: 'Всё было в пакете?', labelKk: 'Пакетте бәрі болды ма?' },
+    // Пропажу замечают уже дома: заказ в пакете, коробке — неважно
+    pickup: { label: 'Всё было на месте?', labelKk: 'Бәрі орнында болды ма?' },
     options: [
       { id: 'MISSING', label: 'Кое-чего не было', labelKk: 'Бірдеңе жетіспеді', weight: 1 },
       { id: 'FULL', label: 'Да, всё на месте', labelKk: 'Иә, бәрі орнында', weight: 5 },
