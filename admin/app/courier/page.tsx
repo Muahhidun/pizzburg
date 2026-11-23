@@ -10,6 +10,10 @@ import { api } from '@/lib/api';
  *
  * Сканер QR — встроенный в Telegram (showScanQrPopup), отдельное
  * приложение камеры не нужно.
+ *
+ * Действия, после которых нельзя передумать («Поехали», «Доставлен»), —
+ * слайдером, а не кнопкой: в кармане или на бегу кнопку легко нажать
+ * случайно, а протянуть ползунок до конца — нет.
  */
 
 interface Task {
@@ -18,6 +22,8 @@ interface Task {
   status: 'ASSIGNED' | 'PICKED_UP';
   number: number;
   items: string;
+  /** Что лежит в пакете — курьер сверяет галочками перед «Поехали» */
+  checklist: { id: string; name: string; qty: number; note: string }[];
   payment: string;
   cash: number;
   needsTerminal: boolean;
@@ -75,6 +81,9 @@ export default function CourierPage() {
   const [busy, setBusy] = useState(false);
   const [failFor, setFailFor] = useState<Task | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  // Галочки комплектации по заказам: живут только на экране, на сервер
+  // уходят вместе с «Поехали»
+  const [checked, setChecked] = useState<Record<string, string[]>>({});
   const tenant = useRef('');
 
   // SDK Telegram подключаем сами: страница живёт в общей админке
@@ -84,6 +93,9 @@ export default function CourierPage() {
       const app = tg();
       app?.ready();
       app?.expand();
+      // Иначе движение пальцем по ползунку Telegram принимает за жест
+      // «закрыть приложение»
+      app?.disableVerticalSwipes?.();
       setReady(true);
     };
     if (tg()) return done();
@@ -158,7 +170,7 @@ export default function CourierPage() {
       setError('Обновите Telegram: эта версия не умеет сканировать QR');
       return;
     }
-    app.showScanQrPopup({ text: 'Наведите камеру на QR на планшете раздачи' }, (text: string) => {
+    app.showScanQrPopup({ text: 'Отсканируйте QR на планшете раздачи' }, (text: string) => {
       app.closeScanQrPopup();
       onCode(text);
       return true;
@@ -240,9 +252,9 @@ export default function CourierPage() {
               </a>
             )}
           </div>
-          <button disabled={busy} onClick={() => delivered(t)} className="btn-primary mt-3">
-            Доставлен
-          </button>
+          <div className="mt-3">
+            <SlideButton label="Заказ доставлен" disabled={busy} onComplete={() => delivered(t)} />
+          </div>
           <button disabled={busy} onClick={() => setFailFor(t)} className="btn-link mt-2">
             Не удалось доставить
           </button>
@@ -254,26 +266,92 @@ export default function CourierPage() {
           ? me.pickupTimeoutMin * 60 -
             Math.floor((nowMs - new Date(t.assignedAt).getTime()) / 1000)
           : null;
+        const marks = checked[t.id] ?? [];
+        const done = t.checklist.filter((i) => marks.includes(i.id)).length;
+        const allChecked = done === t.checklist.length;
+        const toggle = (id: string) => {
+          tg()?.HapticFeedback?.selectionChanged();
+          setChecked((prev) => {
+            const cur = prev[t.id] ?? [];
+            return {
+              ...prev,
+              [t.id]: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id],
+            };
+          });
+        };
         return (
           <Card key={t.id} tone="accent">
             <div className="text-sm font-semibold uppercase opacity-70">
               {t.kind === 'EXTRA_TRIP' ? 'Довоз' : 'Заберите на раздаче'}
             </div>
             <div className="text-4xl font-black">№{t.number}</div>
-            <div className="mt-1 text-lg">{t.items}</div>
-            <div className="mt-1 font-semibold">{t.payment}</div>
+            {t.checklist.length > 0 ? (
+              <>
+                <div className="mt-2 text-sm opacity-70">
+                  Проверьте пакет и отметьте каждую позицию
+                </div>
+                <ul className="mt-2">
+                  {t.checklist.map((i) => {
+                    const on = marks.includes(i.id);
+                    return (
+                      <li key={i.id}>
+                        <button
+                          type="button"
+                          role="checkbox"
+                          aria-checked={on}
+                          onClick={() => toggle(i.id)}
+                          className="flex w-full items-center gap-3 border-b py-3 text-left last:border-b-0"
+                          style={{ borderColor: 'var(--tg-theme-secondary-bg-color, #eee)' }}
+                        >
+                          <span
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border-2 text-lg font-black"
+                            style={
+                              on
+                                ? {
+                                    background: 'var(--tg-theme-button-color, #2481cc)',
+                                    borderColor: 'var(--tg-theme-button-color, #2481cc)',
+                                    color: 'var(--tg-theme-button-text-color, #fff)',
+                                  }
+                                : { borderColor: 'var(--tg-theme-hint-color, #999)' }
+                            }
+                          >
+                            {on ? '✓' : ''}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-lg leading-tight">{i.name}</span>
+                            {i.note && <span className="block text-sm opacity-60">{i.note}</span>}
+                          </span>
+                          {i.qty > 1 && (
+                            <span className="shrink-0 text-xl font-black">×{i.qty}</span>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            ) : (
+              <div className="mt-1 text-lg">{t.items}</div>
+            )}
+            <div className="mt-2 font-semibold">{t.payment}</div>
             {left !== null && left > 0 && (
               <div className="mt-1 text-sm opacity-70">
-                отметьте «Забрал» в течение {Math.ceil(left / 60)} мин
+                заберите в течение {Math.ceil(left / 60)} мин
               </div>
             )}
-            <button
-              disabled={busy}
-              onClick={() => scan((qr) => act(`/tasks/${t.id}/picked-up`, { qr }))}
-              className="btn-primary mt-3"
-            >
-              Забрал — сканировать QR
-            </button>
+            <div className="mt-3">
+              <SlideButton
+                label={
+                  // Длинное «Поехали — сканировать QR» не влезает на узкий
+                  // телефон; про QR скажет сам сканер
+                  allChecked ? 'Поехали' : `Отмечено ${done} из ${t.checklist.length}`
+                }
+                disabled={busy || !allChecked}
+                onComplete={() =>
+                  scan((qr) => act(`/tasks/${t.id}/picked-up`, { qr, items: marks }))
+                }
+              />
+            </div>
             <button
               disabled={busy}
               onClick={() => {
@@ -467,6 +545,114 @@ function Card({ children, tone }: { children: React.ReactNode; tone?: 'warn' | '
       style={{ background: 'var(--tg-theme-bg-color, #fff)' }}
     >
       {children}
+    </div>
+  );
+}
+
+/**
+ * Кнопка-ползунок: срабатывает, только если протянуть кружок почти до
+ * конца. Отпустил раньше — кружок возвращается, ничего не происходит.
+ * С клавиатуры — Enter или пробел на кружке.
+ */
+function SlideButton({
+  label,
+  disabled,
+  onComplete,
+}: {
+  label: string;
+  disabled?: boolean;
+  onComplete: () => void;
+}) {
+  const track = useRef<HTMLDivElement>(null);
+  const start = useRef<{ x: number; max: number } | null>(null);
+  const [dx, setDx] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const THUMB = 56;
+  const PAD = 4;
+
+  // Ползунок стоит в начале, пока действие недоступно
+  useEffect(() => {
+    if (disabled) setDx(0);
+  }, [disabled]);
+
+  function finish() {
+    tg()?.HapticFeedback?.impactOccurred('medium');
+    onComplete();
+    // Если сканер закрыли без кода, ползунок должен быть готов снова
+    setTimeout(() => setDx(0), 400);
+  }
+
+  return (
+    <div
+      ref={track}
+      className="relative select-none overflow-hidden rounded-full"
+      style={{
+        height: THUMB + PAD * 2,
+        background: 'var(--tg-theme-button-color, #2481cc)',
+        color: 'var(--tg-theme-button-text-color, #fff)',
+        opacity: disabled ? 0.45 : 1,
+      }}
+    >
+      <div
+        className="pointer-events-none absolute inset-0 flex items-center justify-center text-lg font-bold"
+        style={{ paddingLeft: THUMB, opacity: Math.max(1 - dx / 160, 0.15) }}
+      >
+        {label}
+      </div>
+      <button
+        type="button"
+        aria-label={label}
+        disabled={disabled}
+        className="absolute flex items-center justify-center rounded-full text-2xl font-black shadow"
+        style={{
+          top: PAD,
+          left: PAD,
+          width: THUMB,
+          height: THUMB,
+          transform: `translateX(${dx}px)`,
+          transition: dragging ? 'none' : 'transform 200ms ease-out',
+          background: 'var(--tg-theme-button-text-color, #fff)',
+          color: 'var(--tg-theme-button-color, #2481cc)',
+          touchAction: 'none',
+        }}
+        onPointerDown={(e) => {
+          if (disabled || !track.current) return;
+          e.currentTarget.setPointerCapture(e.pointerId);
+          start.current = { x: e.clientX - dx, max: track.current.clientWidth - THUMB - PAD * 2 };
+          setDragging(true);
+        }}
+        onPointerMove={(e) => {
+          if (!start.current) return;
+          setDx(Math.min(Math.max(e.clientX - start.current.x, 0), start.current.max));
+        }}
+        onPointerUp={(e) => {
+          const s = start.current;
+          start.current = null;
+          setDragging(false);
+          if (!s) return;
+          const pos = Math.min(Math.max(e.clientX - s.x, 0), s.max);
+          if (pos >= s.max * 0.85) {
+            setDx(s.max);
+            finish();
+          } else {
+            setDx(0);
+          }
+        }}
+        onPointerCancel={() => {
+          start.current = null;
+          setDragging(false);
+          setDx(0);
+        }}
+        onKeyDown={(e) => {
+          if (disabled || (e.key !== 'Enter' && e.key !== ' ')) return;
+          e.preventDefault();
+          finish();
+        }}
+        // Клик без протягивания ничего не делает — в этом смысл ползунка
+        onClick={(e) => e.preventDefault()}
+      >
+        →
+      </button>
     </div>
   );
 }

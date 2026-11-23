@@ -11,8 +11,9 @@ import { verifyQrToken } from './dispatch-qr';
 
 /**
  * Что курьер делает в Mini App (docs/COURIER_SYSTEM_SPEC.md §5–7):
- * «Я на месте» сканом QR → получает заказ → «Забрал» сканом QR (только
- * тогда видит адрес) → «Доставлен» или «Не удалось».
+ * «Я на месте» сканом QR → получает заказ → отмечает состав галочками и
+ * «Поехали» сканом QR (только тогда видит адрес) → «Доставлен» или
+ * «Не удалось».
  *
  * Этапы 1–3: клиент ничего не видит, Order.status не трогаем.
  */
@@ -69,9 +70,20 @@ export class CourierAppService {
             changeFrom: true,
             address: true,
             customer: { select: { phone: true, name: true } },
-            items: { select: { name: true, qty: true, isUnavailable: true } },
+            items: {
+              select: {
+                id: true,
+                name: true,
+                qty: true,
+                modifiers: true,
+                isGift: true,
+                isUnavailable: true,
+              },
+              orderBy: { id: 'asc' },
+            },
           },
         },
+        venue: { select: { address: true } },
       },
     });
 
@@ -110,6 +122,8 @@ export class CourierAppService {
             t.kind === 'EXTRA_TRIP'
               ? `Довоз: ${t.extraReason ?? 'без причины'}`
               : itemsLine(t.order.items),
+          // Галочки комплектации: по ним курьер сверяет пакет перед «Поехали»
+          checklist: t.kind === 'EXTRA_TRIP' ? [] : checklist(t.order.items),
           payment: paymentLine({ ...t, changeFrom: t.order.changeFrom }),
           cash: t.cashToCollect,
           needsTerminal: t.needsTerminal,
@@ -120,7 +134,7 @@ export class CourierAppService {
             ? {
                 address: addr ? formatAddress(addr) : null,
                 addressComment: addr?.comment || null,
-                mapUrl: addr ? mapUrl(addr) : null,
+                mapUrl: addr ? mapUrl(addr, cityOf(t.venue.address)) : null,
                 phone: t.order.customer?.phone ?? null,
                 customerName: t.order.customer?.name ?? null,
                 comment: t.order.comment || null,
@@ -259,16 +273,39 @@ export class CourierAppService {
 
   // ─── «Забрал» ──────────────────────────────────────────────────
 
-  async pickedUp(actor: CourierActorValue, taskId: string, qr: string | null) {
+  /**
+   * «Поехали»: QR у раздачи плюс галочки по составу. Без скана («уже уехал,
+   * забыл») галочки не спрашиваем — пакет уже не перед глазами, такая
+   * выдача и так идёт с пометкой.
+   */
+  async pickedUp(
+    actor: CourierActorValue,
+    taskId: string,
+    qr: string | null,
+    confirmedItemIds: string[] = [],
+  ) {
     const task = await this.ownTask(actor, taskId);
     if (task.status === 'PICKED_UP') return this.me(actor);
     if (task.status !== 'ASSIGNED') throw new BadRequestException('Этот заказ уже не ваш');
 
-    if (qr !== null) {
+    const manual = qr === null;
+    let itemsConfirmed: number | undefined;
+    if (!manual && task.kind !== 'EXTRA_TRIP') {
+      const items = await this.prisma.orderItem.findMany({
+        where: { orderId: task.orderId, isUnavailable: false },
+        select: { id: true },
+      });
+      // Состав могли поменять, пока курьер отмечал (кассир снял позицию,
+      // добавил замену) — тогда пусть сверит ещё раз по свежему списку
+      if (missingItems(items, confirmedItemIds).length > 0) {
+        throw new BadRequestException('Состав заказа обновился. Отметьте все позиции ещё раз');
+      }
+      itemsConfirmed = items.length;
+    }
+    if (!manual) {
       const venueId = await this.venueFromQr(actor.tenantId, qr);
       if (venueId !== task.venueId) throw new BadRequestException('Это QR другой точки');
     }
-    const manual = qr === null;
     const changed = await this.prisma.deliveryTask.updateMany({
       where: { id: taskId, status: 'ASSIGNED', courierId: actor.courier.id },
       data: {
@@ -285,7 +322,10 @@ export class CourierAppService {
         data: { state: 'ON_DELIVERY' },
       });
     }
-    await this.event(actor, taskId, 'PICKED_UP', { method: manual ? 'MANUAL' : 'SCAN' });
+    await this.event(actor, taskId, 'PICKED_UP', {
+      method: manual ? 'MANUAL' : 'SCAN',
+      ...(itemsConfirmed !== undefined ? { itemsConfirmed } : {}),
+    });
     return this.me(actor);
   }
 
@@ -477,15 +517,60 @@ export function formatAddress(a: Address): string {
 }
 
 /**
- * 2ГИС: по координатам точнее, без них — поиском по адресу. Город не
- * подставляем: 2ГИС ищет рядом с курьером, а заведение может быть любым.
+ * Ссылка в 2ГИС. С координатами — сразу маршрут: начало пустое, его 2ГИС
+ * берёт из местоположения телефона. Без координат — поиск по адресу, и тут
+ * нужен город: без него 2ГИС ищет в городе, который угадал по IP (для
+ * Экибастуза это Павлодар).
  */
-export function mapUrl(a: Address): string | null {
+export function mapUrl(a: Address, city = ''): string | null {
   if (typeof a.lat === 'number' && typeof a.lng === 'number') {
-    return `https://2gis.kz/geo/${a.lng},${a.lat}`;
+    return `https://2gis.kz/directions/points/${encodeURIComponent(`|${a.lng},${a.lat}`)}`;
   }
-  const q = [a.street, a.house].filter(Boolean).join(' ');
-  return q ? `https://2gis.kz/search/${encodeURIComponent(q)}` : null;
+  const street = [a.street, a.house].filter(Boolean).join(' ');
+  if (!street) return null;
+  const q = city && !street.toLowerCase().includes(city.toLowerCase()) ? `${city} ${street}` : street;
+  return `https://2gis.kz/search/${encodeURIComponent(q)}`;
+}
+
+/** Город точки — первая часть её адреса: «Экибастуз, Ауэзова 47б, …» */
+export function cityOf(venueAddress: string): string {
+  const [first, ...rest] = venueAddress.split(',');
+  // Адрес без запятой — это улица, а не город
+  return rest.length > 0 ? first.trim() : '';
+}
+
+type ChecklistItem = {
+  id: string;
+  name: string;
+  qty: number;
+  modifiers: unknown;
+  isGift: boolean;
+  isUnavailable: boolean;
+};
+
+/** Строки для галочек: что лежит в пакете, с добавками мелким шрифтом */
+export function checklist(items: ChecklistItem[]) {
+  return items
+    .filter((i) => !i.isUnavailable)
+    .map((i) => {
+      const mods = Array.isArray(i.modifiers)
+        ? i.modifiers
+            .map((m) => (m && typeof m === 'object' ? (m as { name?: unknown }).name : null))
+            .filter((n): n is string => typeof n === 'string' && n.trim() !== '')
+        : [];
+      return {
+        id: i.id,
+        name: i.name,
+        qty: i.qty,
+        note: [...mods, ...(i.isGift ? ['подарок'] : [])].join(', '),
+      };
+    });
+}
+
+/** Каких позиций курьер не отметил */
+export function missingItems(items: { id: string }[], confirmed: string[]): string[] {
+  const seen = new Set(confirmed);
+  return items.filter((i) => !seen.has(i.id)).map((i) => i.id);
 }
 
 /** Начало суток по часовому поясу сервера (TZ=Asia/Almaty на Railway) */

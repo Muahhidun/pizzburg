@@ -1,10 +1,24 @@
 import { Body, Controller, Get, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
-import { IsNumber, IsOptional, IsString, Length, Max, Min } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Length,
+  Max,
+  Min,
+} from 'class-validator';
 import { CourierActor, CourierActorValue, CourierAuthGuard } from './courier-auth.guard';
 import { CourierAppService } from './courier-app.service';
 
 class QrDto {
   @IsString() @Length(10, 200) qr: string;
+}
+
+class PickedUpDto extends QrDto {
+  /** Позиции, которые курьер отметил галочками */
+  @IsOptional() @IsArray() @ArrayMaxSize(200) @IsString({ each: true }) items?: string[];
 }
 
 class DeliveredDto {
@@ -35,8 +49,12 @@ export class CourierAppController {
 
   @Post('tasks/:id/picked-up')
   @HttpCode(200)
-  pickedUp(@CourierActor() actor: CourierActorValue, @Param('id') id: string, @Body() dto: QrDto) {
-    return this.app.pickedUp(actor, id, dto.qr);
+  pickedUp(
+    @CourierActor() actor: CourierActorValue,
+    @Param('id') id: string,
+    @Body() dto: PickedUpDto,
+  ) {
+    return this.app.pickedUp(actor, id, dto.qr, dto.items ?? []);
   }
 
   /** «Забрал без скана» — засчитывается с пометкой */
