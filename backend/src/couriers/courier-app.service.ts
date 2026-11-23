@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { GeoService } from '../geo/geo.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { esc, TelegramService } from '../telegram/telegram.service';
 import { AssignmentService, itemsLine, paymentLine } from './assignment.service';
@@ -8,6 +9,7 @@ import { CourierCashService } from './courier-cash.service';
 import { CourierRegistrationService } from './courier-registration.service';
 import { courierSettings } from './courier-settings';
 import { verifyQrToken } from './dispatch-qr';
+import { shortName } from './names';
 
 /**
  * Что курьер делает в Mini App (docs/COURIER_SYSTEM_SPEC.md §5–7):
@@ -39,6 +41,7 @@ export class CourierAppService {
     private readonly assignment: AssignmentService,
     private readonly registration: CourierRegistrationService,
     private readonly cash: CourierCashService,
+    private readonly geo: GeoService,
   ) {}
 
   // ─── Экран курьера ─────────────────────────────────────────────
@@ -87,6 +90,28 @@ export class CourierAppService {
       },
     });
 
+    // Очередь у раздачи целиком: кто ждёт, кто в пути, кто на паузе.
+    // Видно, что очередь честная, — главный вопрос курьеров к раздаче
+    const venueShifts =
+      shift && courier.status === 'ACTIVE'
+        ? await this.prisma.courierShift.findMany({
+            where: { venueId: shift.venueId, endedAt: null, state: { not: 'AWAY' } },
+            select: {
+              state: true,
+              scheduled: true,
+              queuedAt: true,
+              pauseUntil: true,
+              courier: { select: { id: true, fullName: true, selfieFileId: true } },
+              tasks: {
+                where: { status: 'PICKED_UP' },
+                select: { pickedUpAt: true },
+                orderBy: { pickedUpAt: 'asc' },
+                take: 1,
+              },
+            },
+          })
+        : [];
+
     const since = startOfDay();
     const today = await this.prisma.courierPayoutLine.aggregate({
       where: { courierId: courier.id, createdAt: { gte: since } },
@@ -108,11 +133,12 @@ export class CourierAppService {
         : null,
       pauseMin: cfg.pauseMin,
       pickupTimeoutMin: cfg.pickupTimeoutMin,
-      tasks: tasks.map((t) => {
+      queue: buildQueue(venueShifts, courier.id),
+      tasks: await Promise.all(tasks.map(async (t) => {
         // Адрес и телефон — только после «Забрал»: до этого курьер видит
         // номер и состав, чтобы найти пакет
         const picked = t.status === 'PICKED_UP';
-        const addr = (t.order.address as Address | null) ?? null;
+        const addr = picked ? await this.withCoords(actor.tenantSlug, t.order.address) : null;
         return {
           id: t.id,
           kind: t.kind,
@@ -141,7 +167,7 @@ export class CourierAppService {
               }
             : {}),
         };
-      }),
+      })),
       today: { deliveries: today._count._all, earned: today._sum.amount ?? 0 },
     };
   }
@@ -476,6 +502,45 @@ export class CourierAppService {
     return venueId;
   }
 
+  // ─── Фото в очереди ────────────────────────────────────────────
+
+  /** Скачанные у Телеграма селфи: очередь опрашивается каждые 5 секунд */
+  private readonly photos = new Map<string, { data: Buffer; type: string }>();
+
+  /**
+   * Селфи коллеги для очереди. Только тем, кто сейчас на смене у той же
+   * раздачи, и только тех, кто тоже на смене: фото не каталог курьеров.
+   */
+  async photo(actor: CourierActorValue, courierId: string) {
+    const mine = await this.openShift(actor.courier.id);
+    if (!mine || actor.courier.status !== 'ACTIVE') throw new NotFoundException('Нет фото');
+    const theirs = await this.prisma.courierShift.findFirst({
+      where: { venueId: mine.venueId, endedAt: null, courierId, tenantId: actor.tenantId },
+      select: { courier: { select: { selfieFileId: true } } },
+    });
+    const fileId = theirs?.courier.selfieFileId;
+    if (!fileId) throw new NotFoundException('Нет фото');
+
+    let file = this.photos.get(fileId);
+    if (!file) {
+      file = (await this.telegram.downloadFile(actor.tenantId, fileId)) ?? undefined;
+      if (!file) throw new NotFoundException('Нет фото');
+      if (this.photos.size >= 50) this.photos.delete(this.photos.keys().next().value!);
+      this.photos.set(fileId, file);
+    }
+    return file;
+  }
+
+  /** Адрес заказа с координатами из справочника города, если своих нет */
+  private async withCoords(tenantSlug: string, raw: unknown): Promise<Address | null> {
+    const addr = (raw as Address | null) ?? null;
+    if (!addr || (typeof addr.lat === 'number' && typeof addr.lng === 'number')) return addr;
+    const point = await this.geo
+      .coordsOf(tenantSlug, addr.street ?? '', addr.house ?? '')
+      .catch(() => null);
+    return point ? { ...addr, ...point } : addr;
+  }
+
   private async ownTask(actor: CourierActorValue, taskId: string) {
     const task = await this.prisma.deliveryTask.findFirst({
       where: { id: taskId, courierId: actor.courier.id },
@@ -578,4 +643,52 @@ function startOfDay(now = new Date()): Date {
   const d = new Date(now);
   d.setHours(0, 0, 0, 0);
   return d;
+}
+
+type QueueShift = {
+  state: string;
+  scheduled: boolean;
+  queuedAt: Date | null;
+  pauseUntil: Date | null;
+  courier: { id: string; fullName: string; selfieFileId: string | null };
+  tasks: { pickedUpAt: Date | null }[];
+};
+
+/**
+ * Очередь для экрана курьера в порядке, в котором раздаются заказы:
+ * сначала ждущие (график, потом время скана), затем в пути, затем пауза.
+ */
+export function buildQueue(shifts: QueueShift[], meId: string, now = new Date()) {
+  const person = (s: QueueShift) => ({
+    id: s.courier.id,
+    name: shortName(s.courier.fullName),
+    photo: Boolean(s.courier.selfieFileId),
+    me: s.courier.id === meId,
+  });
+  const time = (d: Date | null) => d?.getTime() ?? Number.MAX_SAFE_INTEGER;
+  const minutes = (from: Date | null, to: Date) =>
+    from ? Math.max(Math.floor((to.getTime() - from.getTime()) / 60_000), 0) : null;
+
+  const waiting = shifts
+    .filter((s) => s.state === 'WAITING')
+    .sort((a, b) => Number(b.scheduled) - Number(a.scheduled) || time(a.queuedAt) - time(b.queuedAt))
+    .map(person);
+  const onWay = shifts
+    .filter((s) => ['ASSIGNED', 'ON_DELIVERY', 'RETURNING'].includes(s.state))
+    .sort((a, b) => time(a.tasks[0]?.pickedUpAt ?? null) - time(b.tasks[0]?.pickedUpAt ?? null))
+    .map((s) => ({
+      ...person(s),
+      state: s.state as 'ASSIGNED' | 'ON_DELIVERY' | 'RETURNING',
+      minutes: s.state === 'ON_DELIVERY' ? minutes(s.tasks[0]?.pickedUpAt ?? null, now) : null,
+    }));
+  const pause = shifts
+    .filter((s) => s.state === 'ON_PAUSE')
+    .sort((a, b) => time(a.pauseUntil) - time(b.pauseUntil))
+    .map((s) => ({
+      ...person(s),
+      minutesLeft: s.pauseUntil
+        ? Math.max(Math.ceil((s.pauseUntil.getTime() - now.getTime()) / 60_000), 0)
+        : null,
+    }));
+  return { waiting, onWay, pause };
 }

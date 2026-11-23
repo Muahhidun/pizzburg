@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { itemsLine, paymentLine } from '../src/couriers/assignment.service';
 import {
+  buildQueue,
   checklist,
   cityOf,
   formatAddress,
@@ -97,4 +98,39 @@ test('«Поехали» не пройдёт, пока не отмечены в�
   assert.deepEqual(missingItems(items, ['a', 'b', 'c']), []);
   // Кассир добавил позицию, пока курьер отмечал старый список
   assert.deepEqual(missingItems(items, ['a']), ['c']);
+});
+
+test('очередь: график впереди, потом по времени скана; в пути — минуты, пауза — остаток', () => {
+  const now = new Date('2026-11-23T12:00:00Z');
+  const at = (min: number) => new Date(now.getTime() + min * 60_000);
+  const shift = (id: string, state: string, extra: Partial<Parameters<typeof buildQueue>[0][0]> = {}) => ({
+    state,
+    scheduled: false,
+    queuedAt: null,
+    pauseUntil: null,
+    courier: { id, fullName: `Курьеров ${id}`, selfieFileId: id === 'b' ? null : 'file' },
+    tasks: [],
+    ...extra,
+  });
+  const q = buildQueue(
+    [
+      shift('a', 'WAITING', { queuedAt: at(-5) }),
+      shift('b', 'WAITING', { queuedAt: at(-10) }),
+      shift('c', 'WAITING', { queuedAt: at(-1), scheduled: true }),
+      shift('d', 'ON_DELIVERY', { tasks: [{ pickedUpAt: at(-12) }] }),
+      shift('e', 'RETURNING'),
+      shift('f', 'ON_PAUSE', { pauseUntil: at(7.5) }),
+    ],
+    'a',
+    now,
+  );
+  assert.deepEqual(q.waiting.map((p) => p.id), ['c', 'b', 'a']);
+  assert.equal(q.waiting[2].me, true);
+  assert.equal(q.waiting[1].photo, false);
+  assert.equal(q.waiting[0].name, 'c К.');
+  assert.deepEqual(
+    q.onWay.map((p) => [p.id, p.state, p.minutes]),
+    [['d', 'ON_DELIVERY', 12], ['e', 'RETURNING', null]],
+  );
+  assert.deepEqual(q.pause.map((p) => [p.id, p.minutesLeft]), [['f', 8]]);
 });

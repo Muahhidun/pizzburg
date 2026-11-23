@@ -38,6 +38,19 @@ interface Task {
   comment?: string | null;
 }
 
+interface QueuePerson {
+  id: string;
+  name: string;
+  photo: boolean;
+  me: boolean;
+}
+
+interface Queue {
+  waiting: QueuePerson[];
+  onWay: (QueuePerson & { state: 'ASSIGNED' | 'ON_DELIVERY' | 'RETURNING'; minutes: number | null })[];
+  pause: (QueuePerson & { minutesLeft: number | null })[];
+}
+
 interface Me {
   courier: { name: string; status: 'PENDING' | 'ACTIVE' };
   shift: {
@@ -50,6 +63,7 @@ interface Me {
   pickupTimeoutMin: number;
   pauseMin: number;
   tasks: Task[];
+  queue?: Queue;
   today: { deliveries: number; earned: number };
   cash: {
     balance: number;
@@ -84,6 +98,10 @@ export default function CourierPage() {
   // Галочки комплектации по заказам: живут только на экране, на сервер
   // уходят вместе с «Поехали»
   const [checked, setChecked] = useState<Record<string, string[]>>({});
+  // Селфи коллег: картинку нельзя запросить обычным <img> — нужен заголовок
+  // с подписью Telegram, поэтому качаем сами и держим как blob-ссылки
+  const [photos, setPhotos] = useState<Record<string, string>>({});
+  const photoRequested = useRef(new Set<string>());
   const tenant = useRef('');
 
   // SDK Telegram подключаем сами: страница живёт в общей админке
@@ -148,6 +166,24 @@ export default function CourierPage() {
     const t = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
+
+  useEffect(() => {
+    const q = me?.queue;
+    if (!q) return;
+    for (const p of [...q.waiting, ...q.onWay, ...q.pause]) {
+      if (!p.photo || photoRequested.current.has(p.id)) continue;
+      photoRequested.current.add(p.id);
+      fetch(`${api.raw}/courier/photo/${encodeURIComponent(p.id)}`, {
+        headers: { 'X-Tenant': tenant.current, 'X-Telegram-Init-Data': tg()?.initData ?? '' },
+      })
+        .then((r) => (r.ok ? r.blob() : null))
+        .then((b) => {
+          if (b) setPhotos((prev) => ({ ...prev, [p.id]: URL.createObjectURL(b) }));
+        })
+        // Без фото останутся инициалы — не повод показывать ошибку
+        .catch(() => {});
+    }
+  }, [me?.queue]);
 
   async function act(path: string, body: unknown = {}) {
     setBusy(true);
@@ -217,6 +253,8 @@ export default function CourierPage() {
           сегодня {me.today.deliveries} · {me.today.earned.toLocaleString('ru-RU')} ₸
         </div>
       </header>
+
+      {me.queue && <QueueStrip queue={me.queue} photos={photos} />}
 
       {me.courier.status === 'PENDING' && (
         <Card tone="warn">
@@ -653,6 +691,108 @@ function SlideButton({
       >
         →
       </button>
+    </div>
+  );
+}
+
+/**
+ * Очередь у раздачи, как у Додо: кто ждёт (с номером), кто в пути (с
+ * минутами), кто на паузе. Каждый видит, что заказы идут по порядку.
+ */
+function QueueStrip({ queue, photos }: { queue: Queue; photos: Record<string, string> }) {
+  const groups: { title: string; people: { p: QueuePerson; badge: string }[] }[] = [
+    {
+      title: 'Ждут',
+      people: queue.waiting.map((p, i) => ({ p, badge: String(i + 1) })),
+    },
+    {
+      title: 'В пути',
+      people: queue.onWay.map((p) => ({
+        p,
+        badge:
+          p.state === 'RETURNING'
+            ? 'назад'
+            : p.state === 'ASSIGNED'
+              ? 'берёт'
+              : `${p.minutes ?? 0} мин`,
+      })),
+    },
+    {
+      title: 'Пауза',
+      people: queue.pause.map((p) => ({
+        p,
+        badge: p.minutesLeft !== null ? `${p.minutesLeft} мин` : '',
+      })),
+    },
+  ].filter((g) => g.people.length > 0);
+  if (groups.length === 0) return null;
+
+  return (
+    <div
+      className="-mx-4 mb-3 flex gap-4 overflow-x-auto px-4 pb-1"
+      style={{ scrollbarWidth: 'none' }}
+    >
+      {groups.map((g) => (
+        <div key={g.title} className="shrink-0">
+          <div className="mb-1 text-xs font-semibold uppercase opacity-50">{g.title}</div>
+          <div className="flex gap-2">
+            {g.people.map(({ p, badge }) => (
+              <div key={p.id} className="flex w-14 flex-col items-center">
+                <div className="relative">
+                  <Avatar name={p.name} src={photos[p.id]} me={p.me} />
+                  {badge && (
+                    <span
+                      className="absolute -bottom-1 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-1.5 text-[11px] font-bold leading-4"
+                      style={{
+                        background: p.me
+                          ? 'var(--tg-theme-button-color, #2481cc)'
+                          : 'var(--tg-theme-bg-color, #fff)',
+                        color: p.me
+                          ? 'var(--tg-theme-button-text-color, #fff)'
+                          : 'var(--tg-theme-text-color, #111)',
+                      }}
+                    >
+                      {badge}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-1.5 w-full truncate text-center text-xs">
+                  {p.me ? 'Вы' : p.name.split(' ')[0]}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Avatar({ name, src, me }: { name: string; src?: string; me: boolean }) {
+  const ring = me
+    ? { boxShadow: '0 0 0 3px var(--tg-theme-button-color, #2481cc)' }
+    : {};
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={src} alt={name} className="h-12 w-12 rounded-full object-cover" style={ring} />
+    );
+  }
+  const initials = name
+    .split(' ')
+    .map((w) => w.charAt(0))
+    .join('')
+    .slice(0, 2);
+  return (
+    <div
+      className="flex h-12 w-12 items-center justify-center rounded-full text-base font-bold"
+      style={{
+        background: 'var(--tg-theme-bg-color, #fff)',
+        color: 'var(--tg-theme-hint-color, #888)',
+        ...ring,
+      }}
+    >
+      {initials}
     </div>
   );
 }

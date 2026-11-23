@@ -111,6 +111,22 @@ export class GeoService {
     );
   }
 
+  /**
+   * Координаты дома. В заказе хранится только улица и дом, а курьеру нужен
+   * маршрут в 2ГИС в одно касание — берём точку из справочника.
+   */
+  async coordsOf(
+    tenantSlug: string,
+    street: string,
+    house: string,
+  ): Promise<{ lat: number; lng: number } | null> {
+    if (!street.trim() || !house.trim()) return null;
+    const found = findExact(await this.book(tenantSlug), street, house);
+    return typeof found?.lat === 'number' && typeof found?.lng === 'number'
+      ? { lat: found.lat, lng: found.lng }
+      : null;
+  }
+
   /** Есть ли такой адрес в справочнике */
   async verify(street: string, house: string) {
     const found = findExact(await this.book(), street, house);

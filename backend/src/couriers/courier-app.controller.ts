@@ -1,4 +1,14 @@
-import { Body, Controller, Get, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  HttpCode,
+  Param,
+  Post,
+  StreamableFile,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ArrayMaxSize,
   IsArray,
@@ -39,6 +49,14 @@ export class CourierAppController {
   @Get('me')
   me(@CourierActor() actor: CourierActorValue) {
     return this.app.me(actor);
+  }
+
+  /** Селфи коллеги на смене — для очереди с лицами */
+  @Get('photo/:courierId')
+  @Header('Cache-Control', 'private, max-age=3600')
+  async photo(@CourierActor() actor: CourierActorValue, @Param('courierId') courierId: string) {
+    const file = await this.app.photo(actor, courierId);
+    return new StreamableFile(file.data, { type: file.type });
   }
 
   @Post('check-in')

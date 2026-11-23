@@ -228,6 +228,30 @@ export class TelegramService {
     return this.request(s.botToken, method, payload);
   }
 
+  /**
+   * Скачать файл, присланный боту (селфи курьера). Ссылка на файл в
+   * Телеграме содержит токен бота, поэтому наружу отдаём только байты.
+   */
+  async downloadFile(
+    tenantId: string,
+    fileId: string,
+  ): Promise<{ data: Buffer; type: string } | null> {
+    const s = await this.settings(tenantId);
+    if (!s.botToken) return null;
+    const { error, result } = await this.request(s.botToken, 'getFile', { file_id: fileId });
+    if (error || typeof result?.file_path !== 'string') return null;
+    try {
+      const res = await this.fetchImpl(`${API}/file/bot${s.botToken}/${result.file_path}`);
+      if (!res.ok) return null;
+      return {
+        data: Buffer.from(await res.arrayBuffer()),
+        type: res.headers.get('content-type') || 'image/jpeg',
+      };
+    } catch {
+      return null;
+    }
+  }
+
   /** Чаты, кнопки из которых считаются действиями кассы и руководства */
   async staffChatIds(tenantId: string): Promise<string[]> {
     const s = await this.settings(tenantId);
