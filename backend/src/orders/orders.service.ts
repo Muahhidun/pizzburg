@@ -13,6 +13,7 @@ import { LoyaltyService } from '../loyalty/loyalty.service';
 import { OrderStatus } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AvailabilityService } from '../availability/availability.service';
+import { actionsButton } from './order-keyboards';
 import { CancelReasonsService } from './cancel-reasons.service';
 import { LegalService } from '../legal/legal.service';
 import { AddressesService } from '../auth/addresses.service';
@@ -1064,7 +1065,7 @@ export class OrdersService {
         const posted = await this.telegram.notifyCashier(
           order.tenantId,
           newOrderMessage(order, liveItems),
-          undefined,
+          actionsButton(order.id),
           { links: false },
         );
         // Запоминаем, где лежит сообщение: «№N» в других сообщениях бота
@@ -1302,6 +1303,8 @@ export class OrdersService {
     /// Что делать с деньгами Kaspi. По умолчанию — вернуть всё: так вела
     /// себя отмена до появления выбора, и так безопаснее для клиента.
     refund: OperatorCancelRefund = { mode: "FULL" },
+    /// Кто нажал: имя сотрудника из админки или из Телеграма — для итогов дня
+    actorName?: string,
   ) {
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, tenantId },
@@ -1336,6 +1339,7 @@ export class OrdersService {
         // Именно ADMIN, а не OPERATOR: значение уже зафиксировано схемой и
         // отчётом по отменам, второе написание разбило бы разбивку надвое.
         cancelledBy: "ADMIN",
+        cancelledByName: actorName?.slice(0, 80) || null,
         cancelledAt: now,
       },
     });

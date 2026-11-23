@@ -220,6 +220,7 @@ export class AdminController {
       dto.comment,
       dto.refundMode,
       dto.refundAmount,
+      actor.displayName,
     );
     await this.audit.record(actor, {
       action: 'ORDER_CANCELLED', entityType: 'Order', entityId: id,

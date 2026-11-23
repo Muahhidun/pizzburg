@@ -597,6 +597,7 @@ export class AdminService {
     comment?: string,
     refundMode: 'FULL' | 'PARTIAL' | 'NONE' = 'FULL',
     refundAmount?: number,
+    actorName?: string,
   ) {
     const tenant = await this.tenant();
     if (refundMode === 'PARTIAL' && refundAmount === undefined) {
@@ -611,6 +612,7 @@ export class AdminService {
       refundMode === 'PARTIAL'
         ? { mode: 'PARTIAL', amount: refundAmount! }
         : { mode: refundMode },
+      actorName,
     );
   }
 

@@ -31,7 +31,7 @@ test('сводка дня собирает заказы, отмены и воз�
     [
       { number: 1, status: 'DELIVERED', total: 4000, paymentMethod: 'CASH', paidAt: null, cancelledBy: null, cancelReason: null, paymentRefunds: [] },
       { number: 2, status: 'DELIVERED', total: 6000, paymentMethod: 'KASPI_ONLINE', paidAt: new Date(), cancelledBy: null, cancelReason: null, paymentRefunds: [] },
-      { number: 3, status: 'CANCELLED', total: 5000, paymentMethod: 'KASPI_ONLINE', paidAt: new Date(), cancelledBy: 'ADMIN', cancelReason: 'Нет <курьеров>', paymentRefunds: [{ amount: 5000, idempotencyKey: 'order-cancel:3' }] },
+      { number: 3, status: 'CANCELLED', total: 5000, paymentMethod: 'KASPI_ONLINE', paidAt: new Date(), cancelledBy: 'ADMIN', cancelledByName: 'Айгерим', cancelReason: 'Нет <курьеров>', paymentRefunds: [{ amount: 5000, idempotencyKey: 'order-cancel:3' }] },
       { number: 4, status: 'CANCELLED', total: 2000, paymentMethod: 'KASPI_ONLINE', paidAt: null, cancelledBy: 'SYSTEM', cancelReason: 'Не оплачен', paymentRefunds: [] },
     ],
     [
@@ -47,7 +47,8 @@ test('сводка дня собирает заказы, отмены и воз�
     /Kaspi онлайн \(приложение\): 2 заказа на 11000 ₸, возвращено 5000 ₸, итого 6000 ₸/,
   );
   assert.match(text, /Отмен: 2/);
-  assert.match(text, /отменили в админке: 1/);
+  assert.match(text, /отменил сотрудник: 1/);
+  assert.match(text, /№3, 5000 ₸ — отменил сотрудник Айгерим, причина/);
   assert.doesNotMatch(text, /, —/);
   assert.match(text, /Нет &lt;курьеров&gt;/);
   assert.match(text, /Вернули: 1 на 5000 ₸/);

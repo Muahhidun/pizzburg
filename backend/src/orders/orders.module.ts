@@ -18,6 +18,7 @@ import {
   TelegramWebhookBootstrap,
 } from './telegram-replies.controller';
 import { ReviewsService } from './reviews.service';
+import { OrderActionsService } from './order-actions.service';
 import { AuthModule } from '../auth/auth.module';
 import { LoyaltyModule } from '../loyalty/loyalty.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -44,6 +45,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     OrderMessagesService,
     ReviewsService,
     TelegramRepliesService,
+    OrderActionsService,
     TelegramWebhookBootstrap,
   ],
   exports: [

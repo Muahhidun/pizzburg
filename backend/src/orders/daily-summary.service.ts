@@ -37,6 +37,7 @@ type SummaryOrder = {
   paymentMethod: string;
   paidAt: Date | null;
   cancelledBy: string | null;
+  cancelledByName?: string | null;
   cancelReason: string | null;
   paymentRefunds: { amount: number; idempotencyKey: string }[];
 };
@@ -50,7 +51,7 @@ type SummaryRefund = {
 /// Кто отменил — словами для группы
 const WHO: Record<string, string> = {
   CUSTOMER: "отменил клиент",
-  ADMIN: "отменили в админке",
+  ADMIN: "отменил сотрудник",
   POSTER: "отклонили на планшете",
   SYSTEM: "не оплатил Kaspi",
   AUTO: "не приняли за 3 часа",
@@ -113,6 +114,7 @@ export function buildDailySummary(
       const money = moneyLine(o).replace(/^\n/, "").replace(/<\/?b>/g, "");
       lines.push(
         `• №${o.number}, ${o.total} ₸ — ${whoOf(o.cancelledBy)}` +
+          (o.cancelledByName ? ` ${escapeHtml(o.cancelledByName)}` : "") +
           (o.cancelReason ? `, причина: «${escapeHtml(o.cancelReason)}»` : "") +
           (money ? `. ${money}` : ""),
       );
@@ -184,6 +186,7 @@ export class DailySummaryService {
               paymentMethod: true,
               paidAt: true,
               cancelledBy: true,
+              cancelledByName: true,
               cancelReason: true,
               paymentRefunds: {
                 select: { amount: true, idempotencyKey: true },

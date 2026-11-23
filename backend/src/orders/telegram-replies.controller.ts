@@ -17,6 +17,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { esc, TelegramService } from '../telegram/telegram.service';
 import { TelegramUpdatesService } from '../telegram/telegram-updates.service';
 import { OrderMessagesService, QUICK_REPLIES } from './order-messages.service';
+import { OrderActionsService } from './order-actions.service';
 
 /**
  * Секрет вебхука выводим из токена бота, а не храним отдельно: его
@@ -77,6 +78,7 @@ export class TelegramRepliesService {
     private readonly prisma: PrismaService,
     private readonly telegram: TelegramService,
     private readonly messages: OrderMessagesService,
+    private readonly actions: OrderActionsService,
   ) {}
 
   async handle(tenantId: string, update: TgUpdate) {
@@ -88,6 +90,8 @@ export class TelegramRepliesService {
     tenantId: string,
     q: NonNullable<TgUpdate['callback_query']>,
   ) {
+    // Кнопки под сообщением о заказе — свой обработчик
+    if (q.data?.startsWith('o:')) return this.actions.handle(tenantId, q, whoOf(q.from));
     const reply = (text: string) =>
       this.telegram.call(tenantId, 'answerCallbackQuery', {
         callback_query_id: q.id,

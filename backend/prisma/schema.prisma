@@ -736,6 +736,8 @@ model Order {
   cancelReasonRef    CancelReason? @relation(fields: [cancelReasonId], references: [id])
   /// Кто отменил: CUSTOMER | ADMIN | POSTER | SYSTEM — для отчёта по отменам
   cancelledBy        String?
+  /// Имя сотрудника, отменившего заказ (админка или кнопка в Телеграме)
+  cancelledByName    String?
   /// Напоминаний «заказ не принят» уже отправлено: 1 — кассе, 2 — руководству
   acceptReminders    Int           @default(0)
   /// Сообщение «ждёт принятия» в группе кассиров: после принятия его
