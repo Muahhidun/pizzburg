@@ -24,6 +24,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TelegramModule } from './telegram/telegram.module';
 import { PaymentsModule } from './payments/payments.module';
 import { CouriersModule } from './couriers/couriers.module';
+import { CashierPanelModule } from './cashier-panel/cashier-panel.module';
 
 @Controller()
 class RootController {
@@ -83,6 +84,7 @@ class RootController {
     LoyaltyModule,
     AdminModule,
     CouriersModule,
+    CashierPanelModule,
   ],
   controllers: [RootController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

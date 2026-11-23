@@ -6,6 +6,9 @@ import { TelegramService } from '../telegram/telegram.service';
 import { stopDeadline, type ScheduleLookup, type StopPreset } from './stop-deadline';
 
 /** Что ставим на стоп: позицию витрины или целую витринную категорию */
+const escapeHtml = (v: string) =>
+  v.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+
 export interface StopTarget {
   productId?: string;
   appCategoryId?: string;
@@ -241,6 +244,17 @@ export class StopListService {
    */
   @Cron('*/1 * * * *')
   async releaseExpired(now = new Date()) {
+    // Имена до снятия: после updateMany уже не узнать, что вернулось
+    const [backProducts, backCategories] = await Promise.all([
+      this.prisma.product.findMany({
+        where: { stoppedUntil: { lte: now } },
+        select: { tenantId: true, name: true, displayName: true },
+      }),
+      this.prisma.appCategory.findMany({
+        where: { stoppedUntil: { lte: now } },
+        select: { tenantId: true, name: true },
+      }),
+    ]);
     const [products, categories] = await Promise.all([
       this.prisma.product.updateMany({
         where: { stoppedUntil: { lte: now } },
@@ -259,6 +273,25 @@ export class StopListService {
       this.logger.log(
         `Стоп-лист: вернулось в продажу позиций ${products.count}, категорий ${categories.count}`,
       );
+    }
+    // Кассе: стоп у кассира только временный, и если позиции всё ещё
+    // нет — она ставит его заново. Без сообщения об этом не узнать.
+    const byTenant = new Map<string, string[]>();
+    for (const p of backProducts) {
+      byTenant.set(p.tenantId, [...(byTenant.get(p.tenantId) ?? []), `«${p.displayName ?? p.name}»`]);
+    }
+    for (const c of backCategories) {
+      byTenant.set(c.tenantId, [...(byTenant.get(c.tenantId) ?? []), `категория «${c.name}»`]);
+    }
+    for (const [tenantId, names] of byTenant) {
+      await this.telegram
+        .notifyCashier(
+          tenantId,
+          `↩️ <b>Вернулись в продажу:</b> ${names.map(escapeHtml).join(', ')}
+` +
+            'Если ещё нет — поставьте на стоп снова: Пульт → 📋 Стоп-лист.',
+        )
+        .catch((e) => this.logger.warn(`Сообщение о возврате со стопа не ушло: ${e}`));
     }
     return { products: products.count, categories: categories.count, closed: closed.count };
   }
