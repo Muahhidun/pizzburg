@@ -437,7 +437,7 @@ export class DispatchBoardService {
         actor,
       },
     });
-    await this.cash?.createSettlement(shift.tenantId, shift.courier, shift.id);
+    await this.cash?.createSettlement(shift.tenantId, shift.courier, shift.id, 'DISPATCH');
     await this.assignment.sendToCourier(
       shift.tenantId,
       shift.courier.telegramUserId,

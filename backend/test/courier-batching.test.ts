@@ -222,3 +222,51 @@ test('«Уехал»: назначенная связка возвращаетс
   }
   assert.ok(w.events.some((e) => e.type === 'COURIER_LEFT'));
 });
+
+// ─── Ночное автозакрытие смен ───────────────────────────────────────
+
+import { CourierCashService } from '../src/couriers/courier-cash.service';
+import { courierSettings } from '../src/couriers/courier-settings';
+
+test('автозакрытие: закрывает открытые смены, расчёт с пометкой AUTO', async () => {
+  const shifts = [
+    { id: 's1', courierId: 'c1', endedAt: null, courier: { id: 'c1', telegramUserId: '1' } },
+    { id: 's2', courierId: 'c2', endedAt: null, courier: { id: 'c2', telegramUserId: '2' } },
+  ];
+  let where: any = null;
+  const prisma: any = {
+    courierShift: {
+      findMany: async (q: any) => ((where = q.where), shifts),
+      updateMany: async ({ where: w, data }: any) => {
+        const s = shifts.find((x) => x.id === w.id)!;
+        if (s.endedAt) return { count: 0 };
+        Object.assign(s, data);
+        return { count: 1 };
+      },
+    },
+    courier: { update: async () => ({}) },
+    deliveryTaskEvent: { create: async () => ({}) },
+  };
+  const sent: string[] = [];
+  const assignment: any = { sendToCourier: async (_t: string, _c: string, text: string) => sent.push(text) };
+  const updates: any = { register: () => undefined };
+  const cash = new CourierCashService(prisma, {} as any, updates, assignment);
+  const settled: string[] = [];
+  (cash as any).createSettlement = async (_t: string, c: any, _s: string, by: string) => {
+    settled.push(`${c.id}:${by}`);
+    return c.id === 'c1' ? { id: 'st1' } : null;
+  };
+  assert.equal(await cash.autoCloseShifts('t1', new Date(T(0))), 2);
+  assert.deepEqual(settled, ['c1:AUTO', 'c2:AUTO']);
+  assert.equal((shifts[0] as any).endedBy, 'AUTO');
+  // Смены с заказом на руках не трогаем
+  assert.deepEqual(where.tasks, { none: { status: { in: ['ASSIGNED', 'PICKED_UP'] } } });
+  // Курьеру без денег — отдельное сообщение, остальным пишет сам расчёт
+  assert.equal(sent.length, 1);
+});
+
+test('час автозакрытия: по умолчанию полночь, −1 выключает', () => {
+  assert.equal(courierSettings({}).shiftAutoCloseHour, 0);
+  assert.equal(courierSettings({ couriers: { shiftAutoCloseHour: 4 } }).shiftAutoCloseHour, 4);
+  assert.equal(courierSettings({ couriers: { shiftAutoCloseHour: -1 } }).shiftAutoCloseHour, -1);
+});

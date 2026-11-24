@@ -215,7 +215,12 @@ export class CourierCashService implements OnModuleInit {
 
   // ─── Расчёт в конце смены ──────────────────────────────────────
 
-  async createSettlement(tenantId: string, courier: Courier, shiftId: string | null) {
+  async createSettlement(
+    tenantId: string,
+    courier: Courier,
+    shiftId: string | null,
+    closedBy: 'COURIER' | 'DISPATCH' | 'AUTO' = 'COURIER',
+  ) {
     // Неподтверждённая сдача входит в расчёт: две карточки на одни и те
     // же деньги кассира бы запутали
     const pending = await this.prisma.courierCashEntry.findMany({
@@ -266,7 +271,12 @@ export class CourierCashService implements OnModuleInit {
       const { result } = await this.telegram.call(tenantId, 'sendMessage', {
         chat_id: chat,
         parse_mode: 'HTML',
-        text: `🧾 <b>Расчёт: ${esc(name)} закончил смену</b>\n${body}`,
+        text:
+          closedBy === 'AUTO'
+            ? `🧾 <b>Расчёт: ${esc(name)} не закрыл смену</b> — её закрыла система ночью\n${body}`
+            : closedBy === 'DISPATCH'
+              ? `🧾 <b>Расчёт: ${esc(name)}</b> — смену закрыла раздача\n${body}`
+              : `🧾 <b>Расчёт: ${esc(name)} закончил смену</b>\n${body}`,
         reply_markup: {
           inline_keyboard: [
             [
@@ -286,7 +296,9 @@ export class CourierCashService implements OnModuleInit {
     await this.assignment.sendToCourier(
       tenantId,
       courier.telegramUserId,
-      `🧾 Смена закончена.\n${body}\n\nПодойдите к кассиру для расчёта.`,
+      (closedBy === 'AUTO'
+        ? '🧾 Вы не закрыли смену — система закрыла её сама.'
+        : '🧾 Смена закончена.') + `\n${body}\n\nПодойдите к кассиру для расчёта.`,
     );
     return settlement;
   }
@@ -544,6 +556,66 @@ export class CourierCashService implements OnModuleInit {
     }
   }
 
+  /**
+   * Ночное автозакрытие (24.11.2026). Пока часть доставок идёт из старого
+   * приложения, курьеры часто уезжают домой, не закрыв смену, и утром
+   * продолжают вчерашнюю — расчёт за два дня смешивается. В час
+   * `shiftAutoCloseHour` открытые смены закрываются, расчёт уходит кассиру
+   * с пометкой. Смену с заказом на руках не трогаем: закроется в следующий раз.
+   */
+  @Cron('0 1 * * * *')
+  async autoCloseTick(now = new Date()) {
+    try {
+      const tenants = await this.prisma.tenant.findMany({
+        where: { dispatchDevices: { some: { isActive: true } } },
+        select: { id: true, settings: true },
+      });
+      for (const t of tenants) {
+        if (now.getHours() !== courierSettings(t.settings).shiftAutoCloseHour) continue;
+        await this.autoCloseShifts(t.id, now);
+      }
+    } catch (e) {
+      this.logger.error(`Автозакрытие смен: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  async autoCloseShifts(tenantId: string, now = new Date()): Promise<number> {
+    const shifts = await this.prisma.courierShift.findMany({
+      where: {
+        tenantId,
+        endedAt: null,
+        tasks: { none: { status: { in: ['ASSIGNED', 'PICKED_UP'] } } },
+      },
+      include: { courier: true },
+    });
+    let closed = 0;
+    for (const s of shifts) {
+      const changed = await this.prisma.courierShift.updateMany({
+        where: { id: s.id, endedAt: null },
+        data: { endedAt: now, endedBy: 'AUTO', state: 'AWAY', pauseUntil: null },
+      });
+      if (changed.count === 0) continue;
+      closed++;
+      await this.prisma.courier.update({
+        where: { id: s.courierId },
+        data: { completedShifts: { increment: 1 } },
+      });
+      await this.prisma.deliveryTaskEvent.create({
+        data: { tenantId, shiftId: s.id, courierId: s.courierId, type: 'SHIFT_END', actor: 'SYSTEM', meta: { auto: true } },
+      });
+      const settlement = await this.createSettlement(tenantId, s.courier, s.id, 'AUTO');
+      if (!settlement) {
+        await this.assignment.sendToCourier(
+          tenantId,
+          s.courier.telegramUserId,
+          '🏁 Вы не закрыли смену — система закрыла её сама. Рассчитываться не за что.',
+        );
+      }
+    }
+    if (closed > 0) this.logger.log(`Автозакрытие: закрыто смен ${closed}`);
+    return closed;
+  }
+
   async dailyReport(tenantId: string, now = new Date()): Promise<string | null> {
     const since = new Date(now);
     since.setHours(0, 0, 0, 0);
@@ -576,7 +648,7 @@ export class CourierCashService implements OnModuleInit {
       totalDeliveries += today;
       const state = settlement
         ? { PENDING: 'расчёт ждёт кассира', CONFIRMED: 'рассчитались', DISPUTED: 'расчёт не сошёлся' }[settlement.status]
-        : 'смену не закрыл';
+        : 'смену не закрыл (закроется ночью сама)';
       const owed = open.earned > 0 || held > 0
         ? ` · не выплачено ${tenge(open.earned)}, на руках ${tenge(held)}`
         : '';
