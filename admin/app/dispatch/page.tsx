@@ -37,7 +37,10 @@ interface Task {
   id: string;
   kind: 'DELIVERY' | 'PICKUP' | 'EXTRA_TRIP';
   status: TaskStatus;
-  number: number;
+  /** Наш номер или последние цифры чека Poster у заказа старого приложения */
+  number: number | string;
+  /** Заказ старого приложения или сайта, подтянутый из Poster */
+  external?: boolean;
   createdAt: string;
   scheduledAt: string | null;
   readyAt: string | null;
@@ -122,7 +125,7 @@ export default function DispatchPage() {
   const [board, setBoard] = useState<Board | null>(null);
   const [offline, setOffline] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [undo, setUndo] = useState<{ id: string; number: number; until: number } | null>(null);
+  const [undo, setUndo] = useState<{ id: string; number: number | string; until: number } | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [extraOpen, setExtraOpen] = useState(false);
   const [courierOpen, setCourierOpen] = useState<string | null>(null);
@@ -596,6 +599,9 @@ function Tile({
         </span>
       </div>
       <div className="mt-1 flex flex-wrap gap-1 text-xs font-semibold uppercase">
+        {task.external && (
+          <span className="rounded bg-neutral-500 px-1.5 py-0.5 text-white">старое прил.</span>
+        )}
         {pickup && <span className="rounded bg-violet-600 px-1.5 py-0.5 text-white">самовывоз</span>}
         {task.kind === 'EXTRA_TRIP' && (
           <span className="rounded bg-amber-500 px-1.5 py-0.5 text-white">довоз</span>

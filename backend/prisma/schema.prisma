@@ -1411,8 +1411,16 @@ model DeliveryTask {
   tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   venueId       String
   venue         Venue              @relation(fields: [venueId], references: [id])
-  orderId       String
-  order         Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  /// Наш заказ. Пусто у заказов, пришедших в Poster мимо нас (старое
+  /// приложение, старый сайт): их данные — снимком в `external`
+  orderId       String?
+  order         Order?             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  /// Откуда заказ: APP — наш, POSTER — подтянут из Poster (poster-import.ts)
+  source        String             @default("APP")
+  /// Снимок заказа из Poster: номер, время, клиент, адрес, состав, оплата
+  external      Json?
+  /// Ключ заказа Poster «аккаунт:входящий заказ» — чтобы не подтянуть дважды
+  externalKey   String?
   kind          DeliveryTaskKind
   status        DeliveryTaskStatus @default(NEW)
   readyAt       DateTime?
@@ -1449,6 +1457,7 @@ model DeliveryTask {
   cashEntries CourierCashEntry[]
   payoutLines CourierPayoutLine[]
 
+  @@unique([tenantId, externalKey])
   @@index([venueId, status, createdAt])
   @@index([courierId, status])
   @@index([orderId])

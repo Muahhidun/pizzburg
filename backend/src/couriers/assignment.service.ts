@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { adminBaseUrl, esc, TelegramService } from '../telegram/telegram.service';
 import { bestPartner, Point, streetHouseOf } from './batching';
 import { courierSettings } from './courier-settings';
+import { externalOf, externalPaymentLine, orderOf } from './task-order';
 
 /**
  * Раздача заказов курьерам (docs/COURIER_SYSTEM_SPEC.md §6).
@@ -147,7 +148,7 @@ export class AssignmentService {
     const cfg = courierSettings(venue.tenant.settings);
     if (cfg.batchMaxDetourKm <= 0) return 0;
 
-    const orderSelect = { select: { address: true, createdAt: true } } as const;
+    const orderSelect = { select: { number: true, address: true, createdAt: true } } as const;
     const ready = await this.prisma.deliveryTask.findMany({
       where: { venueId, status: 'READY', courierId: null, kind: 'DELIVERY' },
       orderBy: [{ readyAt: 'asc' }, { id: 'asc' }],
@@ -181,13 +182,13 @@ export class AssignmentService {
       holders.map(async (s) => ({
         shift: s,
         task: s.tasks[0],
-        point: await this.pointOf(slug, s.tasks[0].order.address),
+        point: await this.pointOf(slug, orderOf(s.tasks[0]).address),
       })),
     );
     let attached = 0;
     for (const second of ready) {
       if (free.length === 0) break;
-      const point = await this.pointOf(slug, second.order.address);
+      const point = await this.pointOf(slug, orderOf(second).address);
       if (!point) continue;
       const best = bestPartner(venuePoint, point, free, cfg.batchMaxDetourKm);
       if (!best) continue;
@@ -204,12 +205,13 @@ export class AssignmentService {
   private async attach(
     shiftId: string,
     courierId: string,
-    first: { id: string; tenantId: string; order: { createdAt: Date } },
-    second: { id: string; order: { createdAt: Date } },
+    first: { id: string; tenantId: string; order?: { number: number; createdAt: Date } | null; external?: unknown },
+    second: { id: string; order?: { number: number; createdAt: Date } | null; external?: unknown },
     detourKm: number,
   ): Promise<boolean> {
     // Первым везут более старый заказ
-    const firstGoesFirst = first.order.createdAt.getTime() <= second.order.createdAt.getTime();
+    const firstGoesFirst =
+      orderOf(first).createdAt.getTime() <= orderOf(second).createdAt.getTime();
     const batchId = first.id;
     return this.prisma
       .$transaction(async (tx) => {
@@ -327,8 +329,8 @@ export class AssignmentService {
       task.tenantId,
       task.courier!.telegramUserId,
       task.batchId
-        ? `↩️ Отбой: №${task.order.number} ещё не собран. Второй заказ по-прежнему ваш.`
-        : `↩️ Отбой: №${task.order.number} ещё не собран. Вы остаётесь в очереди на своём месте.`,
+        ? `↩️ Отбой: №${orderOf(task).number} ещё не собран. Второй заказ по-прежнему ваш.`
+        : `↩️ Отбой: №${orderOf(task).number} ещё не собран. Вы остаётесь в очереди на своём месте.`,
     );
     return true;
   }
@@ -342,7 +344,7 @@ export class AssignmentService {
    *
    * Возвращает номера снятых заказов или null, если менять было нечего.
    */
-  async releaseShift(shiftId: string, reason: ReleaseReason, actor: string): Promise<number[] | null> {
+  async releaseShift(shiftId: string, reason: ReleaseReason, actor: string): Promise<string[] | null> {
     const shift = await this.prisma.courierShift.findUnique({
       where: { id: shiftId },
       include: {
@@ -362,7 +364,7 @@ export class AssignmentService {
     if (shift.state === 'AWAY' && shift.tasks.length === 0) return null;
 
     const released = await this.prisma.$transaction(async (tx) => {
-      const numbers: number[] = [];
+      const numbers: string[] = [];
       for (const t of shift.tasks) {
         const changed = await tx.deliveryTask.updateMany({
           where: { id: t.id, status: 'ASSIGNED', courierId: shift.courierId },
@@ -376,7 +378,7 @@ export class AssignmentService {
           },
         });
         if (changed.count === 0) continue;
-        numbers.push(t.order.number);
+        numbers.push(orderOf(t).number);
         await tx.deliveryTaskEvent.create({
           data: {
             tenantId: shift.tenantId,
@@ -525,6 +527,7 @@ export class AssignmentService {
         order: {
           select: {
             number: true,
+            createdAt: true,
             changeFrom: true,
             items: { select: { name: true, qty: true, isUnavailable: true } },
           },
@@ -532,28 +535,33 @@ export class AssignmentService {
       },
     });
     if (!task?.courier) return;
+    const view = orderOf(task);
     const what =
       task.kind === 'EXTRA_TRIP'
         ? `Довоз: ${task.extraReason ?? 'без причины'}`
-        : itemsLine(task.order.items);
+        : itemsLine(view.items);
+    const ext = externalOf(task.external);
+    const pay = ext
+      ? externalPaymentLine(ext)
+      : paymentLine({ ...task, changeFrom: view.changeFrom });
     const partner = task.batchId
       ? await this.prisma.deliveryTask.findFirst({
           where: { batchId: task.batchId, id: { not: task.id }, courierId: task.courierId },
-          select: { order: { select: { number: true } } },
+          select: { external: true, order: { select: { number: true, createdAt: true } } },
         })
       : null;
     const title = partner
-      ? `➕ <b>Ещё заказ по пути: №${task.order.number}</b>`
-      : `🛵 <b>Заберите ${task.kind === 'EXTRA_TRIP' ? 'довоз к ' : ''}№${task.order.number}</b>`;
+      ? `➕ <b>Ещё заказ по пути: №${view.number}</b>`
+      : `🛵 <b>Заберите ${task.kind === 'EXTRA_TRIP' ? 'довоз к ' : ''}№${view.number}</b>`;
     const order = partner
       ? task.batchSeq === 1
-        ? `Везёте два заказа: сначала №${task.order.number}, потом №${partner.order.number}.`
-        : `Везёте два заказа: сначала №${partner.order.number}, потом №${task.order.number}.`
+        ? `Везёте два заказа: сначала №${view.number}, потом №${orderOf(partner).number}.`
+        : `Везёте два заказа: сначала №${orderOf(partner).number}, потом №${view.number}.`
       : '';
     const text =
       `${title}\n` +
       `${esc(what)}\n` +
-      `${esc(paymentLine({ ...task, changeFrom: task.order.changeFrom }))}\n\n` +
+      `${esc(pay)}\n\n` +
       (order ? `${order}\n` : '') +
       (partner
         ? 'Заберите оба пакета, отметьте позиции и протяните «Поехали» со сканом QR.'

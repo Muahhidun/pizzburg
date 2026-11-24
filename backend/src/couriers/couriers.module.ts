@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { PosterModule } from '../poster/poster.module';
 import { AssignmentService } from './assignment.service';
 import { CourierAppController } from './courier-app.controller';
 import { CourierAppService } from './courier-app.service';
@@ -7,6 +8,7 @@ import { CourierAuthGuard } from './courier-auth.guard';
 import { CourierCashService } from './courier-cash.service';
 import { CourierPhotoService } from './courier-photo.service';
 import { CourierReportService } from './courier-report.service';
+import { PosterImportService } from './poster-import.service';
 import { CourierRegistrationService } from './courier-registration.service';
 import { DispatchBoardService } from './dispatch-board.service';
 import { DispatchDeviceGuard } from './dispatch-device.guard';
@@ -17,6 +19,7 @@ import { DispatchController } from './dispatch.controller';
  * Telegram и Prisma глобальные, поэтому импортов не нужно.
  */
 @Module({
+  imports: [PosterModule],
   controllers: [DispatchController, CourierAppController],
   providers: [
     AssignmentService,
@@ -26,6 +29,7 @@ import { DispatchController } from './dispatch.controller';
     CourierCashService,
     CourierPhotoService,
     CourierReportService,
+    PosterImportService,
     CourierRegistrationService,
     DispatchBoardService,
     DispatchDeviceGuard,

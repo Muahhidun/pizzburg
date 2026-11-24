@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { esc, TelegramService } from '../telegram/telegram.service';
 import { CourierSettings, courierSettings } from './courier-settings';
 import { shortName } from './names';
+import { orderOf } from './task-order';
 
 /**
  * Тревоги (docs/COURIER_SYSTEM_SPEC.md §11).
@@ -108,7 +109,13 @@ export class CourierAlertsService {
           courier: { select: { fullName: true, phone: true } },
         },
       });
-      for (const t of tasks) {
+      for (const raw of tasks) {
+        // Заказ из Poster без нашего Order — время и номер из снимка
+        const view = orderOf(raw);
+        const t = {
+          ...raw,
+          order: { number: view.number, createdAt: view.createdAt, scheduledAt: view.scheduledAt },
+        };
         const alert = taskAlert(t, ctx, cfg, now);
         if (!alert) continue;
         // Одна тревога каждого вида на заказ: иначе группа утонет в повторах
@@ -134,7 +141,7 @@ export class CourierAlertsService {
 export function alertText(
   alert: TaskAlert,
   t: AlertTask & {
-    order: { number: number; createdAt: Date; scheduledAt: Date | null };
+    order: { number: number | string; createdAt: Date; scheduledAt: Date | null };
     courier?: { fullName: string; phone: string | null } | null;
   },
   now = new Date(),

@@ -20,7 +20,9 @@ interface Task {
   id: string;
   kind: 'DELIVERY' | 'PICKUP' | 'EXTRA_TRIP';
   status: 'ASSIGNED' | 'PICKED_UP';
-  number: number;
+  number: number | string;
+  /** Заказ старого приложения или сайта (из Poster) */
+  external?: boolean;
   items: string;
   /** Что лежит в пакете — курьер сверяет галочками перед «Поехали» */
   checklist: { id: string; name: string; qty: number; note: string }[];
@@ -34,7 +36,7 @@ interface Task {
   batchId: string | null;
   batchSeq: number | null;
   /** Второй заказ связки: адрес откроется после доставки этого номера */
-  afterNumber: number | null;
+  afterNumber: number | string | null;
   address?: string | null;
   addressComment?: string | null;
   mapUrl?: string | null;
@@ -375,6 +377,7 @@ export default function CourierPage() {
                       : batch
                         ? `Пакет ${gi + 1} из ${group.length}`
                         : 'Заберите на раздаче'}
+                    {t.external && ' · старое приложение'}
                   </div>
                   <div className="text-4xl font-black">№{t.number}</div>
                   {t.checklist.length > 0 ? (

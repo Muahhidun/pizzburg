@@ -8,6 +8,7 @@ import { TgCallbackQuery, TgMessage, TgUpdate, tgUserLabel } from '../telegram/t
 import { AssignmentService } from './assignment.service';
 import { courierSettings } from './courier-settings';
 import { shortName } from './names';
+import { orderOf } from './task-order';
 
 /**
  * Наличка курьеров и расчёт в конце смены (docs/COURIER_SYSTEM_SPEC.md §8).
@@ -657,11 +658,11 @@ export class CourierCashService implements OnModuleInit {
     // Довозы — отдельной строкой: по ним видно, кто ошибается при сборке
     const extra = await this.prisma.deliveryTask.findMany({
       where: { tenantId, kind: 'EXTRA_TRIP', createdAt: { gte: since }, status: { not: 'CANCELLED' } },
-      select: { extraReason: true, order: { select: { number: true } } },
+      select: { extraReason: true, external: true, order: { select: { number: true } } },
     });
     const extraLine = extra.length
       ? `\n\n↩️ Довозов: ${extra.length}\n` +
-        extra.map((e) => `• №${e.order.number}: ${esc(e.extraReason ?? '')}`).join('\n')
+        extra.map((e) => `• №${orderOf(e).number}: ${esc(e.extraReason ?? '')}`).join('\n')
       : '';
     return `📊 <b>Курьеры за день</b> · доставок ${totalDeliveries}\n${rows.join('\n')}${extraLine}`;
   }

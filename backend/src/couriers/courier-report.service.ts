@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { shortName } from './names';
+import { orderOf } from './task-order';
 
 /**
  * Отчёт по доставкам курьерского модуля (ТЗ §14).
@@ -26,7 +27,9 @@ export type ReportTask = {
   courierName: string | null;
   batchId: string | null;
   pickupMethod: string | null;
-  number: number;
+  number: string;
+  /** APP — наш заказ, POSTER — старое приложение или сайт через Poster */
+  source?: string;
   orderAt: Date;
   scheduled: boolean;
   readyAt: Date | null;
@@ -98,6 +101,7 @@ export function buildDeliveryReport(input: {
 
   const summary = {
     delivered: delivered.length,
+    deliveredFromPoster: delivered.filter((t) => t.source === 'POSTER').length,
     failed: tasks.filter((t) => t.status === 'FAILED').length,
     inProgress: tasks.filter((t) => ['NEW', 'READY', 'ASSIGNED', 'PICKED_UP'].includes(t.status)).length,
     extraTrips: tasks.filter((t) => t.kind === 'EXTRA_TRIP').length,
@@ -199,6 +203,7 @@ export function buildDeliveryReport(input: {
       return {
         id: t.id,
         number: t.number,
+        source: t.source ?? 'APP',
         kind: t.kind,
         status: t.status,
         courier: t.courierName,
@@ -266,10 +271,11 @@ export class CourierReportService {
         courierName: t.courier ? shortName(t.courier.fullName) : null,
         batchId: t.batchId,
         pickupMethod: t.pickupMethod,
-        number: t.order.number,
+        number: orderOf(t).number,
+        source: t.source,
         // Довоз считаем от его создания, а не от исходного заказа
-        orderAt: t.kind === 'EXTRA_TRIP' ? t.createdAt : t.order.createdAt,
-        scheduled: t.kind !== 'EXTRA_TRIP' && !!t.order.scheduledAt,
+        orderAt: t.kind === 'EXTRA_TRIP' ? t.createdAt : orderOf(t).createdAt,
+        scheduled: t.kind !== 'EXTRA_TRIP' && !!orderOf(t).scheduledAt,
         readyAt: t.readyAt,
         pickedUpAt: t.pickedUpAt,
         deliveredAt: t.deliveredAt,

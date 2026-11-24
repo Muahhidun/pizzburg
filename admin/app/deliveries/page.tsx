@@ -16,6 +16,7 @@ type Stat = { count: number; avg: number | null; median: number | null };
 type Report = {
   summary: {
     delivered: number;
+    deliveredFromPoster: number;
     failed: number;
     inProgress: number;
     extraTrips: number;
@@ -73,7 +74,8 @@ type Report = {
   }[];
   list: {
     id: string;
-    number: number;
+    number: string;
+    source: string;
     kind: string;
     status: string;
     courier: string | null;
@@ -152,7 +154,7 @@ export default function DeliveriesReportPage() {
     <main className="mx-auto max-w-6xl px-4 py-6">
       <h1 className="text-2xl font-bold">Доставки</h1>
       <p className="mt-1 text-sm text-neutral-500">
-        Заказы, прошедшие через планшет раздачи. Доставки старого приложения сюда пока не попадают.
+        Заказы, прошедшие через планшет раздачи, — наши и старого приложения (из Poster, с 25.11).
       </p>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -196,7 +198,7 @@ export default function DeliveriesReportPage() {
       {s && report && (
         <>
           <section className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-            <Tile label="Доставлено" value={String(s.delivered)} hint={`не удалось ${s.failed} · в работе ${s.inProgress}`} />
+            <Tile label="Доставлено" value={String(s.delivered)} hint={`из них старое прил. ${s.deliveredFromPoster} · не удалось ${s.failed}`} />
             <Tile
               label="До 60 минут"
               value={s.within60 === null ? '—' : `${s.within60}%`}
@@ -382,6 +384,7 @@ export default function DeliveriesReportPage() {
                   <tr key={d.id} className="border-t border-black/5 dark:border-white/10">
                     <td className="py-1 pr-3 tabular-nums">
                       {d.number}
+                      {d.source === 'POSTER' && <span className="ml-1 text-xs text-neutral-500">старое</span>}
                       {d.kind === 'EXTRA_TRIP' && <span className="ml-1 text-xs text-amber-600">довоз</span>}
                       {d.batch && <span className="ml-1 text-xs text-sky-600">связка</span>}
                       {d.scheduled && <span className="ml-1 text-xs text-neutral-500">предзаказ</span>}

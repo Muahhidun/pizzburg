@@ -11,6 +11,7 @@ import { CourierRegistrationService } from './courier-registration.service';
 import { courierSettings } from './courier-settings';
 import { verifyQrToken } from './dispatch-qr';
 import { shortName } from './names';
+import { externalOf, externalPaymentLine, orderOf } from './task-order';
 
 /**
  * Что курьер делает в Mini App (docs/COURIER_SYSTEM_SPEC.md §5–7):
@@ -142,19 +143,23 @@ export class CourierAppService {
         // только после первого: сначала везут более старый
         const first = nextInBatch(t, tasks);
         const picked = t.status === 'PICKED_UP' && !first;
-        const addr = picked ? await this.withCoords(actor.tenantSlug, t.order.address) : null;
+        const o = orderOf(t);
+        const ext = externalOf(t.external);
+        const addr = picked ? await this.withCoords(actor.tenantSlug, o.address) : null;
         return {
           id: t.id,
           kind: t.kind,
           status: t.status,
-          number: t.order.number,
+          number: o.number,
+          /// Заказ старого приложения или сайта, подтянутый из Poster
+          external: o.external,
           items:
             t.kind === 'EXTRA_TRIP'
               ? `Довоз: ${t.extraReason ?? 'без причины'}`
-              : itemsLine(t.order.items),
+              : itemsLine(o.items),
           // Галочки комплектации: по ним курьер сверяет пакет перед «Поехали»
-          checklist: t.kind === 'EXTRA_TRIP' ? [] : checklist(t.order.items),
-          payment: paymentLine({ ...t, changeFrom: t.order.changeFrom }),
+          checklist: t.kind === 'EXTRA_TRIP' ? [] : checklist(o.items),
+          payment: ext ? externalPaymentLine(ext) : paymentLine({ ...t, changeFrom: o.changeFrom }),
           cash: t.cashToCollect,
           needsTerminal: t.needsTerminal,
           assignedAt: t.assignedAt?.toISOString() ?? null,
@@ -162,15 +167,15 @@ export class CourierAppService {
           extraReason: t.extraReason,
           batchId: t.batchId,
           batchSeq: t.batchSeq,
-          afterNumber: first?.order.number ?? null,
+          afterNumber: first ? orderOf(first).number : null,
           ...(picked
             ? {
                 address: addr ? formatAddress(addr) : null,
                 addressComment: addr?.comment || null,
                 mapUrl: addr ? mapUrl(addr, cityOf(t.venue.address)) : null,
-                phone: t.order.customer?.phone ?? null,
-                customerName: t.order.customer?.name ?? null,
-                comment: t.order.comment || null,
+                phone: o.phone,
+                customerName: o.customerName,
+                comment: o.comment || null,
               }
             : {}),
         };
@@ -196,7 +201,7 @@ export class CourierAppService {
       include: { order: { select: { number: true } } },
     });
     if (busy) {
-      throw new BadRequestException(`Сначала завершите доставку №${busy.order.number}`);
+      throw new BadRequestException(`Сначала завершите доставку №${orderOf(busy).number}`);
     }
 
     const now = new Date();
@@ -333,10 +338,13 @@ export class CourierAppService {
     if (!manual) {
       for (const t of group) {
         if (t.kind === 'EXTRA_TRIP') continue;
-        const items = await this.prisma.orderItem.findMany({
-          where: { orderId: t.orderId, isUnavailable: false },
-          select: { id: true },
-        });
+        // У заказа из Poster состав — в снимке, своих строк заказа нет
+        const items = t.orderId
+          ? await this.prisma.orderItem.findMany({
+              where: { orderId: t.orderId, isUnavailable: false },
+              select: { id: true },
+            })
+          : orderOf(t).items.map((i) => ({ id: i.id }));
         // Состав могли поменять, пока курьер отмечал (кассир снял позицию,
         // добавил замену) — тогда пусть сверит ещё раз по свежему списку
         if (missingItems(items, confirmedItemIds).length > 0) {
@@ -450,7 +458,7 @@ export class CourierAppService {
         chat_id: chat,
         parse_mode: 'HTML',
         text:
-          `⚠️ <b>Курьер не смог доставить №${task.order.number}</b>\n` +
+          `⚠️ <b>Курьер не смог доставить №${orderOf(task).number}</b>\n` +
           `${esc(actor.courier.fullName)}: ${esc(reason)}\n\n` +
           'Свяжитесь с клиентом и решите, что делать с заказом. Курьер везёт его обратно.',
       });
@@ -468,7 +476,7 @@ export class CourierAppService {
       include: { order: { select: { number: true } } },
     });
     if (active) {
-      throw new BadRequestException(`Сначала завершите №${active.order.number}`);
+      throw new BadRequestException(`Сначала завершите №${orderOf(active).number}`);
     }
     await this.closeShift(actor, shift.id, 'COURIER');
     // Взаимозачёт: кто кому сколько отдаёт — карточкой в чат кассы
@@ -569,7 +577,7 @@ export class CourierAppService {
       },
       include: { order: { select: { number: true } } },
     });
-    if (before) throw new BadRequestException(`Сначала доставьте №${before.order.number}`);
+    if (before) throw new BadRequestException(`Сначала доставьте №${orderOf(before).number}`);
   }
 
   private async ownTask(actor: CourierActorValue, taskId: string) {

@@ -12,7 +12,7 @@ const task = (over: Partial<Parameters<typeof buildDeliveryReport>[0]['tasks'][0
   courierName: 'Асхат Б.',
   batchId: null,
   pickupMethod: 'SCAN',
-  number: 1,
+  number: '1',
   orderAt: at(12),
   scheduled: false,
   readyAt: at(12, 20),

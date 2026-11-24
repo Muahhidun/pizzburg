@@ -213,7 +213,7 @@ test('«Уехал»: назначенная связка возвращаетс
   });
   prisma.deliveryTask.count = async () => 0;
   const released = await w.service.releaseShift('s0', 'COURIER_LEFT', 'DEVICE:d');
-  assert.deepEqual(released, [101, 102]);
+  assert.deepEqual(released, ['101', '102']);
   assert.equal(w.shifts[0].state, 'AWAY');
   for (const t of w.tasks) {
     assert.equal(t.status, 'READY');

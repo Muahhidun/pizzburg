@@ -33,6 +33,8 @@ export interface CourierSettings {
   batchMaxDetourKm: number;
   /// Час (время сервера), когда незакрытые смены закрываются сами (−1 — не закрывать)
   shiftAutoCloseHour: number;
+  /// Заказы старого приложения из Poster: берём принятые не раньше стольких минут назад (0 — не брать)
+  posterImportWindowMin: number;
 }
 
 export const COURIER_DEFAULTS: CourierSettings = {
@@ -51,6 +53,8 @@ export const COURIER_DEFAULTS: CourierSettings = {
   batchMaxDetourKm: 1.5,
   // Работаем до 21:30, последний заказ довозят до ~23:00
   shiftAutoCloseHour: 0,
+  // Старше полутора часов заказ уже точно увезли по-старому
+  posterImportWindowMin: 90,
 };
 
 export function courierSettings(tenantSettings: unknown): CourierSettings {
@@ -75,5 +79,6 @@ export function courierSettings(tenantSettings: unknown): CourierSettings {
       raw.shiftAutoCloseHour === -1
         ? -1
         : num(raw.shiftAutoCloseHour, COURIER_DEFAULTS.shiftAutoCloseHour),
+    posterImportWindowMin: num(raw.posterImportWindowMin, COURIER_DEFAULTS.posterImportWindowMin),
   };
 }

@@ -13,6 +13,7 @@ import { courierSettings } from './courier-settings';
 import { DispatchDeviceValue, hashDeviceToken } from './dispatch-device.guard';
 import { createQrToken } from './dispatch-qr';
 import { shortName } from './names';
+import { orderOf } from './task-order';
 
 /**
  * Планшет раздачи (docs/COURIER_SYSTEM_SPEC.md §4).
@@ -243,13 +244,18 @@ export class DispatchBoardService {
         queuedAt: s.queuedAt?.toISOString() ?? null,
         pauseUntil: s.pauseUntil?.toISOString() ?? null,
       })),
-      tasks: tasks.map((t) => ({
+      tasks: tasks.map((raw) => {
+        // Заказ из Poster (старое приложение) — данные из снимка
+        const o = orderOf(raw);
+        const t = { ...raw, order: { createdAt: o.createdAt, scheduledAt: o.scheduledAt } };
+        return {
         id: t.id,
         kind: t.kind,
         status: t.status,
-        number: t.order.number,
-        createdAt: t.order.createdAt.toISOString(),
-        scheduledAt: t.order.scheduledAt?.toISOString() ?? null,
+        number: o.number,
+        external: o.external,
+        createdAt: o.createdAt.toISOString(),
+        scheduledAt: o.scheduledAt?.toISOString() ?? null,
         readyAt: t.readyAt?.toISOString() ?? null,
         pickedUpAt: t.pickedUpAt?.toISOString() ?? null,
         doneAt: (t.deliveredAt ?? (DONE.includes(t.status) ? t.updatedAt : null))?.toISOString() ?? null,
@@ -257,13 +263,13 @@ export class DispatchBoardService {
         batchSeq: t.batchSeq,
         // Позиции других отделов (Sunday): раздача ждёт, пока их принесут
         otherDepartments:
-          t.kind === 'EXTRA_TRIP' ? [] : otherDepartments(t.order.items, departments),
+          t.kind === 'EXTRA_TRIP' ? [] : otherDepartments(o.items, departments),
         cash: t.cashToCollect,
         needsTerminal: t.needsTerminal,
         extraReason: t.extraReason,
         alert: taskAlert(t, alertCtx, cfg, now),
         // У довоза свой «состав» — причина; весь заказ на плитке путал бы
-        items: t.kind === 'EXTRA_TRIP' ? [] : t.order.items
+        items: t.kind === 'EXTRA_TRIP' ? [] : o.items
           .filter((i) => !i.isUnavailable)
           .map((i) => ({
             name: i.name,
@@ -273,7 +279,8 @@ export class DispatchBoardService {
               .map((m) => m?.name)
               .filter((n): n is string => !!n),
           })),
-      })),
+        };
+      }),
     };
   }
 
@@ -393,7 +400,7 @@ export class DispatchBoardService {
     });
     if (carrying) {
       throw new BadRequestException(
-        `Курьер везёт №${carrying.order.number}: он сам вернётся в очередь сканом QR`,
+        `Курьер везёт №${orderOf(carrying).number}: он сам вернётся в очередь сканом QR`,
       );
     }
   }

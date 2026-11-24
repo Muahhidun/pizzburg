@@ -129,6 +129,27 @@ export class PosterClient {
     );
   }
 
+  /**
+   * Входящие (онлайн) заказы за день — для подтягивания на планшет раздачи
+   * заказов, пришедших мимо нас (старое приложение, старый сайт).
+   * Ответ разбираем по факту (poster-import.ts): поля у источников разные.
+   */
+  getIncomingOrders(token: string, date: string) {
+    return this.call<Record<string, unknown>[]>(token, 'incomingOrders.getIncomingOrders', {
+      date_from: date,
+      date_to: date,
+    });
+  }
+
+  /** Чек: оплата (наличные, карта) и данные доставки */
+  getTransaction(token: string, transactionId: string) {
+    return this.call<Record<string, unknown> | Record<string, unknown>[]>(
+      token,
+      'dash.getTransaction',
+      { transaction_id: transactionId, include_delivery: 'true' },
+    );
+  }
+
   /** Цена Poster (сотые) → целые ₸ */
   static toTenge(posterPrice: string | number | undefined): number {
     if (posterPrice === undefined) return 0;
