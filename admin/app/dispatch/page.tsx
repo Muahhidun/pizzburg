@@ -44,11 +44,15 @@ interface Task {
   pickedUpAt: string | null;
   doneAt: string | null;
   courier: string | null;
+  /** Связка по 2 заказа: порядок развоза (1, 2) */
+  batchSeq: number | null;
+  /** Позиции других отделов (Sunday): «Готов» — только когда их принесли */
+  otherDepartments: { name: string; count: number; only: boolean }[];
   cash: number;
   needsTerminal: boolean;
   extraReason: string | null;
   alert: 'NO_COURIER' | 'NOT_READY' | 'ON_WAY' | null;
-  items: { name: string; qty: number; modifiers: string[] }[];
+  items: { name: string; qty: number; department: string | null; modifiers: string[] }[];
 }
 
 const ALERT_TEXT: Record<NonNullable<Task['alert']>, string> = {
@@ -59,7 +63,10 @@ const ALERT_TEXT: Record<NonNullable<Task['alert']>, string> = {
 
 interface Courier {
   shiftId: string;
+  courierId: string;
   name: string;
+  photo: boolean;
+  carrying: boolean;
   state: 'WAITING' | 'ASSIGNED' | 'ON_DELIVERY' | 'RETURNING' | 'ON_PAUSE' | 'AWAY';
   queuedAt: string | null;
   pauseUntil: string | null;
@@ -118,6 +125,11 @@ export default function DispatchPage() {
   const [undo, setUndo] = useState<{ id: string; number: number; until: number } | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [extraOpen, setExtraOpen] = useState(false);
+  const [courierOpen, setCourierOpen] = useState<string | null>(null);
+  // Селфи курьеров: картинке нужен заголовок с токеном планшета,
+  // поэтому качаем сами и держим как blob-ссылки
+  const [photos, setPhotos] = useState<Record<string, string>>({});
+  const photoRequested = useRef(new Set<string>());
   // Разница часов планшета и сервера: таймеры считаем по серверу
   const skew = useRef(0);
 
@@ -235,6 +247,32 @@ export default function DispatchPage() {
   }
 
   useEffect(() => {
+    if (!token || !board) return;
+    for (const c of board.couriers) {
+      if (!c.photo || photoRequested.current.has(c.courierId)) continue;
+      photoRequested.current.add(c.courierId);
+      fetch(`${api.raw}/dispatch/couriers/${c.courierId}/photo`, {
+        headers: { 'X-Device-Token': token },
+      })
+        .then((r) => (r.ok ? r.blob() : null))
+        .then((b) => b && setPhotos((p) => ({ ...p, [c.courierId]: URL.createObjectURL(b) })))
+        .catch(() => undefined);
+    }
+  }, [board, token]);
+
+  async function courierAction(shiftId: string, action: 'away' | 'end-shift') {
+    if (!token) return;
+    setError(null);
+    try {
+      await call(`/dispatch/couriers/${shiftId}/${action}`, token, 'POST');
+      setCourierOpen(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  useEffect(() => {
     if (!undo) return;
     const left = undo.until - Date.now();
     const t = setTimeout(() => setUndo(null), Math.max(0, left));
@@ -287,23 +325,29 @@ export default function DispatchPage() {
             На месте
           </span>
           {waiting.length === 0 && <span className="text-lg text-neutral-400">никого</span>}
+          {/* Нажатие на курьера — «Уехал» или «Закончил смену» */}
           {waiting.map((c, i) => (
-            <span
+            <button
               key={c.shiftId}
-              className="rounded-full bg-emerald-100 px-3 py-1 text-lg font-semibold text-emerald-900"
+              onClick={() => setCourierOpen(c.shiftId)}
+              className="flex items-center gap-2 rounded-full bg-emerald-100 py-1 pl-1 pr-3 text-lg font-semibold text-emerald-900 active:scale-[.97]"
             >
+              <Face name={c.name} src={photos[c.courierId]} />
               {i + 1}. {c.name}
               {c.queuedAt && (
-                <span className="ml-1 font-normal text-emerald-700">
-                  {minutes(c.queuedAt, nowMs)} мин
-                </span>
+                <span className="font-normal text-emerald-700">{minutes(c.queuedAt, nowMs)} мин</span>
               )}
-            </span>
+            </button>
           ))}
           {others.map((c) => (
-            <span key={c.shiftId} className="rounded-full bg-neutral-100 px-3 py-1 text-base text-neutral-600">
+            <button
+              key={c.shiftId}
+              onClick={() => setCourierOpen(c.shiftId)}
+              className="flex items-center gap-2 rounded-full bg-neutral-100 py-1 pl-1 pr-3 text-base text-neutral-600 active:scale-[.97]"
+            >
+              <Face name={c.name} src={photos[c.courierId]} small />
               {c.name} · {COURIER_STATE[c.state]}
-            </span>
+            </button>
           ))}
         </div>
         {board.cashAlerts.map((a) => (
@@ -346,7 +390,14 @@ export default function DispatchPage() {
                 {t.kind === 'PICKUP' ? (
                   <TileButton onClick={() => act(t, 'handed-over')}>Выдан клиенту</TileButton>
                 ) : t.courier ? (
-                  <div className="text-xl font-bold text-emerald-700">→ {t.courier}</div>
+                  <div className="text-xl font-bold text-emerald-700">
+                    → {t.courier}
+                    {t.batchSeq && (
+                      <span className="ml-2 text-base font-semibold text-sky-700">
+                        связка, {t.batchSeq === 1 ? 'везёт первым' : 'везёт вторым'}
+                      </span>
+                    )}
+                  </div>
                 ) : (
                   <div className="text-base text-amber-700">ждёт курьера</div>
                 )}
@@ -426,6 +477,19 @@ export default function DispatchPage() {
           <div className="mt-2 text-xs text-neutral-400">{board.device.name}</div>
         </aside>
       </div>
+
+      {courierOpen &&
+        (() => {
+          const c = board.couriers.find((x) => x.shiftId === courierOpen);
+          return c ? (
+            <CourierDialog
+              courier={c}
+              photo={photos[c.courierId]}
+              onClose={() => setCourierOpen(null)}
+              onAction={(a) => courierAction(c.shiftId, a)}
+            />
+          ) : null;
+        })()}
 
       {extraOpen && (
         <ExtraTripDialog onClose={() => setExtraOpen(false)} onCreate={createExtraTrip} />
@@ -542,6 +606,12 @@ function Tile({
         {task.needsTerminal && (
           <span className="rounded bg-sky-600 px-1.5 py-0.5 text-white">терминал</span>
         )}
+        {task.otherDepartments.map((d) => (
+          <span key={d.name} className="rounded bg-teal-600 px-1.5 py-0.5 text-white">
+            {d.only ? '' : '+ '}
+            {d.name} · {d.count}
+          </span>
+        ))}
         {task.alert && (
           <span className="rounded bg-red-600 px-1.5 py-0.5 text-white">⚠ {ALERT_TEXT[task.alert]}</span>
         )}
@@ -554,6 +624,11 @@ function Tile({
           <li key={idx}>
             {i.qty > 1 && <b>{i.qty}× </b>}
             {i.name}
+            {i.department && (
+              <span className="ml-1 rounded bg-teal-100 px-1 text-xs font-semibold text-teal-800">
+                {i.department}
+              </span>
+            )}
             {i.modifiers.length > 0 && (
               <span className="text-neutral-500"> · {i.modifiers.join(', ')}</span>
             )}
@@ -599,6 +674,86 @@ function TileButton({
     >
       {children}
     </button>
+  );
+}
+
+function Face({ name, src, small }: { name: string; src?: string; small?: boolean }) {
+  const size = small ? 'h-7 w-7 text-xs' : 'h-9 w-9 text-sm';
+  return src ? (
+    <img src={src} alt="" className={`${size} shrink-0 rounded-full object-cover`} />
+  ) : (
+    <span className={`${size} flex shrink-0 items-center justify-center rounded-full bg-white/70 font-bold`}>
+      {name.slice(0, 1)}
+    </span>
+  );
+}
+
+/**
+ * Курьер в очереди: «Уехал» — например, повёз заказ из старого
+ * приложения (временно, до перехода всех заказов в систему); «Закончил
+ * смену» — ушёл и забыл закрыть её сам.
+ */
+function CourierDialog({
+  courier,
+  photo,
+  onClose,
+  onAction,
+}: {
+  courier: Courier;
+  photo?: string;
+  onClose: () => void;
+  onAction: (a: 'away' | 'end-shift') => void;
+}) {
+  const away = courier.state === 'AWAY';
+  return (
+    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="w-[460px] rounded-2xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center gap-4">
+          {photo ? (
+            <img src={photo} alt="" className="h-24 w-24 rounded-2xl object-cover" />
+          ) : (
+            <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-neutral-100 text-4xl font-bold">
+              {courier.name.slice(0, 1)}
+            </div>
+          )}
+          <div>
+            <div className="text-2xl font-bold">{courier.name}</div>
+            <div className="text-lg text-neutral-500">{COURIER_STATE[courier.state]}</div>
+          </div>
+        </div>
+        {courier.carrying ? (
+          <p className="mb-4 text-lg text-neutral-600">
+            Курьер везёт заказ. После доставки он сам вернётся в очередь сканом QR.
+          </p>
+        ) : (
+          <div className="mb-3 flex flex-col gap-2">
+            {!away && (
+              <button
+                onClick={() => onAction('away')}
+                className="rounded-xl bg-amber-500 px-4 py-3 text-left text-white"
+              >
+                <span className="block text-xl font-semibold">Уехал</span>
+                <span className="block text-sm opacity-90">
+                  Убрать из очереди. Если заказ уже назначен, он сразу уйдёт следующему
+                </span>
+              </button>
+            )}
+            <button
+              onClick={() => {
+                if (confirm(`Закрыть смену: ${courier.name}? Расчёт придёт кассиру.`)) onAction('end-shift');
+              }}
+              className="rounded-xl bg-neutral-100 px-4 py-3 text-left"
+            >
+              <span className="block text-xl font-semibold">Закончил смену</span>
+              <span className="block text-sm text-neutral-500">Ушёл и забыл закрыть смену сам</span>
+            </button>
+          </div>
+        )}
+        <button onClick={onClose} className="w-full rounded-xl bg-neutral-900 py-3 text-lg font-semibold text-white">
+          Закрыть
+        </button>
+      </div>
+    </div>
   );
 }
 

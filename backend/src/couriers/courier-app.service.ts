@@ -6,6 +6,7 @@ import { esc, TelegramService } from '../telegram/telegram.service';
 import { AssignmentService, itemsLine, paymentLine } from './assignment.service';
 import { CourierActorValue } from './courier-auth.guard';
 import { CourierCashService } from './courier-cash.service';
+import { CourierPhotoService } from './courier-photo.service';
 import { CourierRegistrationService } from './courier-registration.service';
 import { courierSettings } from './courier-settings';
 import { verifyQrToken } from './dispatch-qr';
@@ -42,6 +43,7 @@ export class CourierAppService {
     private readonly registration: CourierRegistrationService,
     private readonly cash: CourierCashService,
     private readonly geo: GeoService,
+    private readonly photos: CourierPhotoService,
   ) {}
 
   // ─── Экран курьера ─────────────────────────────────────────────
@@ -136,8 +138,10 @@ export class CourierAppService {
       queue: buildQueue(venueShifts, courier.id),
       tasks: await Promise.all(tasks.map(async (t) => {
         // Адрес и телефон — только после «Забрал»: до этого курьер видит
-        // номер и состав, чтобы найти пакет
-        const picked = t.status === 'PICKED_UP';
+        // номер и состав, чтобы найти пакет. Во второй заказ связки —
+        // только после первого: сначала везут более старый
+        const first = nextInBatch(t, tasks);
+        const picked = t.status === 'PICKED_UP' && !first;
         const addr = picked ? await this.withCoords(actor.tenantSlug, t.order.address) : null;
         return {
           id: t.id,
@@ -156,6 +160,9 @@ export class CourierAppService {
           assignedAt: t.assignedAt?.toISOString() ?? null,
           pickedUpAt: t.pickedUpAt?.toISOString() ?? null,
           extraReason: t.extraReason,
+          batchId: t.batchId,
+          batchSeq: t.batchSeq,
+          afterNumber: first?.order.number ?? null,
           ...(picked
             ? {
                 address: addr ? formatAddress(addr) : null,
@@ -314,29 +321,38 @@ export class CourierAppService {
     if (task.status === 'PICKED_UP') return this.me(actor);
     if (task.status !== 'ASSIGNED') throw new BadRequestException('Этот заказ уже не ваш');
 
+    // Связку забирают одним «Поехали»: оба пакета, одни галочки, один скан
+    const group = task.batchId
+      ? await this.prisma.deliveryTask.findMany({
+          where: { batchId: task.batchId, courierId: actor.courier.id, status: 'ASSIGNED' },
+        })
+      : [task];
+
     const manual = qr === null;
-    let itemsConfirmed: number | undefined;
-    if (!manual && task.kind !== 'EXTRA_TRIP') {
-      const items = await this.prisma.orderItem.findMany({
-        where: { orderId: task.orderId, isUnavailable: false },
-        select: { id: true },
-      });
-      // Состав могли поменять, пока курьер отмечал (кассир снял позицию,
-      // добавил замену) — тогда пусть сверит ещё раз по свежему списку
-      if (missingItems(items, confirmedItemIds).length > 0) {
-        throw new BadRequestException('Состав заказа обновился. Отметьте все позиции ещё раз');
-      }
-      itemsConfirmed = items.length;
-    }
+    const confirmed = new Map<string, number>();
     if (!manual) {
+      for (const t of group) {
+        if (t.kind === 'EXTRA_TRIP') continue;
+        const items = await this.prisma.orderItem.findMany({
+          where: { orderId: t.orderId, isUnavailable: false },
+          select: { id: true },
+        });
+        // Состав могли поменять, пока курьер отмечал (кассир снял позицию,
+        // добавил замену) — тогда пусть сверит ещё раз по свежему списку
+        if (missingItems(items, confirmedItemIds).length > 0) {
+          throw new BadRequestException('Состав заказа обновился. Отметьте все позиции ещё раз');
+        }
+        confirmed.set(t.id, items.length);
+      }
       const venueId = await this.venueFromQr(actor.tenantId, qr);
       if (venueId !== task.venueId) throw new BadRequestException('Это QR другой точки');
     }
+    const now = new Date();
     const changed = await this.prisma.deliveryTask.updateMany({
-      where: { id: taskId, status: 'ASSIGNED', courierId: actor.courier.id },
+      where: { id: { in: group.map((t) => t.id) }, status: 'ASSIGNED', courierId: actor.courier.id },
       data: {
         status: 'PICKED_UP',
-        pickedUpAt: new Date(),
+        pickedUpAt: now,
         pickupMethod: manual ? 'MANUAL' : 'SCAN',
         ...(manual ? { flags: { push: 'MANUAL_PICKUP' } } : {}),
       },
@@ -348,10 +364,14 @@ export class CourierAppService {
         data: { state: 'ON_DELIVERY' },
       });
     }
-    await this.event(actor, taskId, 'PICKED_UP', {
-      method: manual ? 'MANUAL' : 'SCAN',
-      ...(itemsConfirmed !== undefined ? { itemsConfirmed } : {}),
-    });
+    for (const t of group) {
+      const n = confirmed.get(t.id);
+      await this.event(actor, t.id, 'PICKED_UP', {
+        method: manual ? 'MANUAL' : 'SCAN',
+        ...(n !== undefined ? { itemsConfirmed: n } : {}),
+        ...(t.batchId ? { batchSeq: t.batchSeq } : {}),
+      });
+    }
     return this.me(actor);
   }
 
@@ -361,6 +381,7 @@ export class CourierAppService {
     const task = await this.ownTask(actor, taskId);
     if (task.status === 'DELIVERED') return this.me(actor);
     if (task.status !== 'PICKED_UP') throw new BadRequestException('Сначала отметьте «Забрал»');
+    await this.assertBatchOrder(actor, task);
 
     const cfg = courierSettings(actor.tenantSettings);
     const now = new Date();
@@ -504,9 +525,6 @@ export class CourierAppService {
 
   // ─── Фото в очереди ────────────────────────────────────────────
 
-  /** Скачанные у Телеграма селфи: очередь опрашивается каждые 5 секунд */
-  private readonly photos = new Map<string, { data: Buffer; type: string }>();
-
   /**
    * Селфи коллеги для очереди. Только тем, кто сейчас на смене у той же
    * раздачи, и только тех, кто тоже на смене: фото не каталог курьеров.
@@ -520,14 +538,8 @@ export class CourierAppService {
     });
     const fileId = theirs?.courier.selfieFileId;
     if (!fileId) throw new NotFoundException('Нет фото');
-
-    let file = this.photos.get(fileId);
-    if (!file) {
-      file = (await this.telegram.downloadFile(actor.tenantId, fileId)) ?? undefined;
-      if (!file) throw new NotFoundException('Нет фото');
-      if (this.photos.size >= 50) this.photos.delete(this.photos.keys().next().value!);
-      this.photos.set(fileId, file);
-    }
+    const file = await this.photos.get(actor.tenantId, fileId);
+    if (!file) throw new NotFoundException('Нет фото');
     return file;
   }
 
@@ -539,6 +551,25 @@ export class CourierAppService {
       .coordsOf(tenantSlug, addr.street ?? '', addr.house ?? '')
       .catch(() => null);
     return point ? { ...addr, ...point } : addr;
+  }
+
+  /** Второй заказ связки закрывается только после первого */
+  private async assertBatchOrder(
+    actor: CourierActorValue,
+    task: { id: string; batchId: string | null; batchSeq: number | null },
+  ) {
+    if (!task.batchId) return;
+    const before = await this.prisma.deliveryTask.findFirst({
+      where: {
+        batchId: task.batchId,
+        courierId: actor.courier.id,
+        status: 'PICKED_UP',
+        id: { not: task.id },
+        batchSeq: { lt: task.batchSeq ?? 0 },
+      },
+      include: { order: { select: { number: true } } },
+    });
+    if (before) throw new BadRequestException(`Сначала доставьте №${before.order.number}`);
   }
 
   private async ownTask(actor: CourierActorValue, taskId: string) {
@@ -630,6 +661,26 @@ export function checklist(items: ChecklistItem[]) {
         note: [...mods, ...(i.isGift ? ['подарок'] : [])].join(', '),
       };
     });
+}
+
+/**
+ * Первый заказ связки, который ещё в пути, — если `t` идёт после него.
+ * Пока он не доставлен, адрес второго курьеру не показываем.
+ */
+export function nextInBatch<
+  T extends { id: string; status: string; batchId: string | null; batchSeq: number | null },
+>(t: T, all: T[]): T | null {
+  if (!t.batchId || t.batchSeq == null) return null;
+  return (
+    all.find(
+      (o) =>
+        o.id !== t.id &&
+        o.batchId === t.batchId &&
+        o.status === t.status &&
+        o.batchSeq != null &&
+        o.batchSeq < t.batchSeq!,
+    ) ?? null
+  );
 }
 
 /** Каких позиций курьер не отметил */

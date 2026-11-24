@@ -5,6 +5,7 @@ import { CourierAppService } from './courier-app.service';
 import { CourierAlertsService } from './courier-alerts.service';
 import { CourierAuthGuard } from './courier-auth.guard';
 import { CourierCashService } from './courier-cash.service';
+import { CourierPhotoService } from './courier-photo.service';
 import { CourierRegistrationService } from './courier-registration.service';
 import { DispatchBoardService } from './dispatch-board.service';
 import { DispatchDeviceGuard } from './dispatch-device.guard';
@@ -22,6 +23,7 @@ import { DispatchController } from './dispatch.controller';
     CourierAlertsService,
     CourierAuthGuard,
     CourierCashService,
+    CourierPhotoService,
     CourierRegistrationService,
     DispatchBoardService,
     DispatchDeviceGuard,

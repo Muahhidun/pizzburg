@@ -29,6 +29,8 @@ export interface CourierSettings {
   alertNotReadyMin: number;
   /// Тревога «долго в пути»: от «Забрал» прошло столько минут
   alertOnWayMin: number;
+  /// Связка по 2 заказа: максимальный лишний путь, км по прямой (0 — связок нет)
+  batchMaxDetourKm: number;
 }
 
 export const COURIER_DEFAULTS: CourierSettings = {
@@ -44,6 +46,7 @@ export const COURIER_DEFAULTS: CourierSettings = {
   alertNoCourierAtMin: 40,
   alertNotReadyMin: 25,
   alertOnWayMin: 20,
+  batchMaxDetourKm: 1.5,
 };
 
 export function courierSettings(tenantSettings: unknown): CourierSettings {
@@ -63,5 +66,6 @@ export function courierSettings(tenantSettings: unknown): CourierSettings {
     alertNoCourierAtMin: num(raw.alertNoCourierAtMin, COURIER_DEFAULTS.alertNoCourierAtMin),
     alertNotReadyMin: num(raw.alertNotReadyMin, COURIER_DEFAULTS.alertNotReadyMin),
     alertOnWayMin: num(raw.alertOnWayMin, COURIER_DEFAULTS.alertOnWayMin),
+    batchMaxDetourKm: num(raw.batchMaxDetourKm, COURIER_DEFAULTS.batchMaxDetourKm),
   };
 }

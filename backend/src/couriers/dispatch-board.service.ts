@@ -7,6 +7,8 @@ import QRCode from 'qrcode';
 import { PrismaService } from '../prisma/prisma.service';
 import { AssignmentService } from './assignment.service';
 import { taskAlert } from './courier-alerts.service';
+import { CourierCashService } from './courier-cash.service';
+import { CourierPhotoService } from './courier-photo.service';
 import { courierSettings } from './courier-settings';
 import { DispatchDeviceValue, hashDeviceToken } from './dispatch-device.guard';
 import { createQrToken } from './dispatch-qr';
@@ -43,6 +45,8 @@ export class DispatchBoardService {
     private readonly prisma: PrismaService,
     private readonly assignment: AssignmentService,
     private readonly telegram: TelegramService,
+    private readonly cash?: CourierCashService,
+    private readonly photos?: CourierPhotoService,
   ) {}
 
   // ─── Задачи из заказов ─────────────────────────────────────────
@@ -140,7 +144,15 @@ export class DispatchBoardService {
               createdAt: true,
               scheduledAt: true,
               paymentMethod: true,
-              items: { select: { name: true, qty: true, modifiers: true, isUnavailable: true } },
+              items: {
+                select: {
+                  name: true,
+                  qty: true,
+                  modifiers: true,
+                  isUnavailable: true,
+                  product: { select: { posterAccountId: true } },
+                },
+              },
             },
           },
         },
@@ -148,7 +160,10 @@ export class DispatchBoardService {
       this.prisma.courierShift.findMany({
         where: { venueId: device.venueId, endedAt: null },
         orderBy: [{ scheduled: 'desc' }, { queuedAt: 'asc' }],
-        include: { courier: { select: { fullName: true } } },
+        include: {
+          courier: { select: { id: true, fullName: true, selfieFileId: true } },
+          tasks: { where: { status: { in: ['ASSIGNED', 'PICKED_UP'] } }, select: { status: true } },
+        },
       }),
       // Кто отметился за последнюю минуту — всплывает на планшете, чтобы
       // раздача видела, если «отметился» человек, которого нет у стойки
@@ -179,6 +194,7 @@ export class DispatchBoardService {
       select: { settings: true },
     });
     const cfg = courierSettings(tenant?.settings);
+    const departments = await this.departments(device.tenantId);
     const waitingShifts = shifts.filter((s) => s.state === 'WAITING');
     const alertCtx = {
       waitingCouriers: waitingShifts.length,
@@ -218,7 +234,11 @@ export class DispatchBoardService {
       })),
       couriers: shifts.map((s) => ({
         shiftId: s.id,
+        courierId: s.courier.id,
         name: shortName(s.courier.fullName),
+        photo: !!s.courier.selfieFileId,
+        // Везёт заказ — «Уехал» и «Закончил смену» ему не нужны
+        carrying: s.tasks.some((t) => t.status === 'PICKED_UP'),
         state: s.state,
         queuedAt: s.queuedAt?.toISOString() ?? null,
         pauseUntil: s.pauseUntil?.toISOString() ?? null,
@@ -234,6 +254,10 @@ export class DispatchBoardService {
         pickedUpAt: t.pickedUpAt?.toISOString() ?? null,
         doneAt: (t.deliveredAt ?? (DONE.includes(t.status) ? t.updatedAt : null))?.toISOString() ?? null,
         courier: t.courier ? shortName(t.courier.fullName) : null,
+        batchSeq: t.batchSeq,
+        // Позиции других отделов (Sunday): раздача ждёт, пока их принесут
+        otherDepartments:
+          t.kind === 'EXTRA_TRIP' ? [] : otherDepartments(t.order.items, departments),
         cash: t.cashToCollect,
         needsTerminal: t.needsTerminal,
         extraReason: t.extraReason,
@@ -244,6 +268,7 @@ export class DispatchBoardService {
           .map((i) => ({
             name: i.name,
             qty: i.qty,
+            department: departmentOf(i, departments),
             modifiers: ((i.modifiers as Modifier[] | null) ?? [])
               .map((m) => m?.name)
               .filter((n): n is string => !!n),
@@ -349,6 +374,104 @@ export class DispatchBoardService {
     return { id: task.id };
   }
 
+  // ─── Курьер у раздачи ──────────────────────────────────────────
+
+  /** Курьер на смене у этой раздачи: смена открыта и точка та же */
+  private async venueShift(device: DispatchDeviceValue, shiftId: string) {
+    const shift = await this.prisma.courierShift.findFirst({
+      where: { id: shiftId, venueId: device.venueId, endedAt: null },
+      include: { courier: true },
+    });
+    if (!shift) throw new NotFoundException('Курьер уже не на смене');
+    return shift;
+  }
+
+  private async assertNotCarrying(shiftId: string) {
+    const carrying = await this.prisma.deliveryTask.findFirst({
+      where: { shiftId, status: 'PICKED_UP' },
+      include: { order: { select: { number: true } } },
+    });
+    if (carrying) {
+      throw new BadRequestException(
+        `Курьер везёт №${carrying.order.number}: он сам вернётся в очередь сканом QR`,
+      );
+    }
+  }
+
+  /**
+   * «Уехал» (временно, пока заказы идут и из старого приложения): курьер
+   * вне очереди без нарушения, назначенный ему заказ сразу уходит
+   * следующему. Вернётся — отсканирует QR и встанет в конец.
+   */
+  async courierAway(device: DispatchDeviceValue, shiftId: string) {
+    const shift = await this.venueShift(device, shiftId);
+    await this.assertNotCarrying(shift.id);
+    const released = await this.assignment.releaseShift(shift.id, 'COURIER_LEFT', `DEVICE:${device.id}`);
+    return { released: released ?? [] };
+  }
+
+  /**
+   * «Закончил смену» за курьера, который ушёл и забыл закрыть её сам.
+   * Расчёт смены, как обычно, приходит карточкой в чат кассы.
+   */
+  async courierEndShift(device: DispatchDeviceValue, shiftId: string) {
+    const shift = await this.venueShift(device, shiftId);
+    await this.assertNotCarrying(shift.id);
+    const actor = `DEVICE:${device.id}`;
+    await this.assignment.releaseShift(shift.id, 'COURIER_LEFT', actor);
+    const closed = await this.prisma.courierShift.updateMany({
+      where: { id: shift.id, endedAt: null },
+      data: { endedAt: new Date(), endedBy: 'DISPATCH', state: 'AWAY', pauseUntil: null },
+    });
+    if (closed.count === 0) return { ended: false };
+    await this.prisma.courier.update({
+      where: { id: shift.courierId },
+      data: { completedShifts: { increment: 1 } },
+    });
+    await this.prisma.deliveryTaskEvent.create({
+      data: {
+        tenantId: shift.tenantId,
+        shiftId: shift.id,
+        courierId: shift.courierId,
+        type: 'SHIFT_END',
+        actor,
+      },
+    });
+    await this.cash?.createSettlement(shift.tenantId, shift.courier, shift.id);
+    await this.assignment.sendToCourier(
+      shift.tenantId,
+      shift.courier.telegramUserId,
+      '🏁 Раздача закрыла вашу смену. Расчёт по смене — у кассира.',
+    );
+    return { ended: true };
+  }
+
+  /** Селфи курьера на смене у этой раздачи — для очереди с лицами */
+  async courierPhoto(device: DispatchDeviceValue, courierId: string) {
+    const shift = await this.prisma.courierShift.findFirst({
+      where: { courierId, venueId: device.venueId, endedAt: null },
+      select: { courier: { select: { selfieFileId: true } } },
+    });
+    const fileId = shift?.courier.selfieFileId;
+    const file = fileId && this.photos ? await this.photos.get(device.tenantId, fileId) : null;
+    if (!file) throw new NotFoundException('Нет фото');
+    return file;
+  }
+
+  /**
+   * Отделы Poster тенанта. Основной — первый по порядку (у него
+   * наименьший sortOrder, при равенстве — созданный раньше: cuid растёт
+   * со временем). Остальные помечаются на плитке.
+   */
+  private async departments(tenantId: string): Promise<Departments> {
+    const rows = await this.prisma.posterAccount.findMany({
+      where: { tenantId },
+      orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+      select: { id: true, name: true },
+    });
+    return { mainId: rows[0]?.id ?? null, names: new Map(rows.map((r) => [r.id, r.name])) };
+  }
+
   // ─── Устройства (админка) ──────────────────────────────────────
 
   async listDevices(tenantId: string) {
@@ -408,6 +531,29 @@ export class DispatchBoardService {
       data: { tenantId, taskId, type, actor, ...(meta !== undefined ? { meta } : {}) },
     });
   }
+}
+
+type Departments = { mainId: string | null; names: Map<string, string> };
+type DeptItem = { qty: number; isUnavailable: boolean; product: { posterAccountId: string } | null };
+
+/** Отдел позиции, если он не основной: «Sunday» */
+export function departmentOf(item: DeptItem, d: Departments): string | null {
+  const id = item.product?.posterAccountId;
+  if (!id || d.names.size < 2 || id === d.mainId) return null;
+  return d.names.get(id) ?? null;
+}
+
+/** Сколько позиций каждого неосновного отдела в заказе: [{name: «Sunday», count: 2}] */
+export function otherDepartments(items: DeptItem[], d: Departments) {
+  const counts = new Map<string, number>();
+  for (const i of items) {
+    if (i.isUnavailable) continue;
+    const name = departmentOf(i, d);
+    if (name) counts.set(name, (counts.get(name) ?? 0) + i.qty);
+  }
+  const live = items.filter((i) => !i.isUnavailable).length;
+  const onlyOther = live > 0 && items.every((i) => i.isUnavailable || departmentOf(i, d));
+  return [...counts].map(([name, count]) => ({ name, count, only: onlyOther }));
 }
 
 const tengeText = (n: number) => `${n.toLocaleString('ru-RU')} ₸`;

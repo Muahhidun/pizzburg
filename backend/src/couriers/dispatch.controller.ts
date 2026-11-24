@@ -1,4 +1,14 @@
-import { Body, Controller, Get, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  HttpCode,
+  Param,
+  Post,
+  StreamableFile,
+  UseGuards,
+} from '@nestjs/common';
 import { IsInt, IsString, Length, Max, Min } from 'class-validator';
 import { SkipThrottle } from '@nestjs/throttler';
 import { DispatchBoardService } from './dispatch-board.service';
@@ -53,5 +63,28 @@ export class DispatchController {
   @HttpCode(200)
   handedOver(@DispatchDevice() device: DispatchDeviceValue, @Param('id') id: string) {
     return this.board.handOver(device, id);
+  }
+
+  /** Нажатие на курьера в очереди: «Уехал» — вне очереди, заказ следующему */
+  @Post('couriers/:shiftId/away')
+  @HttpCode(200)
+  courierAway(@DispatchDevice() device: DispatchDeviceValue, @Param('shiftId') shiftId: string) {
+    return this.board.courierAway(device, shiftId);
+  }
+
+  @Post('couriers/:shiftId/end-shift')
+  @HttpCode(200)
+  courierEndShift(@DispatchDevice() device: DispatchDeviceValue, @Param('shiftId') shiftId: string) {
+    return this.board.courierEndShift(device, shiftId);
+  }
+
+  @Get('couriers/:courierId/photo')
+  @Header('Cache-Control', 'private, max-age=3600')
+  async courierPhoto(
+    @DispatchDevice() device: DispatchDeviceValue,
+    @Param('courierId') courierId: string,
+  ) {
+    const file = await this.board.courierPhoto(device, courierId);
+    return new StreamableFile(file.data, { type: file.type });
   }
 }
