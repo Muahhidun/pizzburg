@@ -56,6 +56,16 @@ interface Task {
   extraReason: string | null;
   alert: 'NO_COURIER' | 'NOT_READY' | 'ON_WAY' | null;
   items: { name: string; qty: number; department: string | null; modifiers: string[] }[];
+  /** Для большой карточки по долгому нажатию */
+  details?: {
+    address: string | null;
+    addressComment: string | null;
+    phone: string | null;
+    customerName: string | null;
+    comment: string | null;
+    payment: string;
+    cancellable: boolean;
+  };
 }
 
 const ALERT_TEXT: Record<NonNullable<Task['alert']>, string> = {
@@ -129,6 +139,8 @@ export default function DispatchPage() {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [extraOpen, setExtraOpen] = useState(false);
   const [courierOpen, setCourierOpen] = useState<string | null>(null);
+  // Большая карточка заказа: долгое нажатие на плитку
+  const [taskOpen, setTaskOpen] = useState<string | null>(null);
   // Селфи курьеров: картинке нужен заголовок с токеном планшета,
   // поэтому качаем сами и держим как blob-ссылки
   const [photos, setPhotos] = useState<Record<string, string>>({});
@@ -222,7 +234,7 @@ export default function DispatchPage() {
     };
   }, []);
 
-  async function act(task: Task, action: 'ready' | 'undo-ready' | 'handed-over') {
+  async function act(task: Task, action: 'ready' | 'undo-ready' | 'handed-over' | 'cancel') {
     if (!token) return;
     setError(null);
     try {
@@ -376,20 +388,20 @@ export default function DispatchPage() {
           <Column title="Новый" hint="нажмите, когда пакет собран" count={fresh.length}>
             {fresh.map((t) =>
               t.kind === 'PICKUP' ? (
-                <Tile key={t.id} task={t} nowMs={nowMs}>
+                <Tile key={t.id} task={t} nowMs={nowMs} onLongPress={() => setTaskOpen(t.id)}>
                   <TileButton onClick={() => act(t, 'ready')}>Готов</TileButton>
                   <TileButton tone="muted" onClick={() => act(t, 'handed-over')}>
                     Выдан
                   </TileButton>
                 </Tile>
               ) : (
-                <Tile key={t.id} task={t} nowMs={nowMs} onClick={() => act(t, 'ready')} />
+                <Tile key={t.id} task={t} nowMs={nowMs} onClick={() => act(t, 'ready')} onLongPress={() => setTaskOpen(t.id)} />
               ),
             )}
           </Column>
           <Column title="Готов" count={readyCol.length}>
             {readyCol.map((t) => (
-              <Tile key={t.id} task={t} nowMs={nowMs}>
+              <Tile key={t.id} task={t} nowMs={nowMs} onLongPress={() => setTaskOpen(t.id)}>
                 {t.kind === 'PICKUP' ? (
                   <TileButton onClick={() => act(t, 'handed-over')}>Выдан клиенту</TileButton>
                 ) : t.courier ? (
@@ -409,7 +421,7 @@ export default function DispatchPage() {
           </Column>
           <Column title="В пути" count={onWay.length}>
             {onWay.map((t) => (
-              <Tile key={t.id} task={t} nowMs={nowMs}>
+              <Tile key={t.id} task={t} nowMs={nowMs} onLongPress={() => setTaskOpen(t.id)}>
                 <div className="text-lg font-semibold">
                   {t.courier}
                   {t.pickedUpAt && (
@@ -480,6 +492,22 @@ export default function DispatchPage() {
           <div className="mt-2 text-xs text-neutral-400">{board.device.name}</div>
         </aside>
       </div>
+
+      {taskOpen &&
+        (() => {
+          const t = board.tasks.find((x) => x.id === taskOpen);
+          return t ? (
+            <TaskDialog
+              task={t}
+              nowMs={nowMs}
+              onClose={() => setTaskOpen(null)}
+              onAction={async (a) => {
+                setTaskOpen(null);
+                await act(t, a);
+              }}
+            />
+          ) : null;
+        })()}
 
       {courierOpen &&
         (() => {
@@ -566,19 +594,74 @@ function Column({
   );
 }
 
+/**
+ * Долгое нажатие (полсекунды) — большая карточка заказа. Короткое
+ * нажатие работает как раньше («Готов»). Сдвиг пальца отменяет долгое
+ * нажатие: иначе прокрутка колонки открывала бы карточки.
+ */
+function useLongPress(onLongPress?: () => void) {
+  const timer = useRef<number | null>(null);
+  const start = useRef<{ x: number; y: number } | null>(null);
+  const fired = useRef(false);
+  const clear = () => {
+    if (timer.current) window.clearTimeout(timer.current);
+    timer.current = null;
+  };
+  return {
+    fired,
+    handlers: onLongPress
+      ? {
+          onPointerDown: (e: React.PointerEvent) => {
+            fired.current = false;
+            start.current = { x: e.clientX, y: e.clientY };
+            clear();
+            timer.current = window.setTimeout(() => {
+              fired.current = true;
+              onLongPress();
+            }, 500);
+          },
+          onPointerMove: (e: React.PointerEvent) => {
+            const s = start.current;
+            if (s && Math.hypot(e.clientX - s.x, e.clientY - s.y) > 10) clear();
+          },
+          onPointerUp: clear,
+          onPointerLeave: clear,
+          onPointerCancel: clear,
+          onContextMenu: (e: React.MouseEvent) => {
+            e.preventDefault();
+            clear();
+            fired.current = true;
+            onLongPress();
+          },
+          // После долгого нажатия палец отпускают — это не «Готов»
+          onClickCapture: (e: React.MouseEvent) => {
+            if (fired.current) {
+              e.stopPropagation();
+              e.preventDefault();
+              fired.current = false;
+            }
+          },
+        }
+      : {},
+  };
+}
+
 function Tile({
   task,
   nowMs,
   onClick,
+  onLongPress,
   faded,
   children,
 }: {
   task: Task;
   nowMs: number;
   onClick?: () => void;
+  onLongPress?: () => void;
   faded?: boolean;
   children?: React.ReactNode;
 }) {
+  const press = useLongPress(onLongPress);
   const preorder = task.scheduledAt && new Date(task.scheduledAt).getTime() > nowMs;
   const age = minutes(task.createdAt, nowMs);
   const ageTone = preorder
@@ -653,12 +736,158 @@ function Tile({
         : 'bg-white'
   } ${faded ? 'opacity-60' : ''}`;
 
+  // Без выделения текста и системного меню по долгому нажатию
+  const noSelect = { WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' } as const;
   return onClick ? (
-    <button onClick={onClick} className={`${frame} active:scale-[.98]`}>
+    <button onClick={onClick} {...press.handlers} style={noSelect} className={`${frame} active:scale-[.98]`}>
       {body}
     </button>
   ) : (
-    <div className={frame}>{body}</div>
+    <div {...press.handlers} style={noSelect} className={frame}>
+      {body}
+    </div>
+  );
+}
+
+const STATUS_TEXT: Record<TaskStatus, string> = {
+  NEW: 'Новый — собирается',
+  READY: 'Готов — ждёт курьера',
+  ASSIGNED: 'Назначен курьеру',
+  PICKED_UP: 'В пути',
+  DELIVERED: 'Доставлен',
+  HANDED_OVER: 'Выдан',
+  FAILED: 'Не доставлен',
+  CANCELLED: 'Отменён',
+};
+
+/** Большая карточка заказа: весь состав, адрес, телефон, оплата и действия */
+function TaskDialog({
+  task,
+  nowMs,
+  onClose,
+  onAction,
+}: {
+  task: Task;
+  nowMs: number;
+  onClose: () => void;
+  onAction: (a: 'ready' | 'handed-over' | 'cancel') => void;
+}) {
+  const d = task.details;
+  const pickup = task.kind === 'PICKUP';
+  const active = ['NEW', 'READY', 'ASSIGNED'].includes(task.status);
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="flex max-h-full w-[640px] flex-col rounded-2xl bg-white p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="text-5xl font-black tabular-nums">№{task.number}</span>
+          <span className="text-lg text-neutral-500">
+            {clock(task.createdAt)} · {minutes(task.createdAt, nowMs)} мин
+          </span>
+        </div>
+        <div className="mt-1 flex flex-wrap gap-1 text-xs font-semibold uppercase">
+          {task.external && <span className="rounded bg-neutral-500 px-1.5 py-0.5 text-white">старое приложение</span>}
+          {pickup && <span className="rounded bg-violet-600 px-1.5 py-0.5 text-white">самовывоз</span>}
+          {task.kind === 'EXTRA_TRIP' && <span className="rounded bg-amber-500 px-1.5 py-0.5 text-white">довоз</span>}
+          {task.otherDepartments.map((x) => (
+            <span key={x.name} className="rounded bg-teal-600 px-1.5 py-0.5 text-white">
+              {x.only ? '' : '+ '}
+              {x.name} · {x.count}
+            </span>
+          ))}
+        </div>
+        <div className="mt-2 text-lg font-semibold">
+          {STATUS_TEXT[task.status]}
+          {task.courier && <span className="text-emerald-700"> → {task.courier}</span>}
+        </div>
+
+        <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
+          {task.extraReason && <div className="mb-2 text-lg font-semibold text-amber-700">{task.extraReason}</div>}
+          <ul className="space-y-1 text-xl leading-snug">
+            {task.items.map((i, idx) => (
+              <li key={idx}>
+                {i.qty > 1 && <b>{i.qty}× </b>}
+                {i.name}
+                {i.department && (
+                  <span className="ml-1 rounded bg-teal-100 px-1 text-sm font-semibold text-teal-800">{i.department}</span>
+                )}
+                {i.modifiers.length > 0 && <div className="text-base text-neutral-500">{i.modifiers.join(', ')}</div>}
+              </li>
+            ))}
+          </ul>
+
+          {d && (
+            <dl className="mt-4 space-y-1.5 border-t border-black/10 pt-3 text-lg">
+              {!pickup && (
+                <div>
+                  <dt className="text-sm text-neutral-500">Адрес</dt>
+                  <dd>
+                    {d.address ?? 'не указан'}
+                    {d.addressComment && <div className="text-base text-neutral-500">{d.addressComment}</div>}
+                  </dd>
+                </div>
+              )}
+              {(d.customerName || d.phone) && (
+                <div>
+                  <dt className="text-sm text-neutral-500">Клиент</dt>
+                  <dd>
+                    {d.customerName}
+                    {d.phone && (
+                      <a href={`tel:${d.phone}`} className="ml-2 font-semibold text-sky-700">
+                        {d.phone}
+                      </a>
+                    )}
+                  </dd>
+                </div>
+              )}
+              {d.comment && (
+                <div>
+                  <dt className="text-sm text-neutral-500">Комментарий</dt>
+                  <dd className="whitespace-pre-line">{d.comment}</dd>
+                </div>
+              )}
+              <div>
+                <dt className="text-sm text-neutral-500">Оплата</dt>
+                <dd>{d.payment}</dd>
+              </div>
+            </dl>
+          )}
+        </div>
+
+        <div className="mt-4 flex flex-col gap-2">
+          {task.status === 'NEW' && (
+            <button onClick={() => onAction('ready')} className="rounded-xl bg-neutral-900 py-3 text-xl font-semibold text-white">
+              Готов — пакет собран
+            </button>
+          )}
+          {pickup && (task.status === 'NEW' || task.status === 'READY') && (
+            <button onClick={() => onAction('handed-over')} className="rounded-xl bg-violet-600 py-3 text-xl font-semibold text-white">
+              Выдан клиенту
+            </button>
+          )}
+          {d?.cancellable && (
+            <button
+              onClick={() => {
+                if (confirm(`Отменить заказ №${task.number}? Он исчезнет с планшета.`)) onAction('cancel');
+              }}
+              className="rounded-xl bg-red-50 py-3 text-lg font-semibold text-red-700"
+            >
+              Отменить заказ
+            </button>
+          )}
+          {!task.external && active && task.kind !== 'EXTRA_TRIP' && (
+            <p className="text-center text-sm text-neutral-500">
+              Отменить наш заказ — через кассу: в Telegram «Действия» → «Отменить». Плитка уйдёт сама.
+            </p>
+          )}
+          <button onClick={onClose} className="rounded-xl bg-neutral-100 py-3 text-lg">
+            Закрыть
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

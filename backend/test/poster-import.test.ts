@@ -161,3 +161,49 @@ test('кассир отклонил заказ в Poster — плитка сни
   await w.service.importTenant('t', 'v', NOW);
   assert.equal(w.tasks[0].status, 'CANCELLED');
 });
+
+// ─── Отмена на планшете ──────────────────────────────────────────────
+
+import { DispatchBoardService } from '../src/couriers/dispatch-board.service';
+
+function board(task: any) {
+  const events: any[] = [];
+  const unassigned: string[] = [];
+  const prisma: any = {
+    deliveryTask: {
+      findFirst: async () => task,
+      updateMany: async ({ data }: any) => (Object.assign(task, data), { count: 1 }),
+    },
+    deliveryTaskEvent: { create: async ({ data }: any) => events.push(data) },
+  };
+  const assignment: any = {
+    unassign: async (id: string, reason: string) => (unassigned.push(`${id}:${reason}`), true),
+  };
+  const device = { id: 'd', tenantId: 't', venueId: 'v', name: 'Раздача' };
+  return { service: new DispatchBoardService(prisma, assignment, {} as any), device, events, unassigned };
+}
+
+test('отмена на планшете: заказ старого приложения закрывается', async () => {
+  const task = { id: 'k', venueId: 'v', source: 'POSTER', status: 'NEW' };
+  const b = board(task);
+  assert.deepEqual(await b.service.cancelTask(b.device as any, 'k'), { status: 'CANCELLED' });
+  assert.equal(task.status, 'CANCELLED');
+  assert.equal(b.events[0].type, 'CANCELLED');
+});
+
+test('отмена назначенного: курьер получает «отменён» и остаётся в очереди', async () => {
+  const b = board({ id: 'k', venueId: 'v', source: 'POSTER', status: 'ASSIGNED' });
+  await b.service.cancelTask(b.device as any, 'k');
+  assert.deepEqual(b.unassigned, ['k:CANCELLED']);
+});
+
+test('наш заказ и уже уехавший на планшете не отменяются', async () => {
+  await assert.rejects(
+    board({ id: 'k', venueId: 'v', source: 'APP', status: 'NEW' }).service.cancelTask({ id: 'd', tenantId: 't', venueId: 'v', name: '' } as any, 'k'),
+    /через кассу/,
+  );
+  await assert.rejects(
+    board({ id: 'k', venueId: 'v', source: 'POSTER', status: 'PICKED_UP' }).service.cancelTask({ id: 'd', tenantId: 't', venueId: 'v', name: '' } as any, 'k'),
+    /уже везёт/,
+  );
+});

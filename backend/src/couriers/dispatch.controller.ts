@@ -59,6 +59,13 @@ export class DispatchController {
     return this.board.createExtraTrip(device, dto.number, dto.reason);
   }
 
+  /** Отменить заказ старого приложения (кассир отменил его в Poster) */
+  @Post('tasks/:id/cancel')
+  @HttpCode(200)
+  cancel(@DispatchDevice() device: DispatchDeviceValue, @Param('id') id: string) {
+    return this.board.cancelTask(device, id);
+  }
+
   @Post('tasks/:id/handed-over')
   @HttpCode(200)
   handedOver(@DispatchDevice() device: DispatchDeviceValue, @Param('id') id: string) {

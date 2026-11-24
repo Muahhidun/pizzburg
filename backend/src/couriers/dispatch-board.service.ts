@@ -13,7 +13,9 @@ import { courierSettings } from './courier-settings';
 import { DispatchDeviceValue, hashDeviceToken } from './dispatch-device.guard';
 import { createQrToken } from './dispatch-qr';
 import { shortName } from './names';
-import { orderOf } from './task-order';
+import { externalOf, externalPaymentLine, orderOf } from './task-order';
+import { formatAddress } from './courier-app.service';
+import { paymentLine } from './assignment.service';
 
 /**
  * Планшет раздачи (docs/COURIER_SYSTEM_SPEC.md §4).
@@ -145,6 +147,10 @@ export class DispatchBoardService {
               createdAt: true,
               scheduledAt: true,
               paymentMethod: true,
+              address: true,
+              comment: true,
+              changeFrom: true,
+              customer: { select: { phone: true, name: true } },
               items: {
                 select: {
                   name: true,
@@ -247,6 +253,7 @@ export class DispatchBoardService {
       tasks: tasks.map((raw) => {
         // Заказ из Poster (старое приложение) — данные из снимка
         const o = orderOf(raw);
+        const ext = externalOf(raw.external);
         const t = { ...raw, order: { createdAt: o.createdAt, scheduledAt: o.scheduledAt } };
         return {
         id: t.id,
@@ -268,6 +275,20 @@ export class DispatchBoardService {
         needsTerminal: t.needsTerminal,
         extraReason: t.extraReason,
         alert: taskAlert(t, alertCtx, cfg, now),
+        // Для большой карточки по долгому нажатию: раздача уточняет детали
+        details: {
+          address: o.address ? formatAddress(o.address as Parameters<typeof formatAddress>[0]) : null,
+          addressComment: (o.address as { comment?: string } | null)?.comment || null,
+          phone: o.phone,
+          customerName: o.customerName,
+          comment: o.comment || null,
+          payment: ext
+            ? externalPaymentLine(ext)
+            : paymentLine({ ...raw, changeFrom: o.changeFrom }),
+          // Отменить на планшете можно только заказ старого приложения:
+          // наш отменяется через кассу — это касается клиента и оплаты
+          cancellable: raw.source === 'POSTER' && ['NEW', 'READY', 'ASSIGNED'].includes(raw.status),
+        },
         // У довоза свой «состав» — причина; весь заказ на плитке путал бы
         items: t.kind === 'EXTRA_TRIP' ? [] : o.items
           .filter((i) => !i.isUnavailable)
@@ -329,6 +350,40 @@ export class DispatchBoardService {
       await this.event(device.tenantId, taskId, 'READY_UNDONE', `DEVICE:${device.id}`);
     }
     return { status: 'NEW' as const };
+  }
+
+  /**
+   * «Отменить заказ» в большой карточке. Только для заказов старого
+   * приложения: кассир отменил чек в Poster, а плитка осталась. Если заказ
+   * уже назначен, курьер получает «отменён» и остаётся в очереди на месте.
+   * Уехавший с заказом курьер — не отмена, а «Не удалось доставить».
+   */
+  async cancelTask(device: DispatchDeviceValue, taskId: string) {
+    const task = await this.ownTask(device, taskId);
+    if (task.status === 'CANCELLED') return { status: task.status };
+    if (task.source !== 'POSTER') {
+      throw new BadRequestException(
+        'Наш заказ отменяется через кассу: в Telegram «Действия» → «Отменить». Плитка уйдёт сама',
+      );
+    }
+    if (task.status === 'PICKED_UP') {
+      throw new BadRequestException('Курьер уже везёт заказ — отменить на планшете нельзя');
+    }
+    if (!['NEW', 'READY', 'ASSIGNED'].includes(task.status)) {
+      throw new BadRequestException('Заказ уже закрыт');
+    }
+    const actor = `DEVICE:${device.id}`;
+    if (task.status === 'ASSIGNED') {
+      if (await this.assignment.unassign(taskId, 'CANCELLED', actor)) return { status: 'CANCELLED' as const };
+      throw new BadRequestException('Заказ только что изменился, попробуйте ещё раз');
+    }
+    const changed = await this.prisma.deliveryTask.updateMany({
+      where: { id: taskId, status: { in: ['NEW', 'READY'] } },
+      data: { status: 'CANCELLED' },
+    });
+    if (changed.count === 0) throw new BadRequestException('Заказ только что изменился, попробуйте ещё раз');
+    await this.event(device.tenantId, taskId, 'CANCELLED', actor);
+    return { status: 'CANCELLED' as const };
   }
 
   /** Самовывоз выдан клиенту. Можно и из «Нового», если «Готов» забыли */

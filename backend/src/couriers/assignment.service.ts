@@ -269,11 +269,13 @@ export class AssignmentService {
   }
 
   /**
-   * «Отменить» на планшете: заказ ещё не собран, обратно в «Новый».
-   * Не вина курьера — место в очереди сохраняется. Если у него связка,
-   * второй заказ остаётся за ним как одиночный.
+   * Снять заказ с курьера, который ещё у раздачи. Не вина курьера — место
+   * в очереди сохраняется. Если у него связка, второй заказ остаётся за ним
+   * как одиночный.
+   * - `READY_UNDONE` — «Отменить» сразу после «Готов»: заказ обратно в «Новый»;
+   * - `CANCELLED` — заказ отменён (клиент передумал): плитка закрывается.
    */
-  async unassign(taskId: string, reason: 'READY_UNDONE', actor: string): Promise<boolean> {
+  async unassign(taskId: string, reason: 'READY_UNDONE' | 'CANCELLED', actor: string): Promise<boolean> {
     const task = await this.prisma.deliveryTask.findUnique({
       where: { id: taskId },
       include: { order: { select: { number: true } }, courier: true },
@@ -285,8 +287,7 @@ export class AssignmentService {
         const t = await tx.deliveryTask.updateMany({
           where: { id: taskId, status: 'ASSIGNED', courierId: task.courierId },
           data: {
-            status: 'NEW',
-            readyAt: null,
+            ...(reason === 'CANCELLED' ? { status: 'CANCELLED' } : { status: 'NEW', readyAt: null }),
             courierId: null,
             shiftId: null,
             assignedAt: null,
@@ -328,9 +329,12 @@ export class AssignmentService {
     await this.sendToCourier(
       task.tenantId,
       task.courier!.telegramUserId,
-      task.batchId
-        ? `↩️ Отбой: №${orderOf(task).number} ещё не собран. Второй заказ по-прежнему ваш.`
-        : `↩️ Отбой: №${orderOf(task).number} ещё не собран. Вы остаётесь в очереди на своём месте.`,
+      reason === 'CANCELLED'
+        ? `❌ №${orderOf(task).number} отменён, забирать не нужно. ` +
+            (task.batchId ? 'Второй заказ по-прежнему ваш.' : 'Вы остаётесь в очереди на своём месте.')
+        : task.batchId
+          ? `↩️ Отбой: №${orderOf(task).number} ещё не собран. Второй заказ по-прежнему ваш.`
+          : `↩️ Отбой: №${orderOf(task).number} ещё не собран. Вы остаётесь в очереди на своём месте.`,
     );
     return true;
   }
