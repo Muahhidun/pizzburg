@@ -683,7 +683,7 @@ function Tile({
       </div>
       <div className="mt-1 flex flex-wrap gap-1 text-xs font-semibold uppercase">
         {task.external && (
-          <span className="rounded bg-neutral-500 px-1.5 py-0.5 text-white">старое прил.</span>
+          <span className="rounded bg-yellow-400 px-1.5 py-0.5 text-yellow-950">старое прил.</span>
         )}
         {pickup && <span className="rounded bg-violet-600 px-1.5 py-0.5 text-white">самовывоз</span>}
         {task.kind === 'EXTRA_TRIP' && (
@@ -728,12 +728,15 @@ function Tile({
     </>
   );
 
+  // Цвет плитки: тревога → самовывоз → старое приложение → обычная
   const frame = `rounded-xl p-3 text-left shadow-sm ${
     task.alert
       ? 'bg-red-50 ring-2 ring-red-500'
       : pickup
         ? 'bg-violet-50 ring-2 ring-violet-300'
-        : 'bg-white'
+        : task.external
+          ? 'bg-yellow-50 ring-2 ring-yellow-400'
+          : 'bg-white'
   } ${faded ? 'opacity-60' : ''}`;
 
   // Без выделения текста и системного меню по долгому нажатию
@@ -788,7 +791,7 @@ function TaskDialog({
           </span>
         </div>
         <div className="mt-1 flex flex-wrap gap-1 text-xs font-semibold uppercase">
-          {task.external && <span className="rounded bg-neutral-500 px-1.5 py-0.5 text-white">старое приложение</span>}
+          {task.external && <span className="rounded bg-yellow-400 px-1.5 py-0.5 text-yellow-950">старое приложение</span>}
           {pickup && <span className="rounded bg-violet-600 px-1.5 py-0.5 text-white">самовывоз</span>}
           {task.kind === 'EXTRA_TRIP' && <span className="rounded bg-amber-500 px-1.5 py-0.5 text-white">довоз</span>}
           {task.otherDepartments.map((x) => (
