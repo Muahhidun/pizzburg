@@ -34,7 +34,11 @@ test('время, телефон, Яндекс', () => {
 test('оплата заказа из Poster для курьера', () => {
   const base = { label: '1', createdAt: '', phone: null, name: null, address: null, comment: '', items: [], pickup: false, refs: [] };
   assert.equal(externalPaymentLine({ ...base, cash: 8440, card: 0, total: 8440 }).replace(/\s/g, ' '), 'Наличные 8 440 ₸');
-  assert.match(externalPaymentLine({ ...base, cash: 0, card: 7360, total: 7530 }).replace(/\s/g, ' '), /Картой 7 360 ₸ — уточните/);
+  assert.equal(
+    externalPaymentLine({ ...base, cash: 0, card: 7360, total: 7530 }).replace(/\s/g, ' '),
+    'Картой 7 360 ₸: возьмите терминал',
+  );
+  assert.equal(externalPaymentLine({ ...base, cash: 0, card: 0, total: 6890 }), 'Оплачен онлайн');
 });
 
 // ─── Импорт на памяти ────────────────────────────────────────────────
@@ -126,6 +130,8 @@ test('заказ старого приложения → плитка; PizzBurg 
     ['sun-товар-5', 1, 'sun'],
   ]);
   assert.equal(t.external.card, 3000);
+  // Часть Sunday оплачена картой — курьеру нужен терминал
+  assert.equal(t.needsTerminal, true);
   assert.equal(t.external.refs.length, 2);
 
   // Повторный проход ничего не дублирует

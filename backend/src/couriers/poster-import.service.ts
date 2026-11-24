@@ -288,6 +288,7 @@ export class PosterImportService {
           data: {
             external: next as unknown as Prisma.InputJsonValue,
             cashToCollect: next.pickup ? 0 : next.cash,
+            needsTerminal: !next.pickup && next.card > 0,
           },
         });
         await this.prisma.deliveryTaskEvent.create({
@@ -321,6 +322,8 @@ export class PosterImportService {
           external: external as unknown as Prisma.InputJsonValue,
           externalKey: `${accountId}:${incomingOrderId}`,
           cashToCollect: pickup ? 0 : cash,
+          // «Карточкой» в чеке старого приложения — оплата у двери
+          needsTerminal: !pickup && card > 0,
           createdBy: 'POSTER',
         },
       });

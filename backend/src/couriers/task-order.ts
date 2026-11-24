@@ -126,14 +126,14 @@ export function orderOf(t: { order?: OurOrder | null; external?: unknown }): Ord
 const tenge = (n: number) => `${n.toLocaleString('ru-RU')} ₸`;
 
 /**
- * Оплата заказа из Poster для курьера. Что значит «Карточкой» в чеке
- * старого приложения (онлайн или терминал у двери), из чека не видно —
- * поэтому подсказываем уточнить у кассира.
+ * Оплата заказа из Poster для курьера. У старого приложения три способа
+ * (Дом, 25.11.2026): наличные — взять деньги (про сдачу пишут в
+ * комментарии), «Карточкой» — картой у двери, нужен терминал,
+ * «Онлайн-оплата» — уже оплачен через Kaspi.
  */
 export function externalPaymentLine(e: ExternalOrder): string {
   const parts: string[] = [];
   if (e.cash > 0) parts.push(`Наличные ${tenge(e.cash)}`);
-  if (e.card > 0) parts.push(`Картой ${tenge(e.card)} — уточните у кассира, нужен ли терминал`);
-  if (parts.length === 0) return e.total > 0 ? `К оплате ${tenge(e.total)} — уточните у кассира` : 'Оплачен';
-  return parts.join('; ');
+  if (e.card > 0) parts.push(`Картой ${tenge(e.card)}: возьмите терминал`);
+  return parts.length ? parts.join('; ') : 'Оплачен онлайн';
 }
