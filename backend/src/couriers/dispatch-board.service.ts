@@ -15,6 +15,7 @@ import { createQrToken } from './dispatch-qr';
 import { shortName } from './names';
 import { externalOf, externalPaymentLine, orderOf } from './task-order';
 import { formatAddress } from './courier-app.service';
+import { completeDelivery } from './delivery-completion';
 import { paymentLine } from './assignment.service';
 
 /**
@@ -288,6 +289,10 @@ export class DispatchBoardService {
           // Отменить на планшете можно только заказ старого приложения:
           // наш отменяется через кассу — это касается клиента и оплаты
           cancellable: raw.source === 'POSTER' && ['NEW', 'READY', 'ASSIGNED'].includes(raw.status),
+          // Ручные статусы — когда у планшета пропадала связь
+          canMarkPickedUp: raw.kind !== 'PICKUP' && ['NEW', 'READY', 'ASSIGNED'].includes(raw.status),
+          canMarkDelivered: raw.kind !== 'PICKUP' && ACTIVE.includes(raw.status),
+          courierId: raw.courierId,
         },
         // У довоза свой «состав» — причина; весь заказ на плитке путал бы
         items: t.kind === 'EXTRA_TRIP' ? [] : o.items
@@ -384,6 +389,209 @@ export class DispatchBoardService {
     if (changed.count === 0) throw new BadRequestException('Заказ только что изменился, попробуйте ещё раз');
     await this.event(device.tenantId, taskId, 'CANCELLED', actor);
     return { status: 'CANCELLED' as const };
+  }
+
+  // ─── Ручные статусы (у планшета пропал интернет) ───────────────
+
+  /**
+   * «Забрал курьер…»: пока планшет был без связи, курьер взял пакет сам.
+   * Раздача выбирает его из тех, кто на смене. Заказ — у него «в пути»,
+   * как после ползунка; курьеру приходит сообщение, адрес — в приложении.
+   * Если заказ был назначен другому — тому «отбой», он остаётся в очереди.
+   */
+  async markPickedUp(device: DispatchDeviceValue, taskId: string, shiftId: string) {
+    const task = await this.ownTask(device, taskId);
+    if (task.kind === 'PICKUP') throw new BadRequestException('Это самовывоз: «Выдан клиенту»');
+    const shift = await this.venueShift(device, shiftId);
+    if (task.status === 'PICKED_UP' && task.courierId === shift.courierId) return { status: task.status };
+    if (!['NEW', 'READY', 'ASSIGNED'].includes(task.status)) {
+      throw new BadRequestException(
+        task.status === 'PICKED_UP' ? 'Заказ уже везёт другой курьер' : 'Заказ уже закрыт',
+      );
+    }
+    const actor = `DEVICE:${device.id}`;
+    const before = { courierId: task.courierId, shiftId: task.shiftId, status: task.status };
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      const changed = await tx.deliveryTask.updateMany({
+        where: { id: taskId, status: before.status, courierId: before.courierId },
+        data: {
+          status: 'PICKED_UP',
+          courierId: shift.courierId,
+          shiftId: shift.id,
+          readyAt: task.readyAt ?? now,
+          assignedAt: task.assignedAt ?? now,
+          pickedUpAt: now,
+          pickupMethod: 'DISPATCH',
+        },
+      });
+      if (changed.count === 0) throw new BadRequestException('Заказ только что изменился, попробуйте ещё раз');
+      await this.releaseBatch(tx, task, shift.courierId);
+      await this.freePrevious(tx, before, shift.id);
+      await tx.courierShift.update({ where: { id: shift.id }, data: { state: 'ON_DELIVERY', pauseUntil: null } });
+      await tx.deliveryTaskEvent.create({
+        data: {
+          tenantId: device.tenantId,
+          taskId,
+          shiftId: shift.id,
+          courierId: shift.courierId,
+          type: 'PICKED_UP',
+          actor,
+          meta: { method: 'DISPATCH' },
+        },
+      });
+    });
+    const number = await this.numberOf(taskId);
+    await this.tellPrevious(device.tenantId, before, shift.courierId, number);
+    await this.assignment.sendToCourier(
+      device.tenantId,
+      shift.courier.telegramUserId,
+      `📦 Раздача отметила: вы везёте №${number}. Адрес и «Доставлен» — в приложении.`,
+    );
+    // Освободился назначенный курьер — ему может достаться следующий заказ
+    if (before.status === 'ASSIGNED') await this.assignment.assignVenue(device.venueId);
+    return { status: 'PICKED_UP' as const };
+  }
+
+  /**
+   * «Доставлен»: курьер успел забрать и отвезти, пока планшет был без
+   * связи. Доставка засчитывается курьеру в оплату, наличные — на нём,
+   * как после его собственного «Доставлен». У заказа, который ещё никто
+   * не вёз, раздача выбирает курьера (`shiftId`).
+   */
+  async markDelivered(device: DispatchDeviceValue, taskId: string, shiftId?: string) {
+    const task = await this.ownTask(device, taskId);
+    if (task.kind === 'PICKUP') throw new BadRequestException('Это самовывоз: «Выдан клиенту»');
+    if (task.status === 'DELIVERED') return { status: task.status };
+    if (!['NEW', 'READY', 'ASSIGNED', 'PICKED_UP'].includes(task.status)) {
+      throw new BadRequestException('Заказ уже закрыт');
+    }
+    // Везёт — закрываем за того, кто везёт; иначе — за выбранного
+    const carrying = task.status === 'PICKED_UP';
+    const shift = carrying
+      ? await this.prisma.courierShift.findFirst({ where: { id: task.shiftId ?? '' }, include: { courier: true } })
+      : shiftId
+        ? await this.venueShift(device, shiftId)
+        : null;
+    if (!shift || (carrying && shift.courierId !== task.courierId)) {
+      if (carrying) throw new BadRequestException('Не найдена смена курьера, который везёт заказ');
+      throw new BadRequestException('Выберите курьера, который отвёз заказ');
+    }
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: device.tenantId }, select: { settings: true } });
+    const cfg = courierSettings(tenant?.settings);
+    const actor = `DEVICE:${device.id}`;
+    const before = { courierId: task.courierId, shiftId: task.shiftId, status: task.status };
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      const ok = await completeDelivery(tx, {
+        tenantId: device.tenantId,
+        task,
+        courierId: shift.courierId,
+        shiftId: shift.id,
+        from: [before.status as 'NEW' | 'READY' | 'ASSIGNED' | 'PICKED_UP'],
+        currentCourierId: before.courierId,
+        deliveryPay: cfg.deliveryPay,
+        now,
+        handoffMethod: 'DISPATCH',
+        data: {
+          readyAt: task.readyAt ?? now,
+          assignedAt: task.assignedAt ?? now,
+          pickedUpAt: task.pickedUpAt ?? now,
+          ...(carrying ? {} : { pickupMethod: 'DISPATCH' }),
+        },
+      });
+      if (!ok) throw new BadRequestException('Заказ только что изменился, попробуйте ещё раз');
+      if (!carrying) {
+        await this.releaseBatch(tx, task, shift.courierId);
+        await this.freePrevious(tx, before, shift.id);
+      }
+      // Вёз и больше ничего не везёт — едет обратно, в очередь встанет
+      // сканом QR. Не вёз (стоял в очереди) — место в очереди не трогаем.
+      if (carrying) {
+        const more = await tx.deliveryTask.count({ where: { shiftId: shift.id, status: 'PICKED_UP' } });
+        await tx.courierShift.update({
+          where: { id: shift.id },
+          data: more > 0 ? { lastDeliveredAt: now } : { state: 'RETURNING', lastDeliveredAt: now },
+        });
+      } else {
+        await tx.courierShift.update({ where: { id: shift.id }, data: { lastDeliveredAt: now } });
+      }
+      await tx.deliveryTaskEvent.create({
+        data: {
+          tenantId: device.tenantId,
+          taskId,
+          shiftId: shift.id,
+          courierId: shift.courierId,
+          type: 'DELIVERED',
+          actor,
+          meta: { method: 'DISPATCH' },
+        },
+      });
+    });
+    const number = await this.numberOf(taskId);
+    await this.tellPrevious(device.tenantId, before, shift.courierId, number);
+    await this.assignment.sendToCourier(
+      device.tenantId,
+      shift.courier.telegramUserId,
+      `✅ Раздача отметила №${number} доставленным, доставка засчитана.` +
+        (task.cashToCollect > 0 ? ` Наличные ${tengeText(task.cashToCollect)} — на вас, сдайте кассиру.` : ''),
+    );
+    if (before.status === 'ASSIGNED' && before.courierId !== shift.courierId) {
+      await this.assignment.assignVenue(device.venueId);
+    }
+    return { status: 'DELIVERED' as const };
+  }
+
+  /** Связку, которую повезёт другой курьер, разбиваем: каждый везёт своё */
+  private async releaseBatch(
+    tx: Prisma.TransactionClient,
+    task: { id: string; batchId: string | null; courierId: string | null },
+    courierId: string,
+  ) {
+    if (!task.batchId || task.courierId === courierId) return;
+    await tx.deliveryTask.updateMany({
+      where: { batchId: task.batchId },
+      data: { batchId: null, batchSeq: null },
+    });
+  }
+
+  /** Назначенный раньше курьер без других заказов — снова ждёт в очереди */
+  private async freePrevious(
+    tx: Prisma.TransactionClient,
+    before: { shiftId: string | null; status: string },
+    newShiftId: string,
+  ) {
+    if (before.status !== 'ASSIGNED' || !before.shiftId || before.shiftId === newShiftId) return;
+    const rest = await tx.deliveryTask.count({
+      where: { shiftId: before.shiftId, status: { in: ['ASSIGNED', 'PICKED_UP'] } },
+    });
+    if (rest === 0) {
+      await tx.courierShift.updateMany({ where: { id: before.shiftId, state: 'ASSIGNED' }, data: { state: 'WAITING' } });
+    }
+  }
+
+  private async tellPrevious(
+    tenantId: string,
+    before: { courierId: string | null; status: string },
+    newCourierId: string,
+    number: string,
+  ) {
+    if (before.status !== 'ASSIGNED' || !before.courierId || before.courierId === newCourierId) return;
+    const prev = await this.prisma.courier.findUnique({ where: { id: before.courierId }, select: { telegramUserId: true } });
+    if (!prev) return;
+    await this.assignment.sendToCourier(
+      tenantId,
+      prev.telegramUserId,
+      `↩️ №${number} забрал другой курьер, вам забирать не нужно. Вы остаётесь в очереди.`,
+    );
+  }
+
+  private async numberOf(taskId: string) {
+    const t = await this.prisma.deliveryTask.findUnique({
+      where: { id: taskId },
+      include: { order: { select: { number: true } } },
+    });
+    return t ? orderOf(t).number : '—';
   }
 
   /** Самовывоз выдан клиенту. Можно и из «Нового», если «Готов» забыли */

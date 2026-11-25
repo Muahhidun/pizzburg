@@ -75,6 +75,13 @@ interface Me {
   cash: {
     balance: number;
     pendingHandover: { amount: number; createdAt: string } | null;
+    /** Наличные заказы за сутки: по ним можно отметить «клиент оплатил иначе» */
+    cashOrders?: {
+      taskId: string;
+      number: string;
+      amount: number;
+      paidOtherwise: { status: 'PENDING' | 'CONFIRMED' | 'REJECTED'; paidBy: 'CARD' | 'KASPI' | null } | null;
+    }[];
     settlement: { earned: number; cashHeld: number; courierPays: number; venuePays: number } | null;
   };
   pending?: boolean;
@@ -537,7 +544,10 @@ export default function CourierPage() {
         </Card>
       )}
 
-      {!me.cash.settlement && (me.cash.balance > 0 || me.cash.pendingHandover) && (
+      {!me.cash.settlement &&
+        (me.cash.balance > 0 ||
+          me.cash.pendingHandover ||
+          me.cash.cashOrders?.some((o) => o.paidOtherwise?.status === 'PENDING')) && (
         <Card>
           <div className="flex items-baseline justify-between">
             <span className="opacity-70">Наличные на руках</span>
@@ -555,6 +565,53 @@ export default function CourierPage() {
             >
               Сдаю кассиру {tenge(me.cash.balance)}
             </button>
+          )}
+          {(me.cash.cashOrders?.length ?? 0) > 0 && (
+            <details className="mt-3 text-sm">
+              <summary className="cursor-pointer opacity-70">
+                Клиент заплатил не наличными? Отметьте заказ
+              </summary>
+              <ul className="mt-2 space-y-2">
+                {me.cash.cashOrders!.map((o) => (
+                  <li key={o.taskId} className="flex flex-wrap items-center justify-between gap-2">
+                    <span>
+                      №{o.number} · {tenge(o.amount)}
+                    </span>
+                    {o.paidOtherwise?.status === 'PENDING' ? (
+                      <span className="opacity-70">ждём кассира</span>
+                    ) : o.paidOtherwise?.status === 'CONFIRMED' ? (
+                      <span className="text-emerald-600">
+                        {o.paidOtherwise.paidBy === 'KASPI' ? 'Kaspi' : 'картой'} — подтверждено
+                      </span>
+                    ) : (
+                      <span className="flex gap-2">
+                        {o.paidOtherwise?.status === 'REJECTED' && <span className="text-red-600">кассир не подтвердил</span>}
+                        <button
+                          disabled={busy}
+                          className="btn-secondary px-2 py-1"
+                          onClick={() => {
+                            if (confirm(`№${o.number}: клиент оплатил картой через терминал? Кассир проверит.`))
+                              act(`/tasks/${o.taskId}/paid-otherwise`, { paidBy: 'CARD' });
+                          }}
+                        >
+                          Картой
+                        </button>
+                        <button
+                          disabled={busy}
+                          className="btn-secondary px-2 py-1"
+                          onClick={() => {
+                            if (confirm(`№${o.number}: клиент оплатил через Kaspi? Кассир проверит.`))
+                              act(`/tasks/${o.taskId}/paid-otherwise`, { paidBy: 'KASPI' });
+                          }}
+                        >
+                          Kaspi
+                        </button>
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </details>
           )}
         </Card>
       )}

@@ -1391,6 +1391,8 @@ enum PickupMethod {
   SCAN
   /// «Забрал без скана» — засчитывается с пометкой
   MANUAL
+  /// Отметила раздача на планшете (у курьера не было связи или он не нажал)
+  DISPATCH
 }
 
 enum HandoffMethod {
@@ -1400,6 +1402,8 @@ enum HandoffMethod {
   CODE
   /// Этап 4: «Выдал без кода»
   NO_CODE
+  /// Отметила раздача на планшете
+  DISPATCH
 }
 
 /// Одна плитка на планшете раздачи: доставка, самовывоз или довоз.
@@ -1533,6 +1537,9 @@ model CourierCashEntry {
   promptMessageId Int?
   /// Когда напомнили о неподтверждённой сдаче
   remindedAt    DateTime?
+  /// «Клиент оплатил иначе» (поправка ADJUSTMENT по заказу): CARD — картой
+  /// через терминал, KASPI — переводом. Подтверждает кассир
+  paidBy        String?
   createdAt     DateTime          @default(now())
 
   @@index([courierId, status, createdAt])

@@ -5,11 +5,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { esc, TelegramService } from '../telegram/telegram.service';
 import { AssignmentService, itemsLine, paymentLine } from './assignment.service';
 import { CourierActorValue } from './courier-auth.guard';
-import { CourierCashService } from './courier-cash.service';
+import { CourierCashService, PaidBy } from './courier-cash.service';
 import { CourierPhotoService } from './courier-photo.service';
 import { CourierRegistrationService } from './courier-registration.service';
 import { courierSettings } from './courier-settings';
 import { verifyQrToken } from './dispatch-qr';
+import { completeDelivery } from './delivery-completion';
 import { shortName } from './names';
 import { externalOf, externalPaymentLine, orderOf } from './task-order';
 
@@ -309,6 +310,12 @@ export class CourierAppService {
     return this.me(actor);
   }
 
+  /** «Клиент оплатил иначе»: карточка кассиру, он подтверждает */
+  async paidOtherwise(actor: CourierActorValue, taskId: string, paidBy: PaidBy) {
+    await this.cash.requestPaidOtherwise(actor.tenantId, actor.courier, taskId, paidBy);
+    return this.me(actor);
+  }
+
   // ─── «Забрал» ──────────────────────────────────────────────────
 
   /**
@@ -393,48 +400,21 @@ export class CourierAppService {
 
     const cfg = courierSettings(actor.tenantSettings);
     const now = new Date();
-    await this.prisma.$transaction(async (tx) => {
-      const changed = await tx.deliveryTask.updateMany({
-        where: { id: taskId, status: 'PICKED_UP', courierId: actor.courier.id },
-        data: {
-          status: 'DELIVERED',
-          deliveredAt: now,
-          handoffMethod: 'BUTTON',
-          handoffLat: lat ?? null,
-          handoffLng: lng ?? null,
-        },
-      });
-      if (changed.count === 0) return;
-      // Повтор «Доставлен» не начислит дважды: уникальные индексы на задачу
-      await tx.courierPayoutLine.createMany({
-        data: [
-          {
-            tenantId: actor.tenantId,
-            courierId: actor.courier.id,
-            shiftId: task.shiftId,
-            taskId,
-            type: task.kind === 'EXTRA_TRIP' ? 'EXTRA_TRIP' : 'DELIVERY',
-            amount: cfg.deliveryPay,
-          },
-        ],
-        skipDuplicates: true,
-      });
-      if (task.cashToCollect > 0) {
-        await tx.courierCashEntry.createMany({
-          data: [
-            {
-              tenantId: actor.tenantId,
-              courierId: actor.courier.id,
-              taskId,
-              type: 'COLLECTED',
-              status: 'CONFIRMED',
-              amount: task.cashToCollect,
-            },
-          ],
-          skipDuplicates: true,
-        });
-      }
-    });
+    const done = await this.prisma.$transaction((tx) =>
+      completeDelivery(tx, {
+        tenantId: actor.tenantId,
+        task,
+        courierId: actor.courier.id,
+        shiftId: task.shiftId,
+        from: ['PICKED_UP'],
+        currentCourierId: actor.courier.id,
+        deliveryPay: cfg.deliveryPay,
+        now,
+        handoffMethod: 'BUTTON',
+        data: { handoffLat: lat ?? null, handoffLng: lng ?? null },
+      }),
+    );
+    if (!done) return this.me(actor);
     await this.afterTrip(actor, task.shiftId, now);
     await this.event(actor, taskId, 'DELIVERED', lat != null ? { lat, lng } : undefined);
     return this.me(actor);

@@ -65,6 +65,10 @@ interface Task {
     comment: string | null;
     payment: string;
     cancellable: boolean;
+    /** Ручные статусы — когда у планшета пропадала связь */
+    canMarkPickedUp?: boolean;
+    canMarkDelivered?: boolean;
+    courierId?: string | null;
   };
 }
 
@@ -134,6 +138,8 @@ export default function DispatchPage() {
   const [ready, setReady] = useState(false);
   const [board, setBoard] = useState<Board | null>(null);
   const [offline, setOffline] = useState(false);
+  // С какого времени нет связи — чтобы раздача видела, что заказы стоят
+  const [offlineSince, setOfflineSince] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [undo, setUndo] = useState<{ id: string; number: number | string; until: number } | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -172,6 +178,7 @@ export default function DispatchPage() {
       skew.current = new Date(b.now).getTime() - Date.now();
       setBoard(b);
       setOffline(false);
+      setOfflineSince(null);
     } catch (e) {
       if (e instanceof Error && e.message === 'UNAUTHORIZED') {
         try {
@@ -183,6 +190,7 @@ export default function DispatchPage() {
         return;
       }
       setOffline(true);
+      setOfflineSince((s) => s ?? Date.now());
     }
   }, [token]);
 
@@ -234,11 +242,16 @@ export default function DispatchPage() {
     };
   }, []);
 
-  async function act(task: Task, action: 'ready' | 'undo-ready' | 'handed-over' | 'cancel') {
+  async function act(task: Task, action: TaskAction, shiftId?: string) {
     if (!token) return;
     setError(null);
     try {
-      await call(`/dispatch/tasks/${task.id}/${action}`, token, 'POST');
+      await call(
+        `/dispatch/tasks/${task.id}/${action}`,
+        token,
+        'POST',
+        shiftId ? { shiftId } : action === 'picked-up' || action === 'delivered' ? {} : undefined,
+      );
       if (action === 'ready' && board) {
         setUndo({ id: task.id, number: task.number, until: Date.now() + board.readyUndoSec * 1000 });
       }
@@ -382,6 +395,13 @@ export default function DispatchPage() {
           + Довоз
         </button>
       </header>
+      {offline && offlineSince && (
+        <div className="bg-red-600 px-4 py-2 text-center text-lg font-semibold text-white">
+          Нет интернета с {clock(new Date(offlineSince).toISOString())} ({minutes(new Date(offlineSince).toISOString(), Date.now())} мин).
+          Нажатия не доходят, курьеры не получают заказы. Когда связь вернётся — проверьте плитки:
+          долгое нажатие → «Забрал курьер…» или «Доставлен».
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1">
         <div className="grid min-h-0 flex-1 grid-cols-3 gap-3 p-3">
@@ -500,10 +520,12 @@ export default function DispatchPage() {
             <TaskDialog
               task={t}
               nowMs={nowMs}
+              couriers={board.couriers}
+              photos={photos}
               onClose={() => setTaskOpen(null)}
-              onAction={async (a) => {
+              onAction={async (a, shiftId) => {
                 setTaskOpen(null);
-                await act(t, a);
+                await act(t, a, shiftId);
               }}
             />
           ) : null;
@@ -764,18 +786,43 @@ const STATUS_TEXT: Record<TaskStatus, string> = {
 };
 
 /** Большая карточка заказа: весь состав, адрес, телефон, оплата и действия */
+type TaskAction = 'ready' | 'undo-ready' | 'handed-over' | 'cancel' | 'picked-up' | 'delivered';
+
 function TaskDialog({
   task,
   nowMs,
+  couriers,
+  photos,
   onClose,
   onAction,
 }: {
   task: Task;
   nowMs: number;
+  couriers: Courier[];
+  photos: Record<string, string>;
   onClose: () => void;
-  onAction: (a: 'ready' | 'handed-over' | 'cancel') => void;
+  onAction: (a: TaskAction, shiftId?: string) => void;
 }) {
+  // Ручной статус: сначала выбрать курьера из тех, кто на смене
+  const [pick, setPick] = useState<'picked-up' | 'delivered' | null>(null);
   const d = task.details;
+  if (pick) {
+    return (
+      <CourierPicker
+        title={pick === 'picked-up' ? `Кто забрал №${task.number}?` : `Кто отвёз №${task.number}?`}
+        hint={
+          pick === 'picked-up'
+            ? 'Заказ станет «В пути» у этого курьера, ему придёт сообщение.'
+            : 'Доставка засчитается курьеру в оплату' + (task.cash > 0 ? `, наличные ${tenge(task.cash)} — на нём.` : '.')
+        }
+        couriers={couriers}
+        photos={photos}
+        current={d?.courierId ?? null}
+        onBack={() => setPick(null)}
+        onPick={(shiftId) => onAction(pick, shiftId)}
+      />
+    );
+  }
   const pickup = task.kind === 'PICKUP';
   const active = ['NEW', 'READY', 'ASSIGNED'].includes(task.status);
   return (
@@ -870,6 +917,23 @@ function TaskDialog({
               Выдан клиенту
             </button>
           )}
+          {d?.canMarkPickedUp && (
+            <button onClick={() => setPick('picked-up')} className="rounded-xl bg-sky-600 py-3 text-xl font-semibold text-white">
+              Забрал курьер…
+            </button>
+          )}
+          {d?.canMarkDelivered && (
+            <button
+              onClick={() => {
+                if (task.status === 'PICKED_UP') {
+                  if (confirm(`Отметить №${task.number} доставленным за курьера ${task.courier ?? ''}?`)) onAction('delivered');
+                } else setPick('delivered');
+              }}
+              className="rounded-xl bg-emerald-600 py-3 text-xl font-semibold text-white"
+            >
+              {task.status === 'PICKED_UP' ? 'Доставлен' : 'Доставлен (выбрать курьера)'}
+            </button>
+          )}
           {d?.cancellable && (
             <button
               onClick={() => {
@@ -889,6 +953,57 @@ function TaskDialog({
             Закрыть
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Выбор курьера для ручного статуса: все, кто сейчас на смене у раздачи */
+function CourierPicker({
+  title,
+  hint,
+  couriers,
+  photos,
+  current,
+  onBack,
+  onPick,
+}: {
+  title: string;
+  hint: string;
+  couriers: Courier[];
+  photos: Record<string, string>;
+  current: string | null;
+  onBack: () => void;
+  onPick: (shiftId: string) => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4" onClick={onBack}>
+      <div className="flex max-h-full w-[640px] flex-col rounded-2xl bg-white p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="text-3xl font-black">{title}</div>
+        <p className="mt-1 text-base text-neutral-500">{hint}</p>
+        <div className="mt-4 grid min-h-0 flex-1 grid-cols-2 gap-2 overflow-y-auto">
+          {couriers.map((c) => (
+            <button
+              key={c.shiftId}
+              onClick={() => onPick(c.shiftId)}
+              className={`flex items-center gap-3 rounded-xl p-3 text-left ${
+                c.courierId === current ? 'bg-emerald-100 ring-2 ring-emerald-500' : 'bg-neutral-100'
+              }`}
+            >
+              <Face name={c.name} src={photos[c.courierId]} />
+              <span>
+                <span className="block text-xl font-semibold">{c.name}</span>
+                <span className="text-sm text-neutral-500">
+                  {c.courierId === current ? 'назначен на этот заказ' : COURIER_STATE[c.state]}
+                </span>
+              </span>
+            </button>
+          ))}
+          {couriers.length === 0 && <p className="col-span-2 text-lg text-neutral-500">На смене никого нет</p>}
+        </div>
+        <button onClick={onBack} className="mt-4 rounded-xl bg-neutral-100 py-3 text-lg">
+          Назад
+        </button>
       </div>
     </div>
   );

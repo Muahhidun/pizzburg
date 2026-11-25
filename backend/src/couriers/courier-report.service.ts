@@ -27,6 +27,8 @@ export type ReportTask = {
   courierName: string | null;
   batchId: string | null;
   pickupMethod: string | null;
+  /** DISPATCH — «Доставлен» отметила раздача */
+  handoffMethod?: string | null;
   number: string;
   /** APP — наш заказ, POSTER — старое приложение или сайт через Poster */
   source?: string;
@@ -87,12 +89,19 @@ export function buildDeliveryReport(input: {
   const { from, to, tasks, shifts, events, payouts } = input;
   const now = input.now ?? new Date();
   const delivered = tasks.filter((t) => t.status === 'DELIVERED');
-  const stage = (t: ReportTask) => ({
-    kitchen: t.scheduled ? null : min(t.orderAt, t.readyAt),
-    wait: min(t.readyAt, t.pickedUpAt),
-    onWay: min(t.pickedUpAt, t.deliveredAt),
-    total: t.scheduled ? null : min(t.orderAt, t.deliveredAt),
-  });
+  // Отметки раздачи задним числом (у планшета не было связи): время
+  // нажатия, а не события, — в сроки их не берём, только в счёт
+  const marked = (t: ReportTask) => t.pickupMethod === 'DISPATCH' || t.handoffMethod === 'DISPATCH';
+  const stage = (t: ReportTask) => {
+    const pickedLate = t.pickupMethod === 'DISPATCH';
+    const deliveredLate = t.handoffMethod === 'DISPATCH';
+    return {
+      kitchen: t.scheduled || (pickedLate && deliveredLate) ? null : min(t.orderAt, t.readyAt),
+      wait: pickedLate ? null : min(t.readyAt, t.pickedUpAt),
+      onWay: pickedLate || deliveredLate ? null : min(t.pickedUpAt, t.deliveredAt),
+      total: t.scheduled || deliveredLate ? null : min(t.orderAt, t.deliveredAt),
+    };
+  };
   const totals = delivered.map((t) => stage(t).total).filter((x): x is number => x !== null);
   const share = (limit: number, list: number[]) =>
     list.length ? Math.round((list.filter((x) => x <= limit).length / list.length) * 100) : null;
@@ -108,6 +117,7 @@ export function buildDeliveryReport(input: {
     batches: new Set(tasks.map((t) => t.batchId).filter(Boolean)).size,
     manualPickups: tasks.filter((t) => t.pickupMethod === 'MANUAL').length,
     scanPickups: tasks.filter((t) => t.pickupMethod === 'SCAN').length,
+    dispatchMarked: tasks.filter(marked).length,
     pickupTimeouts: count('PICKUP_TIMEOUT'),
     courierLeft: count('COURIER_LEFT'),
     couriers: new Set(shifts.map((s) => s.courierId)).size,
@@ -182,6 +192,7 @@ export function buildDeliveryReport(input: {
         extraTrips: done.filter((t) => t.kind === 'EXTRA_TRIP').length,
         batches: new Set(mine.map((t) => t.batchId).filter(Boolean)).size,
         manualPickups: mine.filter((t) => t.pickupMethod === 'MANUAL').length,
+        dispatchMarked: mine.filter(marked).length,
         pickupTimeouts: count('PICKUP_TIMEOUT', id),
         left: count('COURIER_LEFT', id),
         onWay: stats(done.map((t) => stage(t).onWay)).avg,
@@ -209,6 +220,7 @@ export function buildDeliveryReport(input: {
         courier: t.courierName,
         batch: !!t.batchId,
         pickupMethod: t.pickupMethod,
+        dispatchMarked: marked(t),
         scheduled: t.scheduled,
         orderAt: iso(t.orderAt),
         readyAt: iso(t.readyAt),
@@ -271,6 +283,7 @@ export class CourierReportService {
         courierName: t.courier ? shortName(t.courier.fullName) : null,
         batchId: t.batchId,
         pickupMethod: t.pickupMethod,
+        handoffMethod: t.handoffMethod,
         number: orderOf(t).number,
         source: t.source,
         // Довоз считаем от его создания, а не от исходного заказа

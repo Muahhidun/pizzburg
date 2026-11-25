@@ -23,6 +23,7 @@ type Report = {
     batches: number;
     manualPickups: number;
     scanPickups: number;
+    dispatchMarked?: number;
     pickupTimeouts: number;
     courierLeft: number;
     couriers: number;
@@ -81,6 +82,7 @@ type Report = {
     courier: string | null;
     batch: boolean;
     pickupMethod: string | null;
+    dispatchMarked?: boolean;
     scheduled: boolean;
     orderAt: string;
     readyAt: string | null;
@@ -210,7 +212,7 @@ export default function DeliveriesReportPage() {
 
           <section className="mt-5 rounded-xl border border-black/10 p-4 dark:border-white/10">
             <h2 className="font-semibold">Где уходит время</h2>
-            <p className="text-sm text-neutral-500">Медиана по доставленным; предзаказы не учитываются</p>
+            <p className="text-sm text-neutral-500">Медиана по доставленным; предзаказы и отметки раздачи задним числом не учитываются</p>
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Stage label="Кухня" sub="от заказа до «Готов»" stat={s.kitchen} />
               <Stage label="Ждал курьера" sub="от «Готов» до «Поехали»" stat={s.wait} />
@@ -223,6 +225,11 @@ export default function DeliveriesReportPage() {
             <dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 text-sm md:grid-cols-3">
               <Row k="Забрали со сканом QR" v={s.scanPickups} />
               <Row k="«Уехал, забыл отсканировать»" v={s.manualPickups} warn={s.manualPickups > 0} />
+              <Row
+                k="Отметила раздача (не было связи)"
+                v={s.dispatchMarked ?? 0}
+                warn={(s.dispatchMarked ?? 0) > 0}
+              />
               <Row k="Не пришли за заказом (10 мин)" v={s.pickupTimeouts} warn={s.pickupTimeouts > 0} />
               <Row k="Раздача отметила «Уехал»" v={s.courierLeft} />
               <Row k="Связок по 2 заказа" v={s.batches} />
@@ -395,6 +402,7 @@ export default function DeliveriesReportPage() {
                     <td className="py-1 pr-3 tabular-nums">
                       {clock(d.pickedUpAt)}
                       {d.pickupMethod === 'MANUAL' && <span className="ml-1 text-xs text-amber-600">без скана</span>}
+                      {d.dispatchMarked && <span className="ml-1 text-xs text-amber-600">отметила раздача</span>}
                     </td>
                     <td className="py-1 pr-3 tabular-nums">
                       {d.status === 'DELIVERED' ? clock(d.deliveredAt) : (STATUS[d.status] ?? d.status)}

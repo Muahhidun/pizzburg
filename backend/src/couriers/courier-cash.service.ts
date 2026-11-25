@@ -27,7 +27,12 @@ const CB = {
   other: 'cash:other:',
   settleOk: 'settle:ok:',
   settleNo: 'settle:no:',
+  payOk: 'pay:ok:',
+  payNo: 'pay:no:',
 };
+
+export type PaidBy = 'CARD' | 'KASPI';
+const PAID_BY_TEXT: Record<PaidBy, string> = { CARD: 'картой через терминал', KASPI: 'через Kaspi' };
 
 const tenge = (n: number) => `${n.toLocaleString('ru-RU')} ₸`;
 
@@ -111,14 +116,16 @@ export class CourierCashService implements OnModuleInit {
 
   /** Блок «Наличка» для экрана курьера */
   async summary(courierId: string) {
-    const [balance, pending, settlement] = await Promise.all([
+    const [balance, pending, settlement, cashOrders] = await Promise.all([
       this.balance(courierId),
       this.prisma.courierCashEntry.findFirst({
         where: { courierId, type: 'HANDED_IN', status: 'PENDING' },
       }),
       this.prisma.courierSettlement.findFirst({ where: { courierId, status: 'PENDING' } }),
+      this.cashOrders(courierId),
     ]);
     return {
+      cashOrders,
       balance,
       pendingHandover: pending
         ? { amount: pending.claimedAmount ?? -pending.amount, createdAt: pending.createdAt.toISOString() }
@@ -132,6 +139,144 @@ export class CourierCashService implements OnModuleInit {
           }
         : null,
     };
+  }
+
+  /**
+   * Заказы за наличные, которые курьер отвёз за последние сутки и деньги
+   * по которым ещё не сданы: по ним можно сказать «клиент оплатил иначе».
+   */
+  private async cashOrders(courierId: string) {
+    const since = new Date(Date.now() - 24 * 3_600_000);
+    const collected = await this.prisma.courierCashEntry.findMany({
+      where: { courierId, type: 'COLLECTED', status: 'CONFIRMED', createdAt: { gte: since }, taskId: { not: null } },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      include: { task: { include: { order: { select: { number: true } } } } },
+    });
+    if (collected.length === 0) return [];
+    const changes = await this.prisma.courierCashEntry.findMany({
+      where: { courierId, type: 'ADJUSTMENT', taskId: { in: collected.map((c) => c.taskId!) } },
+      orderBy: { createdAt: 'desc' },
+    });
+    return collected.map((c) => {
+      const change = changes.find((a) => a.taskId === c.taskId) ?? null;
+      return {
+        taskId: c.taskId!,
+        number: c.task ? orderOf(c.task).number : '—',
+        amount: c.amount,
+        paidOtherwise: change ? { status: change.status, paidBy: change.paidBy } : null,
+      };
+    });
+  }
+
+  // ─── «Клиент оплатил иначе» ────────────────────────────────────
+
+  /**
+   * Курьер отвёз заказ «за наличные», а клиент заплатил картой или
+   * через Kaspi (Дом, 25.11.2026). Курьер сам долг не списывает: кассиру
+   * приходит карточка, он сверяет по терминалу или Kaspi и подтверждает.
+   * До подтверждения наличные числятся на курьере.
+   */
+  async requestPaidOtherwise(tenantId: string, courier: Courier, taskId: string, paidBy: PaidBy) {
+    const collected = await this.prisma.courierCashEntry.findFirst({
+      where: { tenantId, courierId: courier.id, taskId, type: 'COLLECTED', status: 'CONFIRMED' },
+      include: { task: { include: { order: { select: { number: true } } } } },
+    });
+    if (!collected) throw new BadRequestException('По этому заказу наличных на вас нет');
+    const before = await this.prisma.courierCashEntry.findFirst({
+      where: { courierId: courier.id, taskId, type: 'ADJUSTMENT', status: { in: ['PENDING', 'CONFIRMED'] } },
+    });
+    if (before) {
+      throw new BadRequestException(before.status === 'PENDING' ? 'Уже отправлено кассиру, ждём ответа' : 'Кассир уже подтвердил');
+    }
+    const number = collected.task ? orderOf(collected.task).number : '—';
+    const entry = await this.prisma.courierCashEntry.create({
+      data: {
+        tenantId,
+        courierId: courier.id,
+        taskId,
+        type: 'ADJUSTMENT',
+        status: 'PENDING',
+        amount: -collected.amount,
+        paidBy,
+        note: `№${number}: клиент оплатил ${PAID_BY_TEXT[paidBy]}`,
+      },
+    });
+    const chat = await this.telegram.cashierTargetChat(tenantId);
+    if (chat) {
+      const { result } = await this.telegram.call(tenantId, 'sendMessage', {
+        chat_id: chat,
+        parse_mode: 'HTML',
+        text:
+          `💳 <b>${esc(shortName(courier.fullName))}: №${esc(number)} оплачен ${PAID_BY_TEXT[paidBy]}</b>\n` +
+          `Курьер говорит, что ${tenge(collected.amount)} клиент заплатил не наличными. ` +
+          (paidBy === 'CARD' ? 'Проверьте по терминалу' : 'Проверьте перевод в Kaspi') +
+          ' и подтвердите — тогда эта сумма снимется с курьера.',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: '✅ Подтверждаю', callback_data: `${CB.payOk}${entry.id}` },
+              { text: '✖ Нет, были наличные', callback_data: `${CB.payNo}${entry.id}` },
+            ],
+          ],
+        },
+      });
+      if (result?.message_id) {
+        await this.prisma.courierCashEntry.update({
+          where: { id: entry.id },
+          data: { cardChatId: chat, cardMessageId: result.message_id },
+        });
+      }
+    }
+    return entry;
+  }
+
+  async resolvePaidOtherwise(tenantId: string, entryId: string, who: string, ok: boolean) {
+    const entry = await this.prisma.courierCashEntry.findFirst({
+      where: { id: entryId, tenantId, type: 'ADJUSTMENT' },
+      include: { courier: true, task: { include: { order: { select: { number: true } } } } },
+    });
+    if (!entry) return false;
+    const changed = await this.prisma.courierCashEntry.updateMany({
+      where: { id: entryId, status: 'PENDING' },
+      data: { status: ok ? 'CONFIRMED' : 'REJECTED', resolvedBy: who, resolvedAt: new Date() },
+    });
+    if (changed.count === 0) return false;
+    const number = entry.task ? orderOf(entry.task).number : '—';
+    const amount = -entry.amount;
+    const paidBy = (entry.paidBy ?? 'CARD') as PaidBy;
+    if (ok && entry.taskId) {
+      // Заказ больше не «за наличные»: так он и попадёт в отчёты
+      await this.prisma.deliveryTask.update({
+        where: { id: entry.taskId },
+        data: { cashToCollect: 0, ...(paidBy === 'CARD' ? { needsTerminal: true } : {}) },
+      });
+      await this.prisma.deliveryTaskEvent.create({
+        data: {
+          tenantId,
+          taskId: entry.taskId,
+          courierId: entry.courierId,
+          type: 'PAYMENT_CHANGED',
+          actor: `CASHIER:${who}`,
+          meta: { from: 'CASH', to: paidBy, amount },
+        },
+      });
+    }
+    await this.closeCard(
+      tenantId,
+      entry.cardChatId,
+      entry.cardMessageId,
+      ok ? `✅ Подтвердил(а): ${esc(who)}` : `✖ Наличные были, долг остаётся: ${esc(who)}`,
+    );
+    const left = await this.balance(entry.courierId);
+    await this.assignment.sendToCourier(
+      tenantId,
+      entry.courier.telegramUserId,
+      ok
+        ? `Кассир подтвердил: №${number} оплачен ${PAID_BY_TEXT[paidBy]}, ${tenge(amount)} сняты с вас. На руках: ${tenge(left)}.`
+        : `Кассир не подтвердил оплату №${number} ${PAID_BY_TEXT[paidBy]}: ${tenge(amount)} остаются на вас. На руках: ${tenge(left)}.`,
+    );
+    return true;
   }
 
   // ─── Сдача налички ─────────────────────────────────────────────
@@ -308,7 +453,7 @@ export class CourierCashService implements OnModuleInit {
 
   async handle(tenantId: string, update: TgUpdate): Promise<boolean> {
     const cb = update.callback_query;
-    if (cb?.data && /^(cash|settle):/.test(cb.data)) {
+    if (cb?.data && /^(cash|settle|pay):/.test(cb.data)) {
       await this.onButton(tenantId, cb);
       return true;
     }
@@ -331,6 +476,12 @@ export class CourierCashService implements OnModuleInit {
       const ok = data.startsWith(CB.settleOk);
       const done = ok ? await this.confirmSettlement(tenantId, id, who) : await this.disputeSettlement(tenantId, id, who);
       return answer(done ? (ok ? 'Расчёт закрыт' : 'Отправлено руководству') : 'Уже обработано');
+    }
+
+    if (data.startsWith(CB.payOk) || data.startsWith(CB.payNo)) {
+      const ok = data.startsWith(CB.payOk);
+      const done = await this.resolvePaidOtherwise(tenantId, id, who, ok);
+      return answer(done ? (ok ? 'Подтверждено' : 'Отмечено') : 'Уже обработано');
     }
 
     const entry = await this.prisma.courierCashEntry.findFirst({
