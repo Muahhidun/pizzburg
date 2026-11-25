@@ -57,8 +57,8 @@ function world(poster: Record<string, Record<string, unknown>[]>, ours: { acc: s
     tenant: { findUnique: async () => ({ settings: {} }) },
     posterAccount: {
       findMany: async () => [
-        { id: 'pb', token: 'tok-pb' },
-        { id: 'sun', token: 'tok-sun' },
+        { id: 'pb', name: 'PizzBurg', token: 'tok-pb' },
+        { id: 'sun', name: 'SunDay', token: 'tok-sun' },
       ],
     },
     orderDispatch: {
@@ -212,4 +212,27 @@ test('наш заказ и уже уехавший на планшете не о
     board({ id: 'k', venueId: 'v', source: 'POSTER', status: 'PICKED_UP' }).service.cancelTask({ id: 'd', tenantId: 't', venueId: 'v', name: '' } as any, 'k'),
     /уже везёт/,
   );
+});
+
+// ─── Запрос к Poster ─────────────────────────────────────────────────
+
+import { PosterClient } from '../src/poster/poster.client';
+
+test('онлайн-заказы запрашиваются за весь день, по часам заведения', async () => {
+  const orig = globalThis.fetch;
+  let url = '';
+  globalThis.fetch = (async (u: string) => {
+    url = u;
+    return { ok: true, json: async () => ({ response: [] }) };
+  }) as any;
+  try {
+    await new PosterClient().getIncomingOrders('x', '2026-11-25');
+  } finally {
+    globalThis.fetch = orig;
+  }
+  const q = new URL(url).searchParams;
+  // Голая дата в обоих полях — пустой промежуток 00:00–00:00
+  assert.equal(q.get('date_from'), '2026-11-25 00:00:00');
+  assert.equal(q.get('date_to'), '2026-11-25 23:59:59');
+  assert.equal(q.get('timezone'), 'client');
 });

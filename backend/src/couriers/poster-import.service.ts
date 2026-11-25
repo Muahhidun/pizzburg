@@ -88,6 +88,8 @@ export class PosterImportService {
   private readonly logger = new Logger(PosterImportService.name);
   /** Набор полей ответа Poster пишем в лог один раз — для разбора, без значений */
   private loggedShape = false;
+  /** Последняя сводка по аккаунту — пишем в лог, только когда она меняется */
+  private lastSummary = new Map<string, string>();
   private running = false;
 
   constructor(
@@ -124,7 +126,7 @@ export class PosterImportService {
     const accounts = await this.prisma.posterAccount.findMany({
       where: { tenantId, isActive: true },
       orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
-      select: { id: true, token: true },
+      select: { id: true, name: true, token: true },
     });
     if (accounts.length === 0) return { created: 0, merged: 0 };
 
@@ -163,17 +165,30 @@ export class PosterImportService {
         this.logger.warn(`Poster: входящие заказы не получены: ${e instanceof Error ? e.message : String(e)}`);
         continue;
       }
-      if (!Array.isArray(list)) continue;
+      if (!Array.isArray(list)) {
+        this.logger.warn(`Poster: онлайн-заказы пришли не списком (${typeof list})`);
+        continue;
+      }
       if (!this.loggedShape && list[0]) {
         this.loggedShape = true;
         this.logger.log(`Poster входящий заказ, поля: ${Object.keys(list[0]).sort().join(', ')}`);
       }
+      // Сводка без личных данных: сколько пришло и почему не взяли
+      const why = { принято: 0, наши: 0, яндекс: 0, вЗале: 0, старые: 0, безАдреса: 0, уже: 0 };
       for (const io of list) {
         const id = str(io.incoming_order_id);
         if (!id) continue;
         const key = `${acc.id}:${id}`;
         const status = num(io.status);
         const seen = known.get(key);
+        if (status === 1) {
+          why.принято++;
+          if (seen) why.уже++;
+          else if (ours.has(key)) why.наши++;
+          else if (isForeignAggregator(io)) why.яндекс++;
+          else if (![2, 3].includes(num(io.service_mode))) why.вЗале++;
+          else if ((posterTime(io.created_at) ?? now) < since) why.старые++;
+        }
 
         // Кассир отклонил — плитку, которую ещё не взяли в работу, снимаем
         if (status === 7 && seen && ['NEW', 'READY'].includes(seen.status)) {
@@ -190,7 +205,13 @@ export class PosterImportService {
         const res = await this.importOne(tenantId, venueId, acc.id, acc.token, io, createdAt, mode === 2, now);
         if (res === 'created') created++;
         if (res === 'merged') merged++;
+        if (res === 'skipped') why.безАдреса++;
         known.set(key, { id: '', status: 'NEW' });
+      }
+      const summary = `всего ${list.length}, ${Object.entries(why).map(([k, v]) => `${k} ${v}`).join(', ')}`;
+      if (this.lastSummary.get(acc.id) !== summary) {
+        this.lastSummary.set(acc.id, summary);
+        this.logger.log(`Poster онлайн-заказы за день (${acc.name}): ${summary}`);
       }
     }
     if (created || merged) this.logger.log(`Из Poster: новых плиток ${created}, склеено ${merged}`);
