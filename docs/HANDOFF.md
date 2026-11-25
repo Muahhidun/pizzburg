@@ -11,6 +11,14 @@ Cloudflare R2 и Railway staging, `docs/LOYALTY.md` — правила и про
 собственного кэшбэка.
 Подключение уведомлений описано в `docs/FCM_SETUP.md`.
 
+## Напитки WeDrink на кассу WDrink, этап 8 (начат 25.11.2026)
+
+План и договорённость с WDrink — `docs/WDRINK_INTEGRATION.md`, решение —
+`DECISIONS.md` §15, этап — `ROADMAP.md` 8. Вторая половина — репозиторий
+`Muahhidun/zakupwedrink` (`docs/pizzburg-delivery-module.md`), ветка
+`claude/clever-cori-bedn3x` в обоих. Пока написан только план; боевые
+системы, Poster Sunday и прод не трогались.
+
 ## Курьерский модуль, этап 7.1 (23.11.2026, ветка `feature/couriers`)
 
 Постановка — `docs/COURIER_SYSTEM_SPEC.md`, решение — `DECISIONS.md` §14,
