@@ -558,6 +558,8 @@ export interface Settings {
     name: string;
     sortOrder: number;
     isActive: boolean;
+    /** POSTER — планшет Poster, WDRINK — касса WDrink */
+    kind?: 'POSTER' | 'WDRINK';
   }[];
   availabilityNow: AvailabilityNow;
   /// Сколько клиентов уже получили подарок за вход

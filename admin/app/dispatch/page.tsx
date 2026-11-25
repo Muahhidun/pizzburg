@@ -48,7 +48,9 @@ interface Task {
   needsTerminal: boolean;
   extraReason: string | null;
   alert: 'NO_COURIER' | 'NOT_READY' | 'ON_WAY' | null;
-  items: { name: string; qty: number; modifiers: string[] }[];
+  items: { name: string; qty: number; modifiers: string[]; source?: string | null }[];
+  /** Напитки с кассы WDrink: их приносят на раздачу */
+  drinks?: { name: string; accepted: boolean } | null;
 }
 
 const ALERT_TEXT: Record<NonNullable<Task['alert']>, string> = {
@@ -549,11 +551,21 @@ function Tile({
       {task.extraReason && (
         <div className="mt-1.5 text-base font-semibold text-amber-700">{task.extraReason}</div>
       )}
+      {task.drinks && (
+        <div
+          className={`mt-1.5 text-sm font-semibold ${task.drinks.accepted ? 'text-emerald-700' : 'text-amber-700'}`}
+        >
+          🥤 {task.drinks.name}: {task.drinks.accepted ? 'приняли, принесут на раздачу' : 'ещё не приняли'}
+        </div>
+      )}
       <ul className="mt-1.5 space-y-0.5 text-base leading-snug">
         {task.items.map((i, idx) => (
           <li key={idx}>
             {i.qty > 1 && <b>{i.qty}× </b>}
             {i.name}
+            {i.source && (
+              <span className="ml-1 rounded bg-sky-100 px-1 text-sm text-sky-800">{i.source}</span>
+            )}
             {i.modifiers.length > 0 && (
               <span className="text-neutral-500"> · {i.modifiers.join(', ')}</span>
             )}

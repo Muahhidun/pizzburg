@@ -11,6 +11,7 @@ import { PromotionsService } from '../promotions/promotions.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CancelReasonsService } from './cancel-reasons.service';
 import { TelegramService } from '../telegram/telegram.service';
+import { WdrinkClient, wdrinkDryRun } from '../wdrink/wdrink.client';
 import { ServiceReceiptService } from './service-receipt.service';
 import { OrdersService } from './orders.service';
 import { lineTotal, recalcAfterShortage, shrinkToOriginal } from './shortage-math';
@@ -51,6 +52,7 @@ export class ShortageService {
     private readonly cancelReasons: CancelReasonsService,
     private readonly telegram: TelegramService,
     private readonly serviceReceipt: ServiceReceiptService,
+    private readonly wdrink?: WdrinkClient,
   ) {}
 
   // ─── Кассир ───────────────────────────────────────────────────────
@@ -503,7 +505,11 @@ export class ShortageService {
       where: { id: orderId },
       include: {
         items: { include: { product: { select: { posterAccountId: true } } } },
-        dispatches: { include: { posterAccount: { select: { name: true } } } },
+        dispatches: {
+          include: {
+            posterAccount: { select: { name: true, kind: true, token: true, apiUrl: true } },
+          },
+        },
       },
     });
 
@@ -644,7 +650,24 @@ export class ShortageService {
         // Отдел, который сам отклонил чек, просить отклонить его ещё раз
         // не нужно — это шум в единственном месте, куда кассир смотрит.
         const alreadyRejected = d.posterStatus === 'REJECTED';
-        if (!alreadyRejected && d.posterOrderId && d.posterOrderId !== 'dry-run') {
+        if (d.posterAccount.kind === 'WDRINK') {
+          // Касса WDrink: заказ снимаем сами, кассиру отклонять нечего.
+          // Он ещё не принят (нехватку отмечают до «Принять»), поэтому
+          // окна «не готовьте» на кассе не будет — он просто исчезнет.
+          if (
+            !alreadyRejected &&
+            d.posterOrderId &&
+            d.posterOrderId !== 'dry-run' &&
+            this.wdrink &&
+            !wdrinkDryRun()
+          ) {
+            try {
+              await this.wdrink.cancelOrder(d.posterAccount, d.posterOrderId, 'VENUE');
+            } catch (e) {
+              this.logger.warn(`WDrink: заказ ${d.posterOrderId} не снят: ${e}`);
+            }
+          }
+        } else if (!alreadyRejected && d.posterOrderId && d.posterOrderId !== 'dry-run') {
           await this.telegram.notifyCashier(
             order.tenantId,
             `🚫 <b>Заказ №${order.number}</b>: в части «${d.posterAccount.name}» ` +
@@ -800,10 +823,15 @@ export class ShortageService {
   private async isAcceptedInPoster(dispatch: {
     posterOrderId: string | null;
     posterStatus: string | null;
-    posterAccount: { token: string };
+    posterAccount: { token: string; kind?: string | null };
   }) {
     if (!dispatch.posterOrderId || dispatch.posterOrderId === 'dry-run') {
       return false;
+    }
+    // Касса WDrink отмечает нехватку только до «Принять», и статус её
+    // части опрос обновляет вместе с самой нехваткой
+    if (dispatch.posterAccount.kind === 'WDRINK') {
+      return dispatch.posterStatus === 'ACCEPTED';
     }
     try {
       const live = await this.poster.getIncomingOrder(

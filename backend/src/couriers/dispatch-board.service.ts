@@ -140,7 +140,20 @@ export class DispatchBoardService {
               createdAt: true,
               scheduledAt: true,
               paymentMethod: true,
-              items: { select: { name: true, qty: true, modifiers: true, isUnavailable: true } },
+              items: {
+                select: {
+                  name: true,
+                  qty: true,
+                  modifiers: true,
+                  isUnavailable: true,
+                  product: { select: { posterAccount: { select: { name: true, kind: true } } } },
+                },
+              },
+              // Касса WDrink (DECISIONS §15): приняли ли напитки
+              dispatches: {
+                where: { posterAccount: { kind: 'WDRINK' }, status: { not: 'VOID' } },
+                select: { posterStatus: true, posterAccount: { select: { name: true } } },
+              },
             },
           },
         },
@@ -238,12 +251,23 @@ export class DispatchBoardService {
         needsTerminal: t.needsTerminal,
         extraReason: t.extraReason,
         alert: taskAlert(t, alertCtx, cfg, now),
+        // Напитки готовит другая касса и приносит на раздачу: видно, приняла
+        // ли она заказ, чтобы не нажать «Готов» без них
+        drinks:
+          t.kind === 'EXTRA_TRIP' || !t.order.dispatches?.length
+            ? null
+            : {
+                name: t.order.dispatches[0].posterAccount.name,
+                accepted: t.order.dispatches.every((d) => d.posterStatus === 'ACCEPTED'),
+              },
         // У довоза свой «состав» — причина; весь заказ на плитке путал бы
         items: t.kind === 'EXTRA_TRIP' ? [] : t.order.items
           .filter((i) => !i.isUnavailable)
           .map((i) => ({
             name: i.name,
             qty: i.qty,
+            source:
+              i.product?.posterAccount?.kind === 'WDRINK' ? i.product.posterAccount.name : null,
             modifiers: ((i.modifiers as Modifier[] | null) ?? [])
               .map((m) => m?.name)
               .filter((n): n is string => !!n),

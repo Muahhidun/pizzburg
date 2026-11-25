@@ -22,6 +22,13 @@ import { ServiceReceiptService } from './service-receipt.service';
 import { OrderMessagesService } from './order-messages.service';
 import { PaymentsService } from '../payments/payments.service';
 import { posterModifications } from './poster-modifications';
+import { WdrinkClient, wdrinkDryRun, wdrinkPartStatus } from '../wdrink/wdrink.client';
+import {
+  isWdrink,
+  wdrinkExternalId,
+  wdrinkItems,
+  wdrinkShowAt,
+} from '../wdrink/wdrink-dispatch';
 
 /**
  * Окно, в котором повторный такой же заказ считается сорвавшимся
@@ -118,6 +125,9 @@ export class OrdersService {
     private readonly serviceReceipt: ServiceReceiptService,
     private readonly messages: OrderMessagesService,
     private readonly payments: PaymentsService,
+    // Касса WDrink как отдел (DECISIONS §15). Последним: без отдела WDRINK
+    // не используется вовсе.
+    private readonly wdrink?: WdrinkClient,
   ) {}
 
   async createOrder(
@@ -588,7 +598,7 @@ export class OrdersService {
               posterStatus: true,
               posterOrderId: true,
               posterAccountId: true,
-              posterAccount: { select: { name: true } },
+              posterAccount: { select: { name: true, kind: true } },
             },
           },
         },
@@ -625,12 +635,15 @@ export class OrdersService {
 
       // Кассе — только если есть что отклонять. Сообщение без действия
       // учит не читать этот канал.
+      // Касса WDrink получает отмену сама (окно «не готовьте»), отклонять
+      // там ничего не нужно.
       const live = (order.dispatches ?? []).filter(
         (d) =>
           d.status === "SENT" &&
           d.posterStatus !== "REJECTED" &&
           d.posterOrderId &&
-          d.posterOrderId !== "dry-run",
+          d.posterOrderId !== "dry-run" &&
+          !isWdrink(d.posterAccount),
       );
       if (live.length === 0) return;
       await this.telegram.notifyCashier(
@@ -877,6 +890,13 @@ export class OrdersService {
       const resending = resendIds.has(d.id);
       if (d.status === "SENT" && !resending) continue;
 
+      // Касса WDrink — свой канал: номер, напитки и количество, без
+      // телефона, адреса и комментария (DECISIONS §15).
+      if (isWdrink(d.posterAccount)) {
+        if (await this.sendWdrinkPart(order, d, liveItems, resending)) sentNow++;
+        continue;
+      }
+
       // Кассира просили не принимать заказ, пока идёт разбирательство, но
       // если чек всё же приняли, второй такой же — это две готовки и два
       // чека. Тогда отправку отменяем и оставляем ошибку в ленте: править
@@ -1082,6 +1102,139 @@ export class OrdersService {
     }
   }
 
+  /**
+   * Отправка части на кассу WDrink.
+   *
+   * В отличие от Poster, заказ в WDrink можно отменить, поэтому новый
+   * состав после нехватки не требует от кассира ничего: старый заказ
+   * снимаем сами («REPLACED» — на кассе без окна об отмене), новый уходит
+   * под следующим номером.
+   */
+  private async sendWdrinkPart(
+    order: {
+      number: number;
+      scheduledAt: Date | null;
+    },
+    d: {
+      id: string;
+      posterAccountId: string;
+      posterOrderId: string | null;
+      posterStatus: string | null;
+      replacedOrders: unknown;
+      posterAccount: { name: string; token: string; apiUrl: string | null; preorderLeadMin: number };
+    },
+    liveItems: {
+      qty: number;
+      price: number;
+      name: string;
+      product: { posterAccountId: string; posterId: string | null } | null;
+    }[],
+    resending: boolean,
+  ): Promise<boolean> {
+    const items = liveItems.filter((it) => it.product?.posterAccountId === d.posterAccountId);
+    if (resending && d.posterStatus === "ACCEPTED") {
+      // Принятый заказ касса уже провела и бариста готовит: подменять
+      // состав поверх — две готовки. Как и с Poster, только руками.
+      await this.prisma.orderDispatch.update({
+        where: { id: d.id },
+        data: {
+          error: `«${d.posterAccount.name}» уже принял заказ — исправьте состав с кассой WeDrink вручную`,
+        },
+      });
+      return false;
+    }
+    const replaced = resending
+      ? this.withReplaced(d)
+      : Array.isArray(d.replacedOrders)
+        ? d.replacedOrders
+        : [];
+    const externalId = wdrinkExternalId(d.id, replaced.length);
+    const now = new Date();
+    const showAt = wdrinkShowAt(order.scheduledAt, d.posterAccount.preorderLeadMin, now);
+    const body = {
+      external_id: externalId,
+      number: order.number,
+      items: wdrinkItems(items),
+      ...(showAt ? { show_at: showAt.toISOString() } : {}),
+    };
+
+    if (wdrinkDryRun()) {
+      this.logger.warn(
+        `DRY RUN: заказ №${order.number} → ${d.posterAccount.name} (WDrink): ` +
+          `${items.map((x) => `${x.name}×${x.qty}`).join(", ")}` +
+          (showAt ? `, показать в ${showAt.toISOString()}` : ""),
+      );
+      await this.prisma.orderDispatch.update({
+        where: { id: d.id },
+        data: {
+          status: "SENT",
+          posterOrderId: "dry-run",
+          sentAt: now,
+          showAt,
+          ...(resending ? { replacedOrders: replaced } : {}),
+        },
+      });
+      return true;
+    }
+
+    try {
+      if (!this.wdrink) throw new Error("Клиент WDrink не подключён");
+      if (resending && d.posterOrderId && d.posterOrderId !== "dry-run") {
+        try {
+          await this.wdrink.cancelOrder(d.posterAccount, d.posterOrderId, "REPLACED");
+        } catch (e) {
+          this.logger.warn(`WDrink: старый заказ ${d.posterOrderId} не снят: ${e}`);
+        }
+      }
+      await this.wdrink.createOrder(d.posterAccount, body);
+      await this.prisma.orderDispatch.update({
+        where: { id: d.id },
+        data: {
+          status: "SENT",
+          posterOrderId: externalId,
+          sentAt: now,
+          showAt,
+          posterStatus: null,
+          error: null,
+          acceptReminders: 0,
+          ...(resending ? { replacedOrders: replaced } : {}),
+        },
+      });
+      return true;
+    } catch (e) {
+      this.logger.error(`WDrink: часть ${d.id} заказа №${order.number} не ушла: ${e}`);
+      await this.prisma.orderDispatch.update({
+        where: { id: d.id },
+        data: { status: "FAILED", error: String(e) },
+      });
+      return false;
+    }
+  }
+
+  /**
+   * Снимает части WDrink отменённого заказа: на кассе окно «не готовьте»,
+   * продажа сторнируется. Кассиру PizzBurg отклонять здесь нечего.
+   */
+  private async cancelWdrinkParts(orderId: string) {
+    if (!this.wdrink || wdrinkDryRun()) return;
+    const parts = await this.prisma.orderDispatch.findMany({
+      where: { orderId, status: "SENT", posterOrderId: { not: null } },
+      include: { posterAccount: true },
+    });
+    for (const d of parts) {
+      if (!isWdrink(d.posterAccount) || !d.posterOrderId || d.posterOrderId === "dry-run") continue;
+      try {
+        const res = await this.wdrink.cancelOrder(d.posterAccount, d.posterOrderId, "CUSTOMER");
+        await this.prisma.orderDispatch.update({
+          where: { id: d.id },
+          data: { posterStatus: wdrinkPartStatus(res.status) },
+        });
+      } catch (e) {
+        this.logger.error(`WDrink: отмена части ${d.id} не дошла: ${e}`);
+      }
+    }
+  }
+
   /** Дописывает отменяемый чек в историю замен этой части */
   private withReplaced(dispatch: {
     posterOrderId: string | null;
@@ -1112,8 +1265,10 @@ export class OrdersService {
         dispatches: { include: { posterAccount: true } },
         items: {
           select: {
+            id: true,
+            isGift: true,
             isUnavailable: true,
-            product: { select: { posterAccountId: true } },
+            product: { select: { posterAccountId: true, posterId: true } },
           },
         },
       },
@@ -1124,6 +1279,8 @@ export class OrdersService {
       1: "ACCEPTED",
       7: "REJECTED",
     };
+    // Касса WDrink нажала «Нет позиции»: отдел → номера позиций WDrink
+    const wdrinkShortage = new Map<string, string[]>();
     for (const d of order.dispatches) {
       if (
         d.status !== "SENT" ||
@@ -1132,6 +1289,18 @@ export class OrdersService {
       )
         continue;
       try {
+        if (isWdrink(d.posterAccount)) {
+          if (!this.wdrink) continue;
+          const res = await this.wdrink.getOrder(d.posterAccount, d.posterOrderId);
+          await this.prisma.orderDispatch.update({
+            where: { id: d.id },
+            data: { posterStatus: wdrinkPartStatus(res.status) },
+          });
+          if (res.status === "SHORTAGE") {
+            wdrinkShortage.set(d.posterAccountId, res.unavailable_item_ids ?? []);
+          }
+          continue;
+        }
         const res = await this.poster.getIncomingOrder(
           d.posterAccount.token,
           d.posterOrderId,
@@ -1194,9 +1363,22 @@ export class OrdersService {
         cancelledBy: "POSTER",
       });
 
+    // Позиции заказа, которых не оказалось на кассе WDrink (её «Нет позиции»)
+    const unavailableItemIds = order.items
+      .filter(
+        (i) =>
+          !i.isGift &&
+          i.product &&
+          (wdrinkShortage.get(i.product.posterAccountId) ?? []).includes(
+            String(i.product.posterId),
+          ),
+      )
+      .map((i) => i.id);
+
     return {
       orderId,
       status: orderStatus,
+      unavailableItemIds,
       parts: fresh.map((d) => ({
         department: d.posterAccount.name,
         posterOrderId: d.posterOrderId,
@@ -1421,7 +1603,10 @@ export class OrdersService {
     if (options?.notify !== false) {
       await this.notifications.sendOrderStatus(order.id, next);
     }
-    if (next === "CANCELLED") await this.announceCancellation(order.id);
+    if (next === "CANCELLED") {
+      await this.cancelWdrinkParts(order.id);
+      await this.announceCancellation(order.id);
+    }
     return this.prisma.order.findUniqueOrThrow({ where: { id: updated.id } });
   }
 

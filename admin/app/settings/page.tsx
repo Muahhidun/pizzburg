@@ -207,7 +207,12 @@ export default function SettingsPage() {
               className="flex items-center gap-3 rounded-xl bg-black/[.03] px-3 py-2 dark:bg-white/5"
             >
               <span className="text-sm text-neutral-400">{a.sortOrder}</span>
-              <span className="flex-1 font-medium">{a.name}</span>
+              <span className="flex-1 font-medium">
+                {a.name}
+                {a.kind === 'WDRINK' && (
+                  <span className="ml-2 text-xs font-normal text-neutral-500">касса WDrink</span>
+                )}
+              </span>
               <span className={`text-xs ${a.isActive ? 'text-emerald-600' : 'text-neutral-400'}`}>
                 {a.isActive ? 'активен' : 'выключен'}
               </span>
@@ -279,6 +284,8 @@ function PolicyToggle({
 }
 
 function AddAccount({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const [kind, setKind] = useState<'POSTER' | 'WDRINK'>('POSTER');
+  const [apiUrl, setApiUrl] = useState('https://wdrink.kz');
   const [name, setName] = useState('');
   const [token, setToken] = useState('');
   const [sortOrder, setSortOrder] = useState('1');
@@ -290,7 +297,8 @@ function AddAccount({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
     token.trim().length >= 10 &&
     token.trim().length <= 500 &&
     /^\d+$/.test(sortOrder) &&
-    Number(sortOrder) <= 1000;
+    Number(sortOrder) <= 1000 &&
+    (kind === 'POSTER' || /^https?:\/\/\S+$/.test(apiUrl.trim()));
 
   async function save() {
     if (!valid) return;
@@ -301,6 +309,8 @@ function AddAccount({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
         name,
         token: token.trim(),
         sortOrder: Number(sortOrder),
+        kind,
+        ...(kind === 'WDRINK' ? { apiUrl: apiUrl.trim() } : {}),
       });
       onSaved();
     } catch (e) {
@@ -320,9 +330,41 @@ function AddAccount({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
         className="w-full max-w-md rounded-t-2xl bg-white p-5 dark:bg-neutral-900 sm:rounded-2xl"
       >
         <h2 className="mb-1 text-lg font-semibold">Новый отдел</h2>
+        <div className="mb-3 flex gap-2">
+          {(['POSTER', 'WDRINK'] as const).map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => {
+                setKind(k);
+                if (k === 'WDRINK' && sortOrder === '1') setSortOrder('100');
+              }}
+              className={`flex-1 rounded-xl border px-3 py-1.5 text-sm ${
+                kind === k
+                  ? 'border-black bg-black text-white dark:border-white dark:bg-white dark:text-black'
+                  : 'border-black/10 dark:border-white/15'
+              }`}
+            >
+              {k === 'POSTER' ? 'Планшет Poster' : 'Касса WDrink'}
+            </button>
+          ))}
+        </div>
         <p className="mb-4 text-sm text-neutral-500">
-          Токен берётся в админке Poster: Настройки → API. Он не отображается после сохранения.
+          {kind === 'POSTER'
+            ? 'Токен берётся в админке Poster: Настройки → API. Он не отображается после сохранения.'
+            : 'Ключ выпускается в кабинете WDrink: Продажи → Доставка PizzBurg. Он не отображается после сохранения.'}
         </p>
+        {kind === 'WDRINK' && (
+          <label className="mb-3 block">
+            <span className="mb-1 block text-sm font-medium">Адрес WDrink</span>
+            <input
+              value={apiUrl}
+              onChange={(e) => setApiUrl(e.target.value)}
+              maxLength={200}
+              className="w-full rounded-xl border border-black/10 bg-transparent px-3 py-2 font-mono dark:border-white/15"
+            />
+          </label>
+        )}
         <label className="mb-3 block">
           <span className="mb-1 block text-sm font-medium">Название</span>
           <input
@@ -334,7 +376,9 @@ function AddAccount({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
           />
         </label>
         <label className="mb-3 block">
-          <span className="mb-1 block text-sm font-medium">Токен Poster API</span>
+          <span className="mb-1 block text-sm font-medium">
+            {kind === 'POSTER' ? 'Токен Poster API' : 'Ключ из кабинета WDrink'}
+          </span>
           <input
             type="password"
             value={token}

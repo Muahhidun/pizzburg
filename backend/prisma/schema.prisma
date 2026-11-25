@@ -107,6 +107,13 @@ model PosterAccount {
   token     String
   isActive  Boolean @default(true)
   sortOrder Int     @default(0) // порядок категорий этого отдела в общем меню
+  /// POSTER — планшет Poster (token — токен Poster).
+  /// WDRINK — касса WDrink (DECISIONS §15): token — ключ из кабинета WDrink,
+  /// apiUrl — адрес сервиса. Заказ, нехватка и отказ идут по тем же правилам.
+  kind            String  @default("POSTER")
+  apiUrl          String?
+  /// Предзаказ: за сколько минут до времени показать заказ на кассе WDrink
+  preorderLeadMin Int     @default(15)
 
   categories Category[]
   products   Product[]
@@ -995,6 +1002,10 @@ model OrderDispatch {
   replacedOrders  Json          @default("[]")
   /// Когда чек ушёл на планшет — от этого считаем «долго не принимают»
   sentAt          DateTime?
+  /// С какого момента касса WDrink видит заказ (предзаказ — позже отправки)
+  showAt          DateTime?
+  /// Сколько напоминаний «не приняли» ушло по этой части (касса WDrink)
+  acceptReminders Int           @default(0)
   createdAt       DateTime      @default(now())
 
   @@unique([orderId, posterAccountId])
