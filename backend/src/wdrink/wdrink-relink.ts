@@ -1,7 +1,7 @@
 /**
  * Сопоставление напитков, заведённых в Poster Sunday, с меню кассы WDrink
  * (DECISIONS §15, «День перехода»). Чистая функция — проверяется тестами,
- * сам перенос делает `prisma/wdrink-relink.ts`.
+ * сам перенос делает `relink-cli.ts`.
  */
 
 /** Имя для сравнения: регистр, ё, пробелы, «0.7»/«0,7», «л», скобки */
@@ -55,7 +55,12 @@ export function planRelink(
   const byItem = new Map<string, RelinkProduct[]>();
   const unmatchedProducts: RelinkProduct[] = [];
   for (const p of products) {
-    const forced = overrides[p.id] ? itemById.get(overrides[p.id]) : undefined;
+    // Подсказка по id товара или по имени — витринному или кассовому
+    const hint =
+      overrides[p.id] ??
+      (p.displayName ? overrides[p.displayName.trim()] : undefined) ??
+      overrides[p.name.trim()];
+    const forced = hint ? itemById.get(hint) : undefined;
     const candidates = forced
       ? [forced]
       : (itemsByKey.get(drinkKey(p.name)) ??

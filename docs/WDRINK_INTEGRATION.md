@@ -94,10 +94,10 @@
    уходят на кассу WDrink:
    ```bash
    cd backend
-   npx tsx prisma/wdrink-relink.ts --from "Sunday" --category "<категория напитков в Sunday>" --to "<отдел WDrink>"
+   railway ssh --service backend --environment production -- node dist/wdrink/relink-cli.js --from SunDay --category WeDrink --to WeDrink
    # проверить список пар и цен, затем то же самое с --apply
    ```
-   Пары подбираются по названию; если какую-то не нашло — `--map <id товара>=<номер позиции WDrink>`.
+   Пары подбираются по названию; если какую-то не нашло — `--map "'<имя в приложении>=<номер позиции WDrink>'"`.
    Напитки, которых в приложении ещё не было, синк заводит **скрытыми**:
    новинку владелец включает в витрине сам.
 4. Удалить категорию WeDrink из Poster Sunday (не раньше шага 3).

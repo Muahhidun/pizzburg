@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
-import { WdrinkClient } from '../src/wdrink/wdrink.client';
-import { planRelink } from '../src/wdrink/wdrink-relink';
+import { WdrinkClient } from './wdrink.client';
+import { planRelink } from './wdrink-relink';
 
 /**
  * День перехода (DECISIONS §15): напитки приложения переезжают из отдела
@@ -8,9 +8,14 @@ import { planRelink } from '../src/wdrink/wdrink-relink';
  * получают новый отдел и номер позиции WDrink, поэтому фото, описания,
  * витринные имена, избранное и история заказов остаются.
  *
- *   npx tsx prisma/wdrink-relink.ts --from "Sunday" --category "WeDrink" --to "WeDrink"
+ * На сервере (собирается вместе с backend):
+ *   railway ssh --service backend --environment production -- \
+ *     node dist/wdrink/relink-cli.js --from SunDay --category WeDrink --to WeDrink
  *   …то же самое с --apply — записать
- *   --map <productId>=<номер позиции WDrink>  — подсказать пару вручную (можно несколько)
+ *   --map "'<имя в приложении>=<номер позиции WDrink>'" — подсказать пару
+ *   (можно несколько; вместо имени — id товара). Внешние кавычки съедает
+ *   ваш терминал, внутренние — railway ssh.
+ * Локально: npx tsx src/wdrink/relink-cli.ts …
  *
  * Без --apply только печатает план. Отдел WDrink должен быть уже подключён
  * в админке (адрес и ключ).
@@ -19,11 +24,14 @@ const prisma = new PrismaClient();
 
 function arg(name: string) {
   const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? process.argv[i + 1] : undefined;
+  return i >= 0 ? unquote(process.argv[i + 1]) : undefined;
 }
 
+/** railway ssh может оставить кавычки вокруг значения — снимаем */
+const unquote = (v: string) => v.replace(/^['"]+|['"]+$/g, '').trim();
+
 function args(name: string) {
-  return process.argv.flatMap((v, i, all) => (v === `--${name}` ? [all[i + 1]] : []));
+  return process.argv.flatMap((v, i, all) => (v === `--${name}` ? [unquote(all[i + 1])] : []));
 }
 
 async function main() {
@@ -36,7 +44,12 @@ async function main() {
     console.error('Нужно: --from <отдел Poster> --category <категория Poster> --to <отдел WDrink>');
     process.exit(1);
   }
-  const overrides = Object.fromEntries(args('map').map((pair) => pair.split('=')));
+  const overrides = Object.fromEntries(
+    args('map').map((pair) => {
+      const at = pair.lastIndexOf('=');
+      return [pair.slice(0, at).trim(), pair.slice(at + 1).trim()];
+    }),
+  );
 
   const tenant = await prisma.tenant.findUniqueOrThrow({ where: { slug: tenantSlug } });
   const from = await prisma.posterAccount.findUniqueOrThrow({

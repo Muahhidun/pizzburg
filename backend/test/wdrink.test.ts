@@ -92,6 +92,10 @@ test('перенос из Sunday: пары по имени, подсказки, 
   assert.deepEqual(plan.unmatchedProducts.map((p) => p.id), ['p3']);
   assert.deepEqual(plan.unmatchedItems.map((i) => i.id), ['13']); // '12' — в неоднозначных
 
+  const byName = planRelink(products, items, { 'Непонятный': '11', 'Американо 0,5 горячий': '13' });
+  assert.ok(byName.matched.some((m) => m.product.id === 'p3' && m.item.id === '11'), 'по имени в кассе');
+  assert.ok(byName.matched.some((m) => m.product.id === 'p2' && m.item.id === '13'), 'по имени в приложении');
+
   const forced = planRelink(products, items, { p3: '13' });
   assert.ok(forced.matched.some((m) => m.product.id === 'p3' && m.item.id === '13'));
 });
