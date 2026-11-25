@@ -367,4 +367,8 @@ export class PosterAccountDto {
   @IsString() @Length(1, 80) name: string;
   @IsString() @Length(10, 500) token: string;
   @IsOptional() @IsInt() @Min(0) @Max(1_000) sortOrder?: number;
+  /** POSTER (по умолчанию) или WDRINK — касса WDrink (DECISIONS §15) */
+  @IsOptional() @IsIn(['POSTER', 'WDRINK']) kind?: 'POSTER' | 'WDRINK';
+  /** Адрес сервиса WDrink, например https://wdrink.kz */
+  @IsOptional() @IsString() @Length(8, 200) @Matches(/^https?:\/\/[^\s]+$/) apiUrl?: string;
 }

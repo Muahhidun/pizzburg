@@ -38,6 +38,7 @@
 | `POSTER_INTEGRATION.md` | Интеграция, разделение заказов и сверка Poster |
 | `FCM_SETUP.md` | Push-уведомления Firebase |
 | `KASPI_QR_INTEGRATION.md` | План интеграции Kaspi QR |
+| `WDRINK_INTEGRATION.md` | Напитки WeDrink: третий отдел — касса WDrink вместо Poster Sunday |
 | `WOLT_DRIVE_INTEGRATION.md` | Резервный курьер: сценарий кассы, API, оплата и приёмка |
 | `APP_STORE.md` | Поля, приватность, скриншоты и проверка карточки App Store |
 | `GOOGLE_PLAY.md` | Карточка Google Play, Data safety, тестирование и релиз Android |

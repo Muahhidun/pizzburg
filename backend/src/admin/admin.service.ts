@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { WdrinkClient, WdrinkError } from '../wdrink/wdrink.client';
 import { PosterClient } from '../poster/poster.client';
 import { ObjectStorageService } from '../storage/object-storage.service';
 import {
@@ -147,6 +148,7 @@ export class AdminService {
     private readonly telegram: TelegramService,
     private readonly posterSync: PosterSyncService,
     private readonly payments: PaymentsService,
+    private readonly wdrink?: WdrinkClient,
   ) {}
 
   private async tenant(slug = 'pizzburg') {
@@ -844,7 +846,7 @@ export class AdminService {
       this.prisma.posterAccount.findMany({
         where: { tenantId: tenant.id },
         orderBy: { sortOrder: 'asc' },
-        select: { id: true, name: true, sortOrder: true, isActive: true },
+        select: { id: true, name: true, sortOrder: true, isActive: true, kind: true },
       }),
       // Сколько клиентов получили подарок за вход — мерило перехода
       this.prisma.customer.count({
@@ -1252,10 +1254,12 @@ export class AdminService {
       select: {
         posterId: true,
         name: true,
-        posterAccount: { select: { name: true, token: true } },
+        posterAccount: { select: { name: true, token: true, kind: true } },
       },
     });
     if (!product.posterId) return { error: 'У позиции нет posterId' };
+    // Ключ кассы WDrink не должен уйти в Poster
+    if (product.posterAccount.kind === 'WDRINK') return { error: 'Позиция кассы WDrink, не Poster' };
     return {
       name: product.name,
       department: product.posterAccount.name,
@@ -1458,10 +1462,27 @@ export class AdminService {
 
   async addPosterAccount(dto: PosterAccountDto) {
     const tenant = await this.tenant();
-    try {
-      await this.poster.getCategories(dto.token.trim());
-    } catch {
-      throw new BadRequestException('Токен Poster недействителен');
+    const kind = dto.kind ?? 'POSTER';
+    const token = dto.token.trim();
+    const apiUrl = kind === 'WDRINK' ? dto.apiUrl?.trim().replace(/\/+$/, '') : undefined;
+    if (kind === 'WDRINK') {
+      // Касса WDrink (DECISIONS §15): проверяем ключ, забрав меню доставки
+      if (!apiUrl) throw new BadRequestException('Укажите адрес сервиса WDrink');
+      try {
+        await this.wdrink!.getMenu({ token, apiUrl });
+      } catch (e) {
+        throw new BadRequestException(
+          e instanceof WdrinkError && e.code === 'MODULE_DISABLED'
+            ? 'В WDrink у точки не включён модуль доставки'
+            : 'Ключ или адрес WDrink не подходят',
+        );
+      }
+    } else {
+      try {
+        await this.poster.getCategories(token);
+      } catch {
+        throw new BadRequestException('Токен Poster недействителен');
+      }
     }
     const acc = await this.prisma.posterAccount.upsert({
       where: {
@@ -1470,15 +1491,20 @@ export class AdminService {
       create: {
         tenantId: tenant.id,
         name: dto.name.trim(),
-        token: dto.token.trim(),
-        sortOrder: dto.sortOrder ?? 0,
+        token,
+        kind,
+        apiUrl: apiUrl ?? null,
+        // Касса напитков не должна стать «главным» отделом общего заказа
+        sortOrder: dto.sortOrder ?? (kind === 'WDRINK' ? 100 : 0),
       },
       update: {
-        token: dto.token.trim(),
-        sortOrder: dto.sortOrder ?? 0,
+        token,
+        kind,
+        apiUrl: apiUrl ?? null,
+        sortOrder: dto.sortOrder ?? (kind === 'WDRINK' ? 100 : 0),
         isActive: true,
       },
-      select: { id: true, name: true, sortOrder: true, isActive: true },
+      select: { id: true, name: true, sortOrder: true, isActive: true, kind: true },
     });
     return acc;
   }

@@ -49,9 +49,10 @@ export class ServiceReceiptService {
   async send(posterAccountId: string, text: string, phone = '') {
     const account = await this.prisma.posterAccount.findUnique({
       where: { id: posterAccountId },
-      select: { id: true, name: true, token: true },
+      select: { id: true, name: true, token: true, kind: true },
     });
-    if (!account) return { sent: false };
+    // Служебный чек — товар Poster; у кассы WDrink своё окно об отмене
+    if (!account || account.kind === 'WDRINK') return { sent: false };
 
     const product = await this.prisma.product.findFirst({
       where: {

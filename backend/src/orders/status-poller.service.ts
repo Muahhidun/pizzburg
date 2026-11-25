@@ -4,6 +4,7 @@ import { OrderStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrdersService } from './orders.service';
 import { ShortageService } from './shortage.service';
+import { TelegramService } from '../telegram/telegram.service';
 
 /** Через сколько принятый заказ закрывается сам (см. DECISIONS §12.8) */
 const AUTO_CLOSE_HOURS = 3;
@@ -21,6 +22,7 @@ export class StatusPollerService {
     private readonly prisma: PrismaService,
     private readonly orders: OrdersService,
     private readonly shortage: ShortageService,
+    private readonly telegram?: TelegramService,
   ) {}
 
   @Cron('*/1 * * * *')
@@ -52,7 +54,7 @@ export class StatusPollerService {
           some: { status: 'SENT', posterOrderId: { not: 'dry-run' } },
         },
       },
-      select: { id: true, number: true, status: true },
+      select: { id: true, number: true, status: true, tenantId: true },
     });
     // Раньше цикл молчал, пока статус не менялся, и «опрос не видит заказ»
     // выглядело в логах ровно как «Poster ещё не принял». Отличить одно от
@@ -84,8 +86,53 @@ export class StatusPollerService {
         // каждом круге, а не на «статус изменился»: отказ мог приехать и
         // синхронизацией из приложения, между кругами опроса.
         await this.shortage.handleRejectedDepartments(o.id);
+        // Касса WDrink нажала «Нет позиции» — тот же вопрос клиенту, что
+        // и после пометки кассира (DECISIONS §15)
+        if (res.unavailableItemIds?.length) {
+          await this.wdrinkShortage(o, res.unavailableItemIds);
+        }
       } catch (e) {
         this.logger.warn(`Poll failed for order ${o.id}: ${e}`);
+      }
+    }
+  }
+
+  /**
+   * Нехватка с кассы WDrink. К уже отмеченным позициям добавляем новые
+   * (пометка заменяет весь список), а если всё уже отмечено — молчим:
+   * опрос идёт каждую минуту, и клиент не должен получать вопрос дважды.
+   */
+  private async wdrinkShortage(
+    o: { id: string; number: number; tenantId: string },
+    itemIds: string[],
+  ) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: o.id },
+      select: { items: { select: { id: true, isUnavailable: true } } },
+    });
+    const marked = (order?.items ?? []).filter((i) => i.isUnavailable).map((i) => i.id);
+    if (itemIds.every((id) => marked.includes(id))) return;
+    try {
+      await this.shortage.markUnavailable(
+        o.tenantId,
+        o.id,
+        [...new Set([...marked, ...itemIds])],
+        new Date(),
+        'касса WeDrink',
+      );
+    } catch (e) {
+      // Например, в заказе были только напитки и не осталось ничего:
+      // решать с клиентом по телефону. Кассе пишем один раз.
+      const claimed = await this.prisma.orderDispatch.updateMany({
+        where: { orderId: o.id, posterStatus: 'SHORTAGE', error: null },
+        data: { error: `Нет позиции на кассе WeDrink: ${String(e)}` },
+      });
+      if (claimed.count > 0) {
+        await this.telegram?.notifyCashier(
+          o.tenantId,
+          `❗️ <b>Заказ №${o.number}</b>: на кассе WeDrink нет напитков из заказа, ` +
+            'а без них в заказе ничего не остаётся. Свяжитесь с клиентом.',
+        );
       }
     }
   }

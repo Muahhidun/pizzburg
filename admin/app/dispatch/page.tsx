@@ -56,6 +56,8 @@ interface Task {
   extraReason: string | null;
   alert: 'NO_COURIER' | 'NOT_READY' | 'ON_WAY' | null;
   items: { name: string; qty: number; department: string | null; modifiers: string[] }[];
+  /** Напитки с кассы WDrink: их приносят на раздачу */
+  drinks?: { name: string; accepted: boolean } | null;
   /** Для большой карточки по долгому нажатию */
   details?: {
     address: string | null;
@@ -729,6 +731,13 @@ function Tile({
       </div>
       {task.extraReason && (
         <div className="mt-1.5 text-base font-semibold text-amber-700">{task.extraReason}</div>
+      )}
+      {task.drinks && (
+        <div
+          className={`mt-1.5 text-sm font-semibold ${task.drinks.accepted ? 'text-emerald-700' : 'text-amber-700'}`}
+        >
+          🥤 {task.drinks.name}: {task.drinks.accepted ? 'приняли, принесут на раздачу' : 'ещё не приняли'}
+        </div>
       )}
       <ul className="mt-1.5 space-y-0.5 text-base leading-snug">
         {task.items.map((i, idx) => (

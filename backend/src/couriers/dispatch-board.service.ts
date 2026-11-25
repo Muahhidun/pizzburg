@@ -161,6 +161,11 @@ export class DispatchBoardService {
                   product: { select: { posterAccountId: true } },
                 },
               },
+              // Касса WDrink (DECISIONS §15): приняли ли напитки
+              dispatches: {
+                where: { posterAccount: { kind: 'WDRINK' }, status: { not: 'VOID' } },
+                select: { posterStatus: true, posterAccount: { select: { name: true } } },
+              },
             },
           },
         },
@@ -276,6 +281,15 @@ export class DispatchBoardService {
         needsTerminal: t.needsTerminal,
         extraReason: t.extraReason,
         alert: taskAlert(t, alertCtx, cfg, now),
+        // Напитки готовит другая касса и приносит на раздачу: видно, приняла
+        // ли она заказ, чтобы не нажать «Готов» без них
+        drinks:
+          raw.kind === 'EXTRA_TRIP' || !raw.order?.dispatches?.length
+            ? null
+            : {
+                name: raw.order.dispatches[0].posterAccount.name,
+                accepted: raw.order.dispatches.every((d) => d.posterStatus === 'ACCEPTED'),
+              },
         // Для большой карточки по долгому нажатию: раздача уточняет детали
         details: {
           address: o.address ? formatAddress(o.address as Parameters<typeof formatAddress>[0]) : null,

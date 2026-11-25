@@ -1,4 +1,5 @@
 import { DailySummaryService } from './daily-summary.service';
+import { WdrinkOpsService } from '../wdrink/wdrink-ops.service';
 import { UnpaidOrdersService } from './unpaid-orders.service';
 import { Module } from '@nestjs/common';
 import { PosterModule } from '../poster/poster.module';
@@ -39,6 +40,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     PreorderReminderService,
     UnpaidOrdersService,
     DailySummaryService,
+    WdrinkOpsService,
     CancelReasonsService,
     ShortageService,
     ServiceReceiptService,
