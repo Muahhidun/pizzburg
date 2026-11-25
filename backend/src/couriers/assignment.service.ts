@@ -3,9 +3,9 @@ import { Cron } from '@nestjs/schedule';
 import { GeoService } from '../geo/geo.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { adminBaseUrl, esc, TelegramService } from '../telegram/telegram.service';
-import { bestPartner, Point, streetHouseOf } from './batching';
+import { pickHolder, Point, streetHouseOf } from './batching';
 import { courierSettings } from './courier-settings';
-import { externalOf, externalPaymentLine, orderOf } from './task-order';
+import { byLateness, dueAt, externalOf, externalPaymentLine, orderOf } from './task-order';
 
 /**
  * Раздача заказов курьерам (docs/COURIER_SYSTEM_SPEC.md §6).
@@ -14,10 +14,16 @@ import { externalOf, externalPaymentLine, orderOf } from './task-order';
  * очереди у раздачи: первым — курьеры из графика, внутри — по времени
  * скана «Я на месте». Курьер заказ не выбирает и не «перехватывает».
  *
+ * Готовые заказы раздаются по опозданию: первым — тот, что оформлен
+ * раньше (предзаказ — по времени клиента), а не тот, что раньше собран.
+ *
  * Связки по два заказа (§6.4): когда свободных курьеров не осталось,
  * готовый заказ добавляется вторым тому, кто ещё стоит у раздачи со своим
- * заказом, — если оба адреса в одну сторону (batching.ts).
+ * заказом. По умолчанию в любую сторону (`batchAnyDirection`), иначе —
+ * только если оба адреса в одну сторону (batching.ts).
  */
+
+const ORDER_TIMES = { select: { number: true, address: true, createdAt: true, scheduledAt: true } } as const;
 
 /** Почему курьера сняли с назначенного заказа */
 export type ReleaseReason = 'PICKUP_TIMEOUT' | 'COURIER_LEFT';
@@ -67,15 +73,16 @@ export class AssignmentService {
   async assignVenue(venueId: string): Promise<number> {
     let assigned = 0;
     for (let i = 0; i < MAX_ASSIGN_PER_PASS; i++) {
-      const task = await this.prisma.deliveryTask.findFirst({
+      const ready = await this.prisma.deliveryTask.findMany({
         where: {
           venueId,
           status: 'READY',
           courierId: null,
           kind: { in: ['DELIVERY', 'EXTRA_TRIP'] },
         },
-        orderBy: [{ readyAt: 'asc' }, { id: 'asc' }],
+        include: { order: ORDER_TIMES },
       });
+      const task = byLateness(ready)[0];
       if (!task) break;
       const shift = await this.prisma.courierShift.findFirst({
         where: { venueId, endedAt: null, state: 'WAITING', courier: { status: 'ACTIVE' } },
@@ -130,9 +137,9 @@ export class AssignmentService {
 
   /**
    * Связки: готовый заказ без курьера → вторым тому, кто ещё у раздачи
-   * (назначен, но не протянул «Поехали») с одним заказом в ту же сторону.
-   * Зовётся только когда свободных курьеров в очереди нет: при свободном
-   * курьере заказ быстрее увезти отдельно.
+   * (назначен, но не протянул «Поехали») с одним заказом. Самые опоздавшие
+   * заказы — первыми. Зовётся только когда свободных курьеров в очереди
+   * нет: при свободном курьере заказ быстрее увезти отдельно.
    */
   private async attachSeconds(venueId: string): Promise<number> {
     const venue = await this.prisma.venue.findUnique({
@@ -148,20 +155,21 @@ export class AssignmentService {
     const cfg = courierSettings(venue.tenant.settings);
     if (cfg.batchMaxDetourKm <= 0) return 0;
 
-    const orderSelect = { select: { number: true, address: true, createdAt: true } } as const;
-    const ready = await this.prisma.deliveryTask.findMany({
-      where: { venueId, status: 'READY', courierId: null, kind: 'DELIVERY' },
-      orderBy: [{ readyAt: 'asc' }, { id: 'asc' }],
-      include: { order: orderSelect },
-    });
+    const ready = byLateness(
+      await this.prisma.deliveryTask.findMany({
+        where: { venueId, status: 'READY', courierId: null, kind: 'DELIVERY' },
+        include: { order: ORDER_TIMES },
+      }),
+    );
     if (ready.length === 0) return 0;
 
     const shifts = await this.prisma.courierShift.findMany({
       where: { venueId, endedAt: null, state: 'ASSIGNED', courier: { status: 'ACTIVE' } },
+      orderBy: { queuedAt: 'asc' },
       include: {
         tasks: {
           where: { status: { in: ['ASSIGNED', 'PICKED_UP'] } },
-          include: { order: orderSelect },
+          include: { order: ORDER_TIMES },
         },
       },
     });
@@ -176,7 +184,8 @@ export class AssignmentService {
 
     const slug = venue.tenant.slug;
     const venuePoint = await this.venuePoint(slug, venue);
-    if (!venuePoint) return 0;
+    // Без точки раздачи «в одну сторону» не измерить
+    if (!venuePoint && !cfg.batchAnyDirection) return 0;
 
     const free = await Promise.all(
       holders.map(async (s) => ({
@@ -189,12 +198,15 @@ export class AssignmentService {
     for (const second of ready) {
       if (free.length === 0) break;
       const point = await this.pointOf(slug, orderOf(second).address);
-      if (!point) continue;
-      const best = bestPartner(venuePoint, point, free, cfg.batchMaxDetourKm);
+      const best = pickHolder(venuePoint, point, free, cfg.batchMaxDetourKm, cfg.batchAnyDirection);
       if (!best) continue;
       const holder = best.item;
       if (await this.attach(holder.shift.id, holder.shift.courierId, holder.task, second, best.detourKm)) {
         attached++;
+        this.logger.log(
+          `Связка: №${orderOf(second).number} вторым к №${orderOf(holder.task).number}` +
+            (best.detourKm == null ? ' (без координат)' : ` (крюк ${best.detourKm.toFixed(1)} км)`),
+        );
         await this.notifyAssigned(second.id);
       }
       free.splice(free.indexOf(holder), 1);
@@ -205,13 +217,12 @@ export class AssignmentService {
   private async attach(
     shiftId: string,
     courierId: string,
-    first: { id: string; tenantId: string; order?: { number: number; createdAt: Date } | null; external?: unknown },
-    second: { id: string; order?: { number: number; createdAt: Date } | null; external?: unknown },
-    detourKm: number,
+    first: { id: string; tenantId: string; createdAt?: Date; order?: { number: number; createdAt: Date } | null; external?: unknown },
+    second: { id: string; createdAt?: Date; order?: { number: number; createdAt: Date } | null; external?: unknown },
+    detourKm: number | null,
   ): Promise<boolean> {
-    // Первым везут более старый заказ
-    const firstGoesFirst =
-      orderOf(first).createdAt.getTime() <= orderOf(second).createdAt.getTime();
+    // Первым везут более опоздавший заказ
+    const firstGoesFirst = dueAt(first) <= dueAt(second);
     const batchId = first.id;
     return this.prisma
       .$transaction(async (tx) => {
@@ -239,7 +250,10 @@ export class AssignmentService {
             courierId,
             type: 'ASSIGNED',
             actor: 'SYSTEM',
-            meta: { batchWith: first.id, detourKm: Math.round(detourKm * 100) / 100 },
+            meta: {
+              batchWith: first.id,
+              detourKm: detourKm == null ? null : Math.round(detourKm * 100) / 100,
+            },
           },
         });
         return true;

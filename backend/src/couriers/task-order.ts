@@ -123,6 +123,27 @@ export function orderOf(t: { order?: OurOrder | null; external?: unknown }): Ord
   };
 }
 
+/**
+ * К какому времени заказ должен уехать: предзаказ — ко времени клиента,
+ * остальные — чем раньше оформлен, тем сильнее опаздывает. Готовые заказы
+ * раздаются в этом порядке (Дом, 25.11.2026: «в первую очередь те, что
+ * опаздывают»).
+ */
+export function dueAt(t: { createdAt?: Date; order?: OurOrder | null; external?: unknown }): number {
+  const o = orderOf(t);
+  if (o.scheduledAt) return o.scheduledAt.getTime();
+  const created = o.createdAt.getTime();
+  if (created > 0) return created;
+  return t.createdAt ? t.createdAt.getTime() : 0;
+}
+
+/** Сначала самые опоздавшие */
+export function byLateness<T extends { createdAt?: Date; order?: OurOrder | null; external?: unknown; id: string }>(
+  rows: T[],
+): T[] {
+  return [...rows].sort((a, b) => dueAt(a) - dueAt(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
 const tenge = (n: number) => `${n.toLocaleString('ru-RU')} ₸`;
 
 /**

@@ -162,7 +162,7 @@ export class PosterImportService {
       try {
         list = (await this.poster.getIncomingOrders(acc.token, date)) ?? [];
       } catch (e) {
-        this.logger.warn(`Poster: входящие заказы не получены: ${e instanceof Error ? e.message : String(e)}`);
+        this.logger.warn(`Poster (${acc.name}): входящие заказы не получены: ${e instanceof Error ? e.message : String(e)}`);
         continue;
       }
       if (!Array.isArray(list)) {

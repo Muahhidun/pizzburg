@@ -52,6 +52,31 @@ export function bestPartner<T extends { point: Point | null }>(
 }
 
 /**
+ * Кому добавить заказ вторым. В одну сторону (`anyDirection` выключен) —
+ * как `bestPartner`. В любую сторону — подходит любой курьер у раздачи:
+ * сначала с наименьшим крюком, кандидаты без координат — следом, в том
+ * порядке, в каком пришли (дольше всех ждёт — первым).
+ */
+export function pickHolder<T extends { point: Point | null }>(
+  venue: Point | null,
+  base: Point | null,
+  candidates: T[],
+  maxDetourKm: number,
+  anyDirection: boolean,
+): { item: T; detourKm: number | null } | null {
+  if (!anyDirection) return venue && base ? bestPartner(venue, base, candidates, maxDetourKm) : null;
+  if (candidates.length === 0) return null;
+  if (venue && base) {
+    const measured = candidates.filter((c) => c.point);
+    if (measured.length) {
+      const best = bestPartner(venue, base, measured, Number.POSITIVE_INFINITY);
+      if (best) return best;
+    }
+  }
+  return { item: candidates.find((c) => !c.point) ?? candidates[0], detourKm: null };
+}
+
+/**
  * Улица и дом из адреса точки: «Экибастуз, Ауэзова 47б, ТРЦ …» →
  * { street: «Ауэзова», house: «47б» }. Первая часть, где после слов
  * идёт номер. Нужно, когда у точки не заданы свои координаты.

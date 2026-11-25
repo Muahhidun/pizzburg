@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { bestPartner, detourKm, distanceKm, streetHouseOf } from '../src/couriers/batching';
+import { bestPartner, detourKm, distanceKm, pickHolder, streetHouseOf } from '../src/couriers/batching';
 import { nextInBatch } from '../src/couriers/courier-app.service';
 import { departmentOf, otherDepartments } from '../src/couriers/dispatch-board.service';
 
@@ -39,6 +39,18 @@ test('напарник: ближайший по крюку, только в пр
   assert.equal(bestPartner(V, north1, [cands[0], cands[1]], 1.5), null);
   // С лимитом 0 связок нет вовсе, кроме совпадающих точек
   assert.equal(bestPartner(V, north1, [cands[3]], 0), null);
+});
+
+test('кому вторым: в любую сторону — меньший крюк, потом без координат', () => {
+  const near = { id: 'near', point: north2 };
+  const opposite = { id: 'opp', point: south1 };
+  const blind = { id: 'blind', point: null };
+  assert.equal(pickHolder(V, north1, [opposite, near], 1.5, true)?.item.id, 'near');
+  assert.equal(pickHolder(V, north1, [opposite], 1.5, true)?.item.id, 'opp');
+  assert.equal(pickHolder(V, north1, [opposite], 1.5, false), null);
+  assert.deepEqual(pickHolder(V, null, [opposite, blind], 1.5, true), { item: blind, detourKm: null });
+  assert.equal(pickHolder(null, north1, [opposite], 1.5, true)?.item.id, 'opp');
+  assert.equal(pickHolder(V, north1, [], 1.5, true), null);
 });
 
 test('улица и дом из адреса точки', () => {
@@ -104,7 +116,7 @@ function matches(row: any, where: any = {}): boolean {
   });
 }
 
-function world(points: Record<string, { lat: number; lng: number }>, waiting = 1) {
+function world(points: Record<string, { lat: number; lng: number }>, waiting = 1, settings: any = {}) {
   const tasks: any[] = [];
   const shifts: any[] = [];
   const events: any[] = [];
@@ -115,7 +127,7 @@ function world(points: Record<string, { lat: number; lng: number }>, waiting = 1
   const sortBy = (rows: any[], key: string) => [...rows].sort((a, b) => (a[key] < b[key] ? -1 : a[key] > b[key] ? 1 : 0));
   const prisma: any = {
     venue: {
-      findUnique: async () => ({ address: 'Экибастуз, Ауэзова 47Б', lat: V.lat, lng: V.lng, tenant: { slug: 'x', settings: {} } }),
+      findUnique: async () => ({ address: 'Экибастуз, Ауэзова 47Б', lat: V.lat, lng: V.lng, tenant: { slug: 'x', settings: { couriers: settings } } }),
     },
     deliveryTask: {
       findFirst: async ({ where }: any) => sortBy(tasks.filter((t) => matches(t, where)), 'readyAt')[0] ?? null,
@@ -147,11 +159,12 @@ function world(points: Record<string, { lat: number; lng: number }>, waiting = 1
   const geo: any = { coordsOf: async () => null };
   const telegram: any = { call: async (_t: string, _m: string, p: any) => (sent.push(p.text), {}) };
   const service = new AssignmentService(prisma, telegram, geo);
-  const ready = (id: string, minute: number) =>
+  // orderedAt — когда оформлен (по умолчанию за 20 минут до «Готов»)
+  const ready = (id: string, minute: number, orderedAt = minute - 20) =>
     tasks.push({
       id, tenantId: 't', venueId: 'v', kind: 'DELIVERY', status: 'READY', courierId: null, shiftId: null,
       batchId: null, batchSeq: null, readyAt: new Date(T(minute)),
-      order: { createdAt: new Date(T(minute - 20)), address: { street: 's', house: '1', ...points[id] } },
+      order: { number: id, createdAt: new Date(T(orderedAt)), address: { street: 's', house: '1', ...points[id] } },
     });
   return { service, tasks, shifts, events, ready };
 }
@@ -171,13 +184,45 @@ test('один курьер, два готовых заказа в одну ст
   assert.equal(b.batchSeq, 2);
 });
 
-test('заказы в разные стороны не связываются — второй ждёт свободного курьера', async () => {
-  const w = world({ a: north1, b: south1 });
+test('«только в одну сторону»: заказы в разные стороны не связываются', async () => {
+  const w = world({ a: north1, b: south1 }, 1, { batchAnyDirection: false });
   w.ready('a', 0);
   w.ready('b', 1);
   assert.equal(await w.service.assignVenue('v'), 1);
   assert.equal(w.tasks[1].status, 'READY');
   assert.equal(w.tasks[0].batchId, null);
+});
+
+test('по умолчанию связка в любую сторону и без координат', async () => {
+  const w = world({ a: north1, b: south1 });
+  w.ready('a', 0);
+  w.ready('b', 1);
+  w.ready('c', 2); // адрес без координат
+  const w2 = world({ a: north1, b: south1 }, 2);
+  w2.ready('a', 0);
+  w2.ready('b', 1);
+  w2.ready('c', 2);
+  w2.ready('d', 3);
+  assert.equal(await w.service.assignVenue('v'), 2);
+  assert.equal(w.tasks[1].batchId, 'a');
+  assert.equal(w.tasks[2].status, 'READY');
+  // Два курьера: каждому по одному, оставшиеся — вторыми, в том числе без координат
+  assert.equal(await w2.service.assignVenue('v'), 4);
+  assert.deepEqual(w2.tasks.map((t) => t.courierId), ['c0', 'c1', 'c0', 'c1']);
+});
+
+test('первыми раздаются опоздавшие, а не раньше собранные', async () => {
+  const w = world({ a: north1, b: north1, c: north1 });
+  w.ready('a', 0, -5); // собран раньше всех, но оформлен 5 минут назад
+  w.ready('b', 1, -40); // оформлен 40 минут назад — опаздывает сильнее всех
+  w.ready('c', 2, -20);
+  assert.equal(await w.service.assignVenue('v'), 2);
+  const [a, b, c] = w.tasks;
+  assert.equal(b.courierId, 'c0');
+  assert.equal(c.courierId, 'c0');
+  assert.equal(a.status, 'READY');
+  assert.equal(b.batchSeq, 1); // опоздавший везут первым
+  assert.equal(c.batchSeq, 2);
 });
 
 test('при двух свободных курьерах связки нет: каждому по заказу', async () => {

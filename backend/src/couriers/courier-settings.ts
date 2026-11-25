@@ -29,8 +29,11 @@ export interface CourierSettings {
   alertNotReadyMin: number;
   /// Тревога «долго в пути»: от «Забрал» прошло столько минут
   alertOnWayMin: number;
-  /// Связка по 2 заказа: максимальный лишний путь, км по прямой (0 — связок нет)
+  /// Связка по 2 заказа: максимальный лишний путь, км по прямой (0 — связок нет совсем)
   batchMaxDetourKm: number;
+  /// Связка в любую сторону: второй заказ даётся, даже если адреса в разные
+  /// стороны или без координат (крюк тогда только выбирает лучшего курьера)
+  batchAnyDirection: boolean;
   /// Час (время сервера), когда незакрытые смены закрываются сами (−1 — не закрывать)
   shiftAutoCloseHour: number;
   /// Заказы старого приложения из Poster: берём принятые не раньше стольких минут назад (0 — не брать)
@@ -51,6 +54,9 @@ export const COURIER_DEFAULTS: CourierSettings = {
   alertNotReadyMin: 25,
   alertOnWayMin: 20,
   batchMaxDetourKm: 1.5,
+  // Дом, 25.11.2026: курьеров не хватает, за день ни одной связки —
+  // второй заказ даём в любую сторону, первым везут более опоздавший
+  batchAnyDirection: true,
   // Работаем до 21:30, последний заказ довозят до ~23:00
   shiftAutoCloseHour: 0,
   // Старше полутора часов заказ уже точно увезли по-старому
@@ -75,6 +81,8 @@ export function courierSettings(tenantSettings: unknown): CourierSettings {
     alertNotReadyMin: num(raw.alertNotReadyMin, COURIER_DEFAULTS.alertNotReadyMin),
     alertOnWayMin: num(raw.alertOnWayMin, COURIER_DEFAULTS.alertOnWayMin),
     batchMaxDetourKm: num(raw.batchMaxDetourKm, COURIER_DEFAULTS.batchMaxDetourKm),
+    batchAnyDirection:
+      typeof raw.batchAnyDirection === 'boolean' ? raw.batchAnyDirection : COURIER_DEFAULTS.batchAnyDirection,
     shiftAutoCloseHour:
       raw.shiftAutoCloseHour === -1
         ? -1
