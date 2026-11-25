@@ -124,7 +124,7 @@ export class PosterImportService {
     dayStart.setHours(0, 0, 0, 0);
 
     const accounts = await this.prisma.posterAccount.findMany({
-      where: { tenantId, isActive: true },
+      where: { tenantId, isActive: true, kind: 'POSTER' },
       orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
       select: { id: true, name: true, token: true },
     });
