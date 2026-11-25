@@ -352,7 +352,7 @@ function AddAccount({ onClose, onSaved }: { onClose: () => void; onSaved: () => 
         <p className="mb-4 text-sm text-neutral-500">
           {kind === 'POSTER'
             ? 'Токен берётся в админке Poster: Настройки → API. Он не отображается после сохранения.'
-            : 'Ключ выпускается в кабинете WDrink: Продажи → Доставка PizzBurg. Он не отображается после сохранения.'}
+            : 'Ключ выпускается в кабинете WDrink: Продажи → Интеграция доставки. Он не отображается после сохранения.'}
         </p>
         {kind === 'WDRINK' && (
           <label className="mb-3 block">
