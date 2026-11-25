@@ -29,6 +29,12 @@ export interface CourierSettings {
   alertNotReadyMin: number;
   /// Тревога «долго в пути»: от «Забрал» прошло столько минут
   alertOnWayMin: number;
+  /// Связка по 2 заказа: максимальный лишний путь, км по прямой (0 — связок нет)
+  batchMaxDetourKm: number;
+  /// Час (время сервера), когда незакрытые смены закрываются сами (−1 — не закрывать)
+  shiftAutoCloseHour: number;
+  /// Заказы старого приложения из Poster: берём принятые не раньше стольких минут назад (0 — не брать)
+  posterImportWindowMin: number;
 }
 
 export const COURIER_DEFAULTS: CourierSettings = {
@@ -44,6 +50,11 @@ export const COURIER_DEFAULTS: CourierSettings = {
   alertNoCourierAtMin: 40,
   alertNotReadyMin: 25,
   alertOnWayMin: 20,
+  batchMaxDetourKm: 1.5,
+  // Работаем до 21:30, последний заказ довозят до ~23:00
+  shiftAutoCloseHour: 0,
+  // Старше полутора часов заказ уже точно увезли по-старому
+  posterImportWindowMin: 90,
 };
 
 export function courierSettings(tenantSettings: unknown): CourierSettings {
@@ -63,5 +74,11 @@ export function courierSettings(tenantSettings: unknown): CourierSettings {
     alertNoCourierAtMin: num(raw.alertNoCourierAtMin, COURIER_DEFAULTS.alertNoCourierAtMin),
     alertNotReadyMin: num(raw.alertNotReadyMin, COURIER_DEFAULTS.alertNotReadyMin),
     alertOnWayMin: num(raw.alertOnWayMin, COURIER_DEFAULTS.alertOnWayMin),
+    batchMaxDetourKm: num(raw.batchMaxDetourKm, COURIER_DEFAULTS.batchMaxDetourKm),
+    shiftAutoCloseHour:
+      raw.shiftAutoCloseHour === -1
+        ? -1
+        : num(raw.shiftAutoCloseHour, COURIER_DEFAULTS.shiftAutoCloseHour),
+    posterImportWindowMin: num(raw.posterImportWindowMin, COURIER_DEFAULTS.posterImportWindowMin),
   };
 }

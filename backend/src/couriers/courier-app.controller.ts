@@ -12,6 +12,7 @@ import {
 import {
   ArrayMaxSize,
   IsArray,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -34,6 +35,10 @@ class PickedUpDto extends QrDto {
 class DeliveredDto {
   @IsOptional() @IsNumber() @Min(-90) @Max(90) lat?: number;
   @IsOptional() @IsNumber() @Min(-180) @Max(180) lng?: number;
+}
+
+class PaidOtherwiseDto {
+  @IsIn(['CARD', 'KASPI']) paidBy: 'CARD' | 'KASPI';
 }
 
 class FailedDto {
@@ -115,6 +120,17 @@ export class CourierAppController {
   @HttpCode(200)
   handIn(@CourierActor() actor: CourierActorValue) {
     return this.app.handIn(actor);
+  }
+
+  /** «Клиент оплатил иначе» (картой, Kaspi): подтверждает кассир */
+  @Post('tasks/:id/paid-otherwise')
+  @HttpCode(200)
+  paidOtherwise(
+    @CourierActor() actor: CourierActorValue,
+    @Param('id') id: string,
+    @Body() dto: PaidOtherwiseDto,
+  ) {
+    return this.app.paidOtherwise(actor, id, dto.paidBy);
   }
 
   @Post('shift/end')

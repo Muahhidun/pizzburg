@@ -15,7 +15,7 @@ import { AdminAuthService } from './admin-auth.service';
 import { AdminAuditService } from './admin-audit.service';
 import { WoltDriveModule } from '../wolt-drive/wolt-drive.module';
 import { CouriersModule } from '../couriers/couriers.module';
-import { AdminDispatchController } from './admin-dispatch.controller';
+import { AdminDeliveryReportController, AdminDispatchController } from './admin-dispatch.controller';
 
 @Module({
   imports: [
@@ -34,6 +34,7 @@ import { AdminDispatchController } from './admin-dispatch.controller';
     AdminAuthController,
     AdminStaffController,
     AdminDispatchController,
+    AdminDeliveryReportController,
   ],
   providers: [AdminService, AdminGuard, AdminAuthService, AdminAuditService],
 })

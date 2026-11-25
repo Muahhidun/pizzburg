@@ -129,6 +129,31 @@ export class PosterClient {
     );
   }
 
+  /**
+   * Входящие (онлайн) заказы за день — для подтягивания на планшет раздачи
+   * заказов, пришедших мимо нас (старое приложение, старый сайт).
+   * Ответ разбираем по факту (poster-import.ts): поля у источников разные.
+   */
+  getIncomingOrders(token: string, date: string) {
+    // Poster ждёт дату со временем («Y-m-d H:i:s»). Голая дата в обоих
+    // полях — это промежуток 00:00–00:00, и ответ всегда пустой
+    // (так было 25.11.2026). timezone=client — время по часам заведения.
+    return this.call<Record<string, unknown>[]>(token, 'incomingOrders.getIncomingOrders', {
+      date_from: `${date} 00:00:00`,
+      date_to: `${date} 23:59:59`,
+      timezone: 'client',
+    });
+  }
+
+  /** Чек: оплата (наличные, карта) и данные доставки */
+  getTransaction(token: string, transactionId: string) {
+    return this.call<Record<string, unknown> | Record<string, unknown>[]>(
+      token,
+      'dash.getTransaction',
+      { transaction_id: transactionId, include_delivery: 'true' },
+    );
+  }
+
   /** Цена Poster (сотые) → целые ₸ */
   static toTenge(posterPrice: string | number | undefined): number {
     if (posterPrice === undefined) return 0;

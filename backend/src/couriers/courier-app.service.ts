@@ -5,11 +5,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { esc, TelegramService } from '../telegram/telegram.service';
 import { AssignmentService, itemsLine, paymentLine } from './assignment.service';
 import { CourierActorValue } from './courier-auth.guard';
-import { CourierCashService } from './courier-cash.service';
+import { CourierCashService, PaidBy } from './courier-cash.service';
+import { CourierPhotoService } from './courier-photo.service';
 import { CourierRegistrationService } from './courier-registration.service';
 import { courierSettings } from './courier-settings';
 import { verifyQrToken } from './dispatch-qr';
+import { completeDelivery } from './delivery-completion';
 import { shortName } from './names';
+import { externalOf, externalPaymentLine, orderOf } from './task-order';
 
 /**
  * Что курьер делает в Mini App (docs/COURIER_SYSTEM_SPEC.md §5–7):
@@ -42,6 +45,7 @@ export class CourierAppService {
     private readonly registration: CourierRegistrationService,
     private readonly cash: CourierCashService,
     private readonly geo: GeoService,
+    private readonly photos: CourierPhotoService,
   ) {}
 
   // ─── Экран курьера ─────────────────────────────────────────────
@@ -136,34 +140,43 @@ export class CourierAppService {
       queue: buildQueue(venueShifts, courier.id),
       tasks: await Promise.all(tasks.map(async (t) => {
         // Адрес и телефон — только после «Забрал»: до этого курьер видит
-        // номер и состав, чтобы найти пакет
-        const picked = t.status === 'PICKED_UP';
-        const addr = picked ? await this.withCoords(actor.tenantSlug, t.order.address) : null;
+        // номер и состав, чтобы найти пакет. Во второй заказ связки —
+        // только после первого: сначала везут более старый
+        const first = nextInBatch(t, tasks);
+        const picked = t.status === 'PICKED_UP' && !first;
+        const o = orderOf(t);
+        const ext = externalOf(t.external);
+        const addr = picked ? await this.withCoords(actor.tenantSlug, o.address) : null;
         return {
           id: t.id,
           kind: t.kind,
           status: t.status,
-          number: t.order.number,
+          number: o.number,
+          /// Заказ старого приложения или сайта, подтянутый из Poster
+          external: o.external,
           items:
             t.kind === 'EXTRA_TRIP'
               ? `Довоз: ${t.extraReason ?? 'без причины'}`
-              : itemsLine(t.order.items),
+              : itemsLine(o.items),
           // Галочки комплектации: по ним курьер сверяет пакет перед «Поехали»
-          checklist: t.kind === 'EXTRA_TRIP' ? [] : checklist(t.order.items),
-          payment: paymentLine({ ...t, changeFrom: t.order.changeFrom }),
+          checklist: t.kind === 'EXTRA_TRIP' ? [] : checklist(o.items),
+          payment: ext ? externalPaymentLine(ext) : paymentLine({ ...t, changeFrom: o.changeFrom }),
           cash: t.cashToCollect,
           needsTerminal: t.needsTerminal,
           assignedAt: t.assignedAt?.toISOString() ?? null,
           pickedUpAt: t.pickedUpAt?.toISOString() ?? null,
           extraReason: t.extraReason,
+          batchId: t.batchId,
+          batchSeq: t.batchSeq,
+          afterNumber: first ? orderOf(first).number : null,
           ...(picked
             ? {
                 address: addr ? formatAddress(addr) : null,
                 addressComment: addr?.comment || null,
                 mapUrl: addr ? mapUrl(addr, cityOf(t.venue.address)) : null,
-                phone: t.order.customer?.phone ?? null,
-                customerName: t.order.customer?.name ?? null,
-                comment: t.order.comment || null,
+                phone: o.phone,
+                customerName: o.customerName,
+                comment: o.comment || null,
               }
             : {}),
         };
@@ -189,7 +202,7 @@ export class CourierAppService {
       include: { order: { select: { number: true } } },
     });
     if (busy) {
-      throw new BadRequestException(`Сначала завершите доставку №${busy.order.number}`);
+      throw new BadRequestException(`Сначала завершите доставку №${orderOf(busy).number}`);
     }
 
     const now = new Date();
@@ -297,6 +310,12 @@ export class CourierAppService {
     return this.me(actor);
   }
 
+  /** «Клиент оплатил иначе»: карточка кассиру, он подтверждает */
+  async paidOtherwise(actor: CourierActorValue, taskId: string, paidBy: PaidBy) {
+    await this.cash.requestPaidOtherwise(actor.tenantId, actor.courier, taskId, paidBy);
+    return this.me(actor);
+  }
+
   // ─── «Забрал» ──────────────────────────────────────────────────
 
   /**
@@ -314,29 +333,41 @@ export class CourierAppService {
     if (task.status === 'PICKED_UP') return this.me(actor);
     if (task.status !== 'ASSIGNED') throw new BadRequestException('Этот заказ уже не ваш');
 
+    // Связку забирают одним «Поехали»: оба пакета, одни галочки, один скан
+    const group = task.batchId
+      ? await this.prisma.deliveryTask.findMany({
+          where: { batchId: task.batchId, courierId: actor.courier.id, status: 'ASSIGNED' },
+        })
+      : [task];
+
     const manual = qr === null;
-    let itemsConfirmed: number | undefined;
-    if (!manual && task.kind !== 'EXTRA_TRIP') {
-      const items = await this.prisma.orderItem.findMany({
-        where: { orderId: task.orderId, isUnavailable: false },
-        select: { id: true },
-      });
-      // Состав могли поменять, пока курьер отмечал (кассир снял позицию,
-      // добавил замену) — тогда пусть сверит ещё раз по свежему списку
-      if (missingItems(items, confirmedItemIds).length > 0) {
-        throw new BadRequestException('Состав заказа обновился. Отметьте все позиции ещё раз');
-      }
-      itemsConfirmed = items.length;
-    }
+    const confirmed = new Map<string, number>();
     if (!manual) {
+      for (const t of group) {
+        if (t.kind === 'EXTRA_TRIP') continue;
+        // У заказа из Poster состав — в снимке, своих строк заказа нет
+        const items = t.orderId
+          ? await this.prisma.orderItem.findMany({
+              where: { orderId: t.orderId, isUnavailable: false },
+              select: { id: true },
+            })
+          : orderOf(t).items.map((i) => ({ id: i.id }));
+        // Состав могли поменять, пока курьер отмечал (кассир снял позицию,
+        // добавил замену) — тогда пусть сверит ещё раз по свежему списку
+        if (missingItems(items, confirmedItemIds).length > 0) {
+          throw new BadRequestException('Состав заказа обновился. Отметьте все позиции ещё раз');
+        }
+        confirmed.set(t.id, items.length);
+      }
       const venueId = await this.venueFromQr(actor.tenantId, qr);
       if (venueId !== task.venueId) throw new BadRequestException('Это QR другой точки');
     }
+    const now = new Date();
     const changed = await this.prisma.deliveryTask.updateMany({
-      where: { id: taskId, status: 'ASSIGNED', courierId: actor.courier.id },
+      where: { id: { in: group.map((t) => t.id) }, status: 'ASSIGNED', courierId: actor.courier.id },
       data: {
         status: 'PICKED_UP',
-        pickedUpAt: new Date(),
+        pickedUpAt: now,
         pickupMethod: manual ? 'MANUAL' : 'SCAN',
         ...(manual ? { flags: { push: 'MANUAL_PICKUP' } } : {}),
       },
@@ -348,10 +379,14 @@ export class CourierAppService {
         data: { state: 'ON_DELIVERY' },
       });
     }
-    await this.event(actor, taskId, 'PICKED_UP', {
-      method: manual ? 'MANUAL' : 'SCAN',
-      ...(itemsConfirmed !== undefined ? { itemsConfirmed } : {}),
-    });
+    for (const t of group) {
+      const n = confirmed.get(t.id);
+      await this.event(actor, t.id, 'PICKED_UP', {
+        method: manual ? 'MANUAL' : 'SCAN',
+        ...(n !== undefined ? { itemsConfirmed: n } : {}),
+        ...(t.batchId ? { batchSeq: t.batchSeq } : {}),
+      });
+    }
     return this.me(actor);
   }
 
@@ -361,51 +396,25 @@ export class CourierAppService {
     const task = await this.ownTask(actor, taskId);
     if (task.status === 'DELIVERED') return this.me(actor);
     if (task.status !== 'PICKED_UP') throw new BadRequestException('Сначала отметьте «Забрал»');
+    await this.assertBatchOrder(actor, task);
 
     const cfg = courierSettings(actor.tenantSettings);
     const now = new Date();
-    await this.prisma.$transaction(async (tx) => {
-      const changed = await tx.deliveryTask.updateMany({
-        where: { id: taskId, status: 'PICKED_UP', courierId: actor.courier.id },
-        data: {
-          status: 'DELIVERED',
-          deliveredAt: now,
-          handoffMethod: 'BUTTON',
-          handoffLat: lat ?? null,
-          handoffLng: lng ?? null,
-        },
-      });
-      if (changed.count === 0) return;
-      // Повтор «Доставлен» не начислит дважды: уникальные индексы на задачу
-      await tx.courierPayoutLine.createMany({
-        data: [
-          {
-            tenantId: actor.tenantId,
-            courierId: actor.courier.id,
-            shiftId: task.shiftId,
-            taskId,
-            type: task.kind === 'EXTRA_TRIP' ? 'EXTRA_TRIP' : 'DELIVERY',
-            amount: cfg.deliveryPay,
-          },
-        ],
-        skipDuplicates: true,
-      });
-      if (task.cashToCollect > 0) {
-        await tx.courierCashEntry.createMany({
-          data: [
-            {
-              tenantId: actor.tenantId,
-              courierId: actor.courier.id,
-              taskId,
-              type: 'COLLECTED',
-              status: 'CONFIRMED',
-              amount: task.cashToCollect,
-            },
-          ],
-          skipDuplicates: true,
-        });
-      }
-    });
+    const done = await this.prisma.$transaction((tx) =>
+      completeDelivery(tx, {
+        tenantId: actor.tenantId,
+        task,
+        courierId: actor.courier.id,
+        shiftId: task.shiftId,
+        from: ['PICKED_UP'],
+        currentCourierId: actor.courier.id,
+        deliveryPay: cfg.deliveryPay,
+        now,
+        handoffMethod: 'BUTTON',
+        data: { handoffLat: lat ?? null, handoffLng: lng ?? null },
+      }),
+    );
+    if (!done) return this.me(actor);
     await this.afterTrip(actor, task.shiftId, now);
     await this.event(actor, taskId, 'DELIVERED', lat != null ? { lat, lng } : undefined);
     return this.me(actor);
@@ -429,7 +438,7 @@ export class CourierAppService {
         chat_id: chat,
         parse_mode: 'HTML',
         text:
-          `⚠️ <b>Курьер не смог доставить №${task.order.number}</b>\n` +
+          `⚠️ <b>Курьер не смог доставить №${orderOf(task).number}</b>\n` +
           `${esc(actor.courier.fullName)}: ${esc(reason)}\n\n` +
           'Свяжитесь с клиентом и решите, что делать с заказом. Курьер везёт его обратно.',
       });
@@ -447,7 +456,7 @@ export class CourierAppService {
       include: { order: { select: { number: true } } },
     });
     if (active) {
-      throw new BadRequestException(`Сначала завершите №${active.order.number}`);
+      throw new BadRequestException(`Сначала завершите №${orderOf(active).number}`);
     }
     await this.closeShift(actor, shift.id, 'COURIER');
     // Взаимозачёт: кто кому сколько отдаёт — карточкой в чат кассы
@@ -504,9 +513,6 @@ export class CourierAppService {
 
   // ─── Фото в очереди ────────────────────────────────────────────
 
-  /** Скачанные у Телеграма селфи: очередь опрашивается каждые 5 секунд */
-  private readonly photos = new Map<string, { data: Buffer; type: string }>();
-
   /**
    * Селфи коллеги для очереди. Только тем, кто сейчас на смене у той же
    * раздачи, и только тех, кто тоже на смене: фото не каталог курьеров.
@@ -520,14 +526,8 @@ export class CourierAppService {
     });
     const fileId = theirs?.courier.selfieFileId;
     if (!fileId) throw new NotFoundException('Нет фото');
-
-    let file = this.photos.get(fileId);
-    if (!file) {
-      file = (await this.telegram.downloadFile(actor.tenantId, fileId)) ?? undefined;
-      if (!file) throw new NotFoundException('Нет фото');
-      if (this.photos.size >= 50) this.photos.delete(this.photos.keys().next().value!);
-      this.photos.set(fileId, file);
-    }
+    const file = await this.photos.get(actor.tenantId, fileId);
+    if (!file) throw new NotFoundException('Нет фото');
     return file;
   }
 
@@ -539,6 +539,25 @@ export class CourierAppService {
       .coordsOf(tenantSlug, addr.street ?? '', addr.house ?? '')
       .catch(() => null);
     return point ? { ...addr, ...point } : addr;
+  }
+
+  /** Второй заказ связки закрывается только после первого */
+  private async assertBatchOrder(
+    actor: CourierActorValue,
+    task: { id: string; batchId: string | null; batchSeq: number | null },
+  ) {
+    if (!task.batchId) return;
+    const before = await this.prisma.deliveryTask.findFirst({
+      where: {
+        batchId: task.batchId,
+        courierId: actor.courier.id,
+        status: 'PICKED_UP',
+        id: { not: task.id },
+        batchSeq: { lt: task.batchSeq ?? 0 },
+      },
+      include: { order: { select: { number: true } } },
+    });
+    if (before) throw new BadRequestException(`Сначала доставьте №${orderOf(before).number}`);
   }
 
   private async ownTask(actor: CourierActorValue, taskId: string) {
@@ -630,6 +649,26 @@ export function checklist(items: ChecklistItem[]) {
         note: [...mods, ...(i.isGift ? ['подарок'] : [])].join(', '),
       };
     });
+}
+
+/**
+ * Первый заказ связки, который ещё в пути, — если `t` идёт после него.
+ * Пока он не доставлен, адрес второго курьеру не показываем.
+ */
+export function nextInBatch<
+  T extends { id: string; status: string; batchId: string | null; batchSeq: number | null },
+>(t: T, all: T[]): T | null {
+  if (!t.batchId || t.batchSeq == null) return null;
+  return (
+    all.find(
+      (o) =>
+        o.id !== t.id &&
+        o.batchId === t.batchId &&
+        o.status === t.status &&
+        o.batchSeq != null &&
+        o.batchSeq < t.batchSeq!,
+    ) ?? null
+  );
 }
 
 /** Каких позиций курьер не отметил */

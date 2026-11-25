@@ -1,8 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { GeoService } from '../geo/geo.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { adminBaseUrl, esc, TelegramService } from '../telegram/telegram.service';
+import { bestPartner, Point, streetHouseOf } from './batching';
 import { courierSettings } from './courier-settings';
+import { externalOf, externalPaymentLine, orderOf } from './task-order';
 
 /**
  * Раздача заказов курьерам (docs/COURIER_SYSTEM_SPEC.md §6).
@@ -11,8 +14,13 @@ import { courierSettings } from './courier-settings';
  * очереди у раздачи: первым — курьеры из графика, внутри — по времени
  * скана «Я на месте». Курьер заказ не выбирает и не «перехватывает».
  *
- * Связки по два заказа будут отдельным шагом: им нужны координаты.
+ * Связки по два заказа (§6.4): когда свободных курьеров не осталось,
+ * готовый заказ добавляется вторым тому, кто ещё стоит у раздачи со своим
+ * заказом, — если оба адреса в одну сторону (batching.ts).
  */
+
+/** Почему курьера сняли с назначенного заказа */
+export type ReleaseReason = 'PICKUP_TIMEOUT' | 'COURIER_LEFT';
 
 const MAX_ASSIGN_PER_PASS = 20;
 
@@ -52,6 +60,7 @@ export class AssignmentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly telegram: TelegramService,
+    private readonly geo: GeoService,
   ) {}
 
   /** Раздать готовые заказы ожидающим курьерам точки. Возвращает число назначений */
@@ -113,44 +122,192 @@ export class AssignmentService {
       assigned++;
       await this.notifyAssigned(task.id);
     }
+    // Свободных курьеров не осталось — оставшиеся готовые заказы пробуем
+    // добавить вторыми тем, кто ещё стоит у раздачи
+    assigned += await this.attachSeconds(venueId);
     return assigned;
   }
 
   /**
-   * Снять назначение. `back` — куда вернуть заказ: в «Новый» (раздача
-   * нажала «Отменить») или в «Готов» (курьер не пришёл за ним).
+   * Связки: готовый заказ без курьера → вторым тому, кто ещё у раздачи
+   * (назначен, но не протянул «Поехали») с одним заказом в ту же сторону.
+   * Зовётся только когда свободных курьеров в очереди нет: при свободном
+   * курьере заказ быстрее увезти отдельно.
    */
-  async unassign(
-    taskId: string,
-    reason: 'READY_UNDONE' | 'PICKUP_TIMEOUT',
-    actor: string,
+  private async attachSeconds(venueId: string): Promise<number> {
+    const venue = await this.prisma.venue.findUnique({
+      where: { id: venueId },
+      select: {
+        address: true,
+        lat: true,
+        lng: true,
+        tenant: { select: { slug: true, settings: true } },
+      },
+    });
+    if (!venue) return 0;
+    const cfg = courierSettings(venue.tenant.settings);
+    if (cfg.batchMaxDetourKm <= 0) return 0;
+
+    const orderSelect = { select: { number: true, address: true, createdAt: true } } as const;
+    const ready = await this.prisma.deliveryTask.findMany({
+      where: { venueId, status: 'READY', courierId: null, kind: 'DELIVERY' },
+      orderBy: [{ readyAt: 'asc' }, { id: 'asc' }],
+      include: { order: orderSelect },
+    });
+    if (ready.length === 0) return 0;
+
+    const shifts = await this.prisma.courierShift.findMany({
+      where: { venueId, endedAt: null, state: 'ASSIGNED', courier: { status: 'ACTIVE' } },
+      include: {
+        tasks: {
+          where: { status: { in: ['ASSIGNED', 'PICKED_UP'] } },
+          include: { order: orderSelect },
+        },
+      },
+    });
+    const holders = shifts.filter(
+      (s) =>
+        s.tasks.length === 1 &&
+        s.tasks[0].status === 'ASSIGNED' &&
+        s.tasks[0].kind === 'DELIVERY' &&
+        !s.tasks[0].batchId,
+    );
+    if (holders.length === 0) return 0;
+
+    const slug = venue.tenant.slug;
+    const venuePoint = await this.venuePoint(slug, venue);
+    if (!venuePoint) return 0;
+
+    const free = await Promise.all(
+      holders.map(async (s) => ({
+        shift: s,
+        task: s.tasks[0],
+        point: await this.pointOf(slug, orderOf(s.tasks[0]).address),
+      })),
+    );
+    let attached = 0;
+    for (const second of ready) {
+      if (free.length === 0) break;
+      const point = await this.pointOf(slug, orderOf(second).address);
+      if (!point) continue;
+      const best = bestPartner(venuePoint, point, free, cfg.batchMaxDetourKm);
+      if (!best) continue;
+      const holder = best.item;
+      if (await this.attach(holder.shift.id, holder.shift.courierId, holder.task, second, best.detourKm)) {
+        attached++;
+        await this.notifyAssigned(second.id);
+      }
+      free.splice(free.indexOf(holder), 1);
+    }
+    return attached;
+  }
+
+  private async attach(
+    shiftId: string,
+    courierId: string,
+    first: { id: string; tenantId: string; order?: { number: number; createdAt: Date } | null; external?: unknown },
+    second: { id: string; order?: { number: number; createdAt: Date } | null; external?: unknown },
+    detourKm: number,
   ): Promise<boolean> {
+    // Первым везут более старый заказ
+    const firstGoesFirst =
+      orderOf(first).createdAt.getTime() <= orderOf(second).createdAt.getTime();
+    const batchId = first.id;
+    return this.prisma
+      .$transaction(async (tx) => {
+        const a = await tx.deliveryTask.updateMany({
+          where: { id: first.id, status: 'ASSIGNED', courierId, batchId: null },
+          data: { batchId, batchSeq: firstGoesFirst ? 1 : 2 },
+        });
+        const b = await tx.deliveryTask.updateMany({
+          where: { id: second.id, status: 'READY', courierId: null },
+          data: {
+            status: 'ASSIGNED',
+            courierId,
+            shiftId,
+            assignedAt: new Date(),
+            batchId,
+            batchSeq: firstGoesFirst ? 2 : 1,
+          },
+        });
+        if (a.count === 0 || b.count === 0) throw new Error('RACE');
+        await tx.deliveryTaskEvent.create({
+          data: {
+            tenantId: first.tenantId,
+            taskId: second.id,
+            shiftId,
+            courierId,
+            type: 'ASSIGNED',
+            actor: 'SYSTEM',
+            meta: { batchWith: first.id, detourKm: Math.round(detourKm * 100) / 100 },
+          },
+        });
+        return true;
+      })
+      .catch((e) => {
+        if (!(e instanceof Error && e.message === 'RACE')) throw e;
+        return false;
+      });
+  }
+
+  /** Точка раздачи: свои координаты или дом из справочника по адресу */
+  private async venuePoint(
+    tenantSlug: string,
+    venue: { address: string; lat: number | null; lng: number | null },
+  ): Promise<Point | null> {
+    if (venue.lat != null && venue.lng != null) return { lat: venue.lat, lng: venue.lng };
+    const sh = streetHouseOf(venue.address);
+    return sh ? this.geo.coordsOf(tenantSlug, sh.street, sh.house).catch(() => null) : null;
+  }
+
+  /** Точка адреса заказа: свои координаты или справочник по улице и дому */
+  async pointOf(tenantSlug: string, raw: unknown): Promise<Point | null> {
+    const a = (raw ?? {}) as { street?: string; house?: string; lat?: unknown; lng?: unknown };
+    if (typeof a.lat === 'number' && typeof a.lng === 'number') return { lat: a.lat, lng: a.lng };
+    if (!a.street || !a.house) return null;
+    return this.geo.coordsOf(tenantSlug, a.street, a.house).catch(() => null);
+  }
+
+  /**
+   * Снять заказ с курьера, который ещё у раздачи. Не вина курьера — место
+   * в очереди сохраняется. Если у него связка, второй заказ остаётся за ним
+   * как одиночный.
+   * - `READY_UNDONE` — «Отменить» сразу после «Готов»: заказ обратно в «Новый»;
+   * - `CANCELLED` — заказ отменён (клиент передумал): плитка закрывается.
+   */
+  async unassign(taskId: string, reason: 'READY_UNDONE' | 'CANCELLED', actor: string): Promise<boolean> {
     const task = await this.prisma.deliveryTask.findUnique({
       where: { id: taskId },
       include: { order: { select: { number: true } }, courier: true },
     });
     if (!task || task.status !== 'ASSIGNED' || !task.shiftId || !task.courierId) return false;
 
-    const toNew = reason === 'READY_UNDONE';
     const ok = await this.prisma
       .$transaction(async (tx) => {
         const t = await tx.deliveryTask.updateMany({
           where: { id: taskId, status: 'ASSIGNED', courierId: task.courierId },
           data: {
-            status: toNew ? 'NEW' : 'READY',
-            readyAt: toNew ? null : task.readyAt,
+            ...(reason === 'CANCELLED' ? { status: 'CANCELLED' } : { status: 'NEW', readyAt: null }),
             courierId: null,
             shiftId: null,
             assignedAt: null,
+            batchId: null,
+            batchSeq: null,
           },
         });
         if (t.count === 0) throw new Error('RACE');
-        // Отбой от раздачи — не вина курьера: место в очереди сохраняется.
-        // Не пришёл за заказом — выходит из очереди до нового скана.
-        await tx.courierShift.updateMany({
-          where: { id: task.shiftId!, state: 'ASSIGNED' },
-          data: { state: toNew ? 'WAITING' : 'AWAY' },
-        });
+        const rest = task.batchId
+          ? await tx.deliveryTask.updateMany({
+              where: { batchId: task.batchId, courierId: task.courierId },
+              data: { batchId: null, batchSeq: null },
+            })
+          : { count: 0 };
+        if (rest.count === 0) {
+          await tx.courierShift.updateMany({
+            where: { id: task.shiftId!, state: 'ASSIGNED' },
+            data: { state: 'WAITING' },
+          });
+        }
         await tx.deliveryTaskEvent.create({
           data: {
             tenantId: task.tenantId,
@@ -169,12 +326,104 @@ export class AssignmentService {
       });
     if (!ok) return false;
 
-    const text = toNew
-      ? `↩️ Отбой: №${task.order.number} ещё не собран. Вы остаётесь в очереди на своём месте.`
-      : `⏰ №${task.order.number} передан другому курьеру: вы не отметили «Забрал». ` +
-        'Вы вне очереди. Чтобы снова получать заказы, отсканируйте QR у раздачи.';
-    await this.sendToCourier(task.tenantId, task.courier!.telegramUserId, text);
+    await this.sendToCourier(
+      task.tenantId,
+      task.courier!.telegramUserId,
+      reason === 'CANCELLED'
+        ? `❌ №${orderOf(task).number} отменён, забирать не нужно. ` +
+            (task.batchId ? 'Второй заказ по-прежнему ваш.' : 'Вы остаётесь в очереди на своём месте.')
+        : task.batchId
+          ? `↩️ Отбой: №${orderOf(task).number} ещё не собран. Второй заказ по-прежнему ваш.`
+          : `↩️ Отбой: №${orderOf(task).number} ещё не собран. Вы остаётесь в очереди на своём месте.`,
+    );
     return true;
+  }
+
+  /**
+   * Курьер вне очереди: не пришёл за заказом (`PICKUP_TIMEOUT`, нарушение)
+   * или раздача отметила «Уехал» (`COURIER_LEFT`, без нарушения — например,
+   * повёз заказ из старого приложения). Назначенные, но не забранные заказы
+   * возвращаются в «Готов» и сразу уходят следующему. Уже забранные остаются
+   * у курьера. Вернётся — отсканирует QR и встанет в конец очереди.
+   *
+   * Возвращает номера снятых заказов или null, если менять было нечего.
+   */
+  async releaseShift(shiftId: string, reason: ReleaseReason, actor: string): Promise<string[] | null> {
+    const shift = await this.prisma.courierShift.findUnique({
+      where: { id: shiftId },
+      include: {
+        courier: { select: { telegramUserId: true } },
+        tasks: {
+          where: { status: 'ASSIGNED' },
+          include: { order: { select: { number: true } } },
+        },
+      },
+    });
+    if (!shift || shift.endedAt) return null;
+    const carrying = await this.prisma.deliveryTask.count({
+      where: { shiftId, status: 'PICKED_UP' },
+    });
+    // Везёт заказ — он и так не в очереди; вернётся сканом
+    if (carrying > 0 && shift.tasks.length === 0) return null;
+    if (shift.state === 'AWAY' && shift.tasks.length === 0) return null;
+
+    const released = await this.prisma.$transaction(async (tx) => {
+      const numbers: string[] = [];
+      for (const t of shift.tasks) {
+        const changed = await tx.deliveryTask.updateMany({
+          where: { id: t.id, status: 'ASSIGNED', courierId: shift.courierId },
+          data: {
+            status: 'READY',
+            courierId: null,
+            shiftId: null,
+            assignedAt: null,
+            batchId: null,
+            batchSeq: null,
+          },
+        });
+        if (changed.count === 0) continue;
+        numbers.push(orderOf(t).number);
+        await tx.deliveryTaskEvent.create({
+          data: {
+            tenantId: shift.tenantId,
+            taskId: t.id,
+            shiftId,
+            courierId: shift.courierId,
+            type: reason,
+            actor,
+          },
+        });
+      }
+      // С забранным заказом курьер в пути, а не вне смены
+      if (carrying === 0) {
+        await tx.courierShift.updateMany({
+          where: { id: shiftId, endedAt: null },
+          data: { state: 'AWAY', pauseUntil: null },
+        });
+        if (reason === 'COURIER_LEFT') {
+          await tx.deliveryTaskEvent.create({
+            data: { tenantId: shift.tenantId, shiftId, courierId: shift.courierId, type: 'AWAY', actor },
+          });
+        }
+      }
+      return numbers;
+    });
+
+    const list = released.map((n) => `№${n}`).join(' и ');
+    const text =
+      reason === 'PICKUP_TIMEOUT'
+        ? `⏰ ${list} ${released.length > 1 ? 'переданы' : 'передан'} другому курьеру: вы не отметили «Забрал». ` +
+          'Вы вне очереди. Чтобы снова получать заказы, отсканируйте QR у раздачи.'
+        : (released.length > 0
+            ? `${list} ${released.length > 1 ? 'переданы' : 'передан'} другому курьеру. `
+            : '') +
+          '🚗 Раздача отметила, что вы уехали: вы вне очереди. ' +
+          'Вернётесь — отсканируйте QR у раздачи, и снова начнут приходить заказы.';
+    if (reason === 'COURIER_LEFT' || released.length > 0) {
+      await this.sendToCourier(shift.tenantId, shift.courier.telegramUserId, text);
+    }
+    if (released.length > 0) await this.assignVenue(shift.venueId);
+    return released;
   }
 
   /**
@@ -204,9 +453,11 @@ export class AssignmentService {
           status: 'ASSIGNED',
           assignedAt: { lt: new Date(now.getTime() - cfg.pickupTimeoutMin * 60_000) },
         },
-        select: { id: true },
+        select: { shiftId: true },
       });
-      for (const t of late) await this.unassign(t.id, 'PICKUP_TIMEOUT', 'SYSTEM');
+      // Связка уходит целиком: заказы одного курьера снимаем вместе
+      const lateShifts = [...new Set(late.map((t) => t.shiftId).filter((id): id is string => !!id))];
+      for (const id of lateShifts) await this.releaseShift(id, 'PICKUP_TIMEOUT', 'SYSTEM');
 
       const gone = await this.prisma.courierShift.findMany({
         where: {
@@ -280,6 +531,7 @@ export class AssignmentService {
         order: {
           select: {
             number: true,
+            createdAt: true,
             changeFrom: true,
             items: { select: { name: true, qty: true, isUnavailable: true } },
           },
@@ -287,15 +539,37 @@ export class AssignmentService {
       },
     });
     if (!task?.courier) return;
+    const view = orderOf(task);
     const what =
       task.kind === 'EXTRA_TRIP'
         ? `Довоз: ${task.extraReason ?? 'без причины'}`
-        : itemsLine(task.order.items);
+        : itemsLine(view.items);
+    const ext = externalOf(task.external);
+    const pay = ext
+      ? externalPaymentLine(ext)
+      : paymentLine({ ...task, changeFrom: view.changeFrom });
+    const partner = task.batchId
+      ? await this.prisma.deliveryTask.findFirst({
+          where: { batchId: task.batchId, id: { not: task.id }, courierId: task.courierId },
+          select: { external: true, order: { select: { number: true, createdAt: true } } },
+        })
+      : null;
+    const title = partner
+      ? `➕ <b>Ещё заказ по пути: №${view.number}</b>`
+      : `🛵 <b>Заберите ${task.kind === 'EXTRA_TRIP' ? 'довоз к ' : ''}№${view.number}</b>`;
+    const order = partner
+      ? task.batchSeq === 1
+        ? `Везёте два заказа: сначала №${view.number}, потом №${orderOf(partner).number}.`
+        : `Везёте два заказа: сначала №${orderOf(partner).number}, потом №${view.number}.`
+      : '';
     const text =
-      `🛵 <b>Заберите ${task.kind === 'EXTRA_TRIP' ? 'довоз к ' : ''}№${task.order.number}</b>\n` +
+      `${title}\n` +
       `${esc(what)}\n` +
-      `${esc(paymentLine({ ...task, changeFrom: task.order.changeFrom }))}\n\n` +
-      'Получите пакет на раздаче и отметьте «Забрал» со сканом QR.';
+      `${esc(pay)}\n\n` +
+      (order ? `${order}\n` : '') +
+      (partner
+        ? 'Заберите оба пакета, отметьте позиции и протяните «Поехали» со сканом QR.'
+        : 'Получите пакет на раздаче и отметьте «Забрал» со сканом QR.');
     await this.sendToCourier(task.tenantId, task.courier.telegramUserId, text, task.tenant.slug);
   }
 

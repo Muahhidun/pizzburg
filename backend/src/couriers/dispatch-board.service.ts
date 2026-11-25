@@ -7,10 +7,16 @@ import QRCode from 'qrcode';
 import { PrismaService } from '../prisma/prisma.service';
 import { AssignmentService } from './assignment.service';
 import { taskAlert } from './courier-alerts.service';
+import { CourierCashService } from './courier-cash.service';
+import { CourierPhotoService } from './courier-photo.service';
 import { courierSettings } from './courier-settings';
 import { DispatchDeviceValue, hashDeviceToken } from './dispatch-device.guard';
 import { createQrToken } from './dispatch-qr';
 import { shortName } from './names';
+import { externalOf, externalPaymentLine, orderOf } from './task-order';
+import { formatAddress } from './courier-app.service';
+import { completeDelivery } from './delivery-completion';
+import { paymentLine } from './assignment.service';
 
 /**
  * Планшет раздачи (docs/COURIER_SYSTEM_SPEC.md §4).
@@ -43,6 +49,8 @@ export class DispatchBoardService {
     private readonly prisma: PrismaService,
     private readonly assignment: AssignmentService,
     private readonly telegram: TelegramService,
+    private readonly cash?: CourierCashService,
+    private readonly photos?: CourierPhotoService,
   ) {}
 
   // ─── Задачи из заказов ─────────────────────────────────────────
@@ -140,13 +148,17 @@ export class DispatchBoardService {
               createdAt: true,
               scheduledAt: true,
               paymentMethod: true,
+              address: true,
+              comment: true,
+              changeFrom: true,
+              customer: { select: { phone: true, name: true } },
               items: {
                 select: {
                   name: true,
                   qty: true,
                   modifiers: true,
                   isUnavailable: true,
-                  product: { select: { posterAccount: { select: { name: true, kind: true } } } },
+                  product: { select: { posterAccountId: true } },
                 },
               },
               // Касса WDrink (DECISIONS §15): приняли ли напитки
@@ -161,7 +173,10 @@ export class DispatchBoardService {
       this.prisma.courierShift.findMany({
         where: { venueId: device.venueId, endedAt: null },
         orderBy: [{ scheduled: 'desc' }, { queuedAt: 'asc' }],
-        include: { courier: { select: { fullName: true } } },
+        include: {
+          courier: { select: { id: true, fullName: true, selfieFileId: true } },
+          tasks: { where: { status: { in: ['ASSIGNED', 'PICKED_UP'] } }, select: { status: true } },
+        },
       }),
       // Кто отметился за последнюю минуту — всплывает на планшете, чтобы
       // раздача видела, если «отметился» человек, которого нет у стойки
@@ -192,6 +207,7 @@ export class DispatchBoardService {
       select: { settings: true },
     });
     const cfg = courierSettings(tenant?.settings);
+    const departments = await this.departments(device.tenantId);
     const waitingShifts = shifts.filter((s) => s.state === 'WAITING');
     const alertCtx = {
       waitingCouriers: waitingShifts.length,
@@ -231,22 +247,36 @@ export class DispatchBoardService {
       })),
       couriers: shifts.map((s) => ({
         shiftId: s.id,
+        courierId: s.courier.id,
         name: shortName(s.courier.fullName),
+        photo: !!s.courier.selfieFileId,
+        // Везёт заказ — «Уехал» и «Закончил смену» ему не нужны
+        carrying: s.tasks.some((t) => t.status === 'PICKED_UP'),
         state: s.state,
         queuedAt: s.queuedAt?.toISOString() ?? null,
         pauseUntil: s.pauseUntil?.toISOString() ?? null,
       })),
-      tasks: tasks.map((t) => ({
+      tasks: tasks.map((raw) => {
+        // Заказ из Poster (старое приложение) — данные из снимка
+        const o = orderOf(raw);
+        const ext = externalOf(raw.external);
+        const t = { ...raw, order: { createdAt: o.createdAt, scheduledAt: o.scheduledAt } };
+        return {
         id: t.id,
         kind: t.kind,
         status: t.status,
-        number: t.order.number,
-        createdAt: t.order.createdAt.toISOString(),
-        scheduledAt: t.order.scheduledAt?.toISOString() ?? null,
+        number: o.number,
+        external: o.external,
+        createdAt: o.createdAt.toISOString(),
+        scheduledAt: o.scheduledAt?.toISOString() ?? null,
         readyAt: t.readyAt?.toISOString() ?? null,
         pickedUpAt: t.pickedUpAt?.toISOString() ?? null,
         doneAt: (t.deliveredAt ?? (DONE.includes(t.status) ? t.updatedAt : null))?.toISOString() ?? null,
         courier: t.courier ? shortName(t.courier.fullName) : null,
+        batchSeq: t.batchSeq,
+        // Позиции других отделов (Sunday): раздача ждёт, пока их принесут
+        otherDepartments:
+          t.kind === 'EXTRA_TRIP' ? [] : otherDepartments(o.items, departments),
         cash: t.cashToCollect,
         needsTerminal: t.needsTerminal,
         extraReason: t.extraReason,
@@ -254,25 +284,43 @@ export class DispatchBoardService {
         // Напитки готовит другая касса и приносит на раздачу: видно, приняла
         // ли она заказ, чтобы не нажать «Готов» без них
         drinks:
-          t.kind === 'EXTRA_TRIP' || !t.order.dispatches?.length
+          raw.kind === 'EXTRA_TRIP' || !raw.order?.dispatches?.length
             ? null
             : {
-                name: t.order.dispatches[0].posterAccount.name,
-                accepted: t.order.dispatches.every((d) => d.posterStatus === 'ACCEPTED'),
+                name: raw.order.dispatches[0].posterAccount.name,
+                accepted: raw.order.dispatches.every((d) => d.posterStatus === 'ACCEPTED'),
               },
+        // Для большой карточки по долгому нажатию: раздача уточняет детали
+        details: {
+          address: o.address ? formatAddress(o.address as Parameters<typeof formatAddress>[0]) : null,
+          addressComment: (o.address as { comment?: string } | null)?.comment || null,
+          phone: o.phone,
+          customerName: o.customerName,
+          comment: o.comment || null,
+          payment: ext
+            ? externalPaymentLine(ext)
+            : paymentLine({ ...raw, changeFrom: o.changeFrom }),
+          // Отменить на планшете можно только заказ старого приложения:
+          // наш отменяется через кассу — это касается клиента и оплаты
+          cancellable: raw.source === 'POSTER' && ['NEW', 'READY', 'ASSIGNED'].includes(raw.status),
+          // Ручные статусы — когда у планшета пропадала связь
+          canMarkPickedUp: raw.kind !== 'PICKUP' && ['NEW', 'READY', 'ASSIGNED'].includes(raw.status),
+          canMarkDelivered: raw.kind !== 'PICKUP' && ACTIVE.includes(raw.status),
+          courierId: raw.courierId,
+        },
         // У довоза свой «состав» — причина; весь заказ на плитке путал бы
-        items: t.kind === 'EXTRA_TRIP' ? [] : t.order.items
+        items: t.kind === 'EXTRA_TRIP' ? [] : o.items
           .filter((i) => !i.isUnavailable)
           .map((i) => ({
             name: i.name,
             qty: i.qty,
-            source:
-              i.product?.posterAccount?.kind === 'WDRINK' ? i.product.posterAccount.name : null,
+            department: departmentOf(i, departments),
             modifiers: ((i.modifiers as Modifier[] | null) ?? [])
               .map((m) => m?.name)
               .filter((n): n is string => !!n),
           })),
-      })),
+        };
+      }),
     };
   }
 
@@ -323,6 +371,243 @@ export class DispatchBoardService {
     return { status: 'NEW' as const };
   }
 
+  /**
+   * «Отменить заказ» в большой карточке. Только для заказов старого
+   * приложения: кассир отменил чек в Poster, а плитка осталась. Если заказ
+   * уже назначен, курьер получает «отменён» и остаётся в очереди на месте.
+   * Уехавший с заказом курьер — не отмена, а «Не удалось доставить».
+   */
+  async cancelTask(device: DispatchDeviceValue, taskId: string) {
+    const task = await this.ownTask(device, taskId);
+    if (task.status === 'CANCELLED') return { status: task.status };
+    if (task.source !== 'POSTER') {
+      throw new BadRequestException(
+        'Наш заказ отменяется через кассу: в Telegram «Действия» → «Отменить». Плитка уйдёт сама',
+      );
+    }
+    if (task.status === 'PICKED_UP') {
+      throw new BadRequestException('Курьер уже везёт заказ — отменить на планшете нельзя');
+    }
+    if (!['NEW', 'READY', 'ASSIGNED'].includes(task.status)) {
+      throw new BadRequestException('Заказ уже закрыт');
+    }
+    const actor = `DEVICE:${device.id}`;
+    if (task.status === 'ASSIGNED') {
+      if (await this.assignment.unassign(taskId, 'CANCELLED', actor)) return { status: 'CANCELLED' as const };
+      throw new BadRequestException('Заказ только что изменился, попробуйте ещё раз');
+    }
+    const changed = await this.prisma.deliveryTask.updateMany({
+      where: { id: taskId, status: { in: ['NEW', 'READY'] } },
+      data: { status: 'CANCELLED' },
+    });
+    if (changed.count === 0) throw new BadRequestException('Заказ только что изменился, попробуйте ещё раз');
+    await this.event(device.tenantId, taskId, 'CANCELLED', actor);
+    return { status: 'CANCELLED' as const };
+  }
+
+  // ─── Ручные статусы (у планшета пропал интернет) ───────────────
+
+  /**
+   * «Забрал курьер…»: пока планшет был без связи, курьер взял пакет сам.
+   * Раздача выбирает его из тех, кто на смене. Заказ — у него «в пути»,
+   * как после ползунка; курьеру приходит сообщение, адрес — в приложении.
+   * Если заказ был назначен другому — тому «отбой», он остаётся в очереди.
+   */
+  async markPickedUp(device: DispatchDeviceValue, taskId: string, shiftId: string) {
+    const task = await this.ownTask(device, taskId);
+    if (task.kind === 'PICKUP') throw new BadRequestException('Это самовывоз: «Выдан клиенту»');
+    const shift = await this.venueShift(device, shiftId);
+    if (task.status === 'PICKED_UP' && task.courierId === shift.courierId) return { status: task.status };
+    if (!['NEW', 'READY', 'ASSIGNED'].includes(task.status)) {
+      throw new BadRequestException(
+        task.status === 'PICKED_UP' ? 'Заказ уже везёт другой курьер' : 'Заказ уже закрыт',
+      );
+    }
+    const actor = `DEVICE:${device.id}`;
+    const before = { courierId: task.courierId, shiftId: task.shiftId, status: task.status };
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      const changed = await tx.deliveryTask.updateMany({
+        where: { id: taskId, status: before.status, courierId: before.courierId },
+        data: {
+          status: 'PICKED_UP',
+          courierId: shift.courierId,
+          shiftId: shift.id,
+          readyAt: task.readyAt ?? now,
+          assignedAt: task.assignedAt ?? now,
+          pickedUpAt: now,
+          pickupMethod: 'DISPATCH',
+        },
+      });
+      if (changed.count === 0) throw new BadRequestException('Заказ только что изменился, попробуйте ещё раз');
+      await this.releaseBatch(tx, task, shift.courierId);
+      await this.freePrevious(tx, before, shift.id);
+      await tx.courierShift.update({ where: { id: shift.id }, data: { state: 'ON_DELIVERY', pauseUntil: null } });
+      await tx.deliveryTaskEvent.create({
+        data: {
+          tenantId: device.tenantId,
+          taskId,
+          shiftId: shift.id,
+          courierId: shift.courierId,
+          type: 'PICKED_UP',
+          actor,
+          meta: { method: 'DISPATCH' },
+        },
+      });
+    });
+    const number = await this.numberOf(taskId);
+    await this.tellPrevious(device.tenantId, before, shift.courierId, number);
+    await this.assignment.sendToCourier(
+      device.tenantId,
+      shift.courier.telegramUserId,
+      `📦 Раздача отметила: вы везёте №${number}. Адрес и «Доставлен» — в приложении.`,
+    );
+    // Освободился назначенный курьер — ему может достаться следующий заказ
+    if (before.status === 'ASSIGNED') await this.assignment.assignVenue(device.venueId);
+    return { status: 'PICKED_UP' as const };
+  }
+
+  /**
+   * «Доставлен»: курьер успел забрать и отвезти, пока планшет был без
+   * связи. Доставка засчитывается курьеру в оплату, наличные — на нём,
+   * как после его собственного «Доставлен». У заказа, который ещё никто
+   * не вёз, раздача выбирает курьера (`shiftId`).
+   */
+  async markDelivered(device: DispatchDeviceValue, taskId: string, shiftId?: string) {
+    const task = await this.ownTask(device, taskId);
+    if (task.kind === 'PICKUP') throw new BadRequestException('Это самовывоз: «Выдан клиенту»');
+    if (task.status === 'DELIVERED') return { status: task.status };
+    if (!['NEW', 'READY', 'ASSIGNED', 'PICKED_UP'].includes(task.status)) {
+      throw new BadRequestException('Заказ уже закрыт');
+    }
+    // Везёт — закрываем за того, кто везёт; иначе — за выбранного
+    const carrying = task.status === 'PICKED_UP';
+    const shift = carrying
+      ? await this.prisma.courierShift.findFirst({ where: { id: task.shiftId ?? '' }, include: { courier: true } })
+      : shiftId
+        ? await this.venueShift(device, shiftId)
+        : null;
+    if (!shift || (carrying && shift.courierId !== task.courierId)) {
+      if (carrying) throw new BadRequestException('Не найдена смена курьера, который везёт заказ');
+      throw new BadRequestException('Выберите курьера, который отвёз заказ');
+    }
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: device.tenantId }, select: { settings: true } });
+    const cfg = courierSettings(tenant?.settings);
+    const actor = `DEVICE:${device.id}`;
+    const before = { courierId: task.courierId, shiftId: task.shiftId, status: task.status };
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      const ok = await completeDelivery(tx, {
+        tenantId: device.tenantId,
+        task,
+        courierId: shift.courierId,
+        shiftId: shift.id,
+        from: [before.status as 'NEW' | 'READY' | 'ASSIGNED' | 'PICKED_UP'],
+        currentCourierId: before.courierId,
+        deliveryPay: cfg.deliveryPay,
+        now,
+        handoffMethod: 'DISPATCH',
+        data: {
+          readyAt: task.readyAt ?? now,
+          assignedAt: task.assignedAt ?? now,
+          pickedUpAt: task.pickedUpAt ?? now,
+          ...(carrying ? {} : { pickupMethod: 'DISPATCH' }),
+        },
+      });
+      if (!ok) throw new BadRequestException('Заказ только что изменился, попробуйте ещё раз');
+      if (!carrying) {
+        await this.releaseBatch(tx, task, shift.courierId);
+        await this.freePrevious(tx, before, shift.id);
+      }
+      // Вёз и больше ничего не везёт — едет обратно, в очередь встанет
+      // сканом QR. Не вёз (стоял в очереди) — место в очереди не трогаем.
+      if (carrying) {
+        const more = await tx.deliveryTask.count({ where: { shiftId: shift.id, status: 'PICKED_UP' } });
+        await tx.courierShift.update({
+          where: { id: shift.id },
+          data: more > 0 ? { lastDeliveredAt: now } : { state: 'RETURNING', lastDeliveredAt: now },
+        });
+      } else {
+        await tx.courierShift.update({ where: { id: shift.id }, data: { lastDeliveredAt: now } });
+      }
+      await tx.deliveryTaskEvent.create({
+        data: {
+          tenantId: device.tenantId,
+          taskId,
+          shiftId: shift.id,
+          courierId: shift.courierId,
+          type: 'DELIVERED',
+          actor,
+          meta: { method: 'DISPATCH' },
+        },
+      });
+    });
+    const number = await this.numberOf(taskId);
+    await this.tellPrevious(device.tenantId, before, shift.courierId, number);
+    await this.assignment.sendToCourier(
+      device.tenantId,
+      shift.courier.telegramUserId,
+      `✅ Раздача отметила №${number} доставленным, доставка засчитана.` +
+        (task.cashToCollect > 0 ? ` Наличные ${tengeText(task.cashToCollect)} — на вас, сдайте кассиру.` : ''),
+    );
+    if (before.status === 'ASSIGNED' && before.courierId !== shift.courierId) {
+      await this.assignment.assignVenue(device.venueId);
+    }
+    return { status: 'DELIVERED' as const };
+  }
+
+  /** Связку, которую повезёт другой курьер, разбиваем: каждый везёт своё */
+  private async releaseBatch(
+    tx: Prisma.TransactionClient,
+    task: { id: string; batchId: string | null; courierId: string | null },
+    courierId: string,
+  ) {
+    if (!task.batchId || task.courierId === courierId) return;
+    await tx.deliveryTask.updateMany({
+      where: { batchId: task.batchId },
+      data: { batchId: null, batchSeq: null },
+    });
+  }
+
+  /** Назначенный раньше курьер без других заказов — снова ждёт в очереди */
+  private async freePrevious(
+    tx: Prisma.TransactionClient,
+    before: { shiftId: string | null; status: string },
+    newShiftId: string,
+  ) {
+    if (before.status !== 'ASSIGNED' || !before.shiftId || before.shiftId === newShiftId) return;
+    const rest = await tx.deliveryTask.count({
+      where: { shiftId: before.shiftId, status: { in: ['ASSIGNED', 'PICKED_UP'] } },
+    });
+    if (rest === 0) {
+      await tx.courierShift.updateMany({ where: { id: before.shiftId, state: 'ASSIGNED' }, data: { state: 'WAITING' } });
+    }
+  }
+
+  private async tellPrevious(
+    tenantId: string,
+    before: { courierId: string | null; status: string },
+    newCourierId: string,
+    number: string,
+  ) {
+    if (before.status !== 'ASSIGNED' || !before.courierId || before.courierId === newCourierId) return;
+    const prev = await this.prisma.courier.findUnique({ where: { id: before.courierId }, select: { telegramUserId: true } });
+    if (!prev) return;
+    await this.assignment.sendToCourier(
+      tenantId,
+      prev.telegramUserId,
+      `↩️ №${number} забрал другой курьер, вам забирать не нужно. Вы остаётесь в очереди.`,
+    );
+  }
+
+  private async numberOf(taskId: string) {
+    const t = await this.prisma.deliveryTask.findUnique({
+      where: { id: taskId },
+      include: { order: { select: { number: true } } },
+    });
+    return t ? orderOf(t).number : '—';
+  }
+
   /** Самовывоз выдан клиенту. Можно и из «Нового», если «Готов» забыли */
   async handOver(device: DispatchDeviceValue, taskId: string) {
     const task = await this.ownTask(device, taskId);
@@ -371,6 +656,104 @@ export class DispatchBoardService {
       `↩️ <b>Довоз к №${number}</b>: ${esc(reason.trim())}`,
     );
     return { id: task.id };
+  }
+
+  // ─── Курьер у раздачи ──────────────────────────────────────────
+
+  /** Курьер на смене у этой раздачи: смена открыта и точка та же */
+  private async venueShift(device: DispatchDeviceValue, shiftId: string) {
+    const shift = await this.prisma.courierShift.findFirst({
+      where: { id: shiftId, venueId: device.venueId, endedAt: null },
+      include: { courier: true },
+    });
+    if (!shift) throw new NotFoundException('Курьер уже не на смене');
+    return shift;
+  }
+
+  private async assertNotCarrying(shiftId: string) {
+    const carrying = await this.prisma.deliveryTask.findFirst({
+      where: { shiftId, status: 'PICKED_UP' },
+      include: { order: { select: { number: true } } },
+    });
+    if (carrying) {
+      throw new BadRequestException(
+        `Курьер везёт №${orderOf(carrying).number}: он сам вернётся в очередь сканом QR`,
+      );
+    }
+  }
+
+  /**
+   * «Уехал» (временно, пока заказы идут и из старого приложения): курьер
+   * вне очереди без нарушения, назначенный ему заказ сразу уходит
+   * следующему. Вернётся — отсканирует QR и встанет в конец.
+   */
+  async courierAway(device: DispatchDeviceValue, shiftId: string) {
+    const shift = await this.venueShift(device, shiftId);
+    await this.assertNotCarrying(shift.id);
+    const released = await this.assignment.releaseShift(shift.id, 'COURIER_LEFT', `DEVICE:${device.id}`);
+    return { released: released ?? [] };
+  }
+
+  /**
+   * «Закончил смену» за курьера, который ушёл и забыл закрыть её сам.
+   * Расчёт смены, как обычно, приходит карточкой в чат кассы.
+   */
+  async courierEndShift(device: DispatchDeviceValue, shiftId: string) {
+    const shift = await this.venueShift(device, shiftId);
+    await this.assertNotCarrying(shift.id);
+    const actor = `DEVICE:${device.id}`;
+    await this.assignment.releaseShift(shift.id, 'COURIER_LEFT', actor);
+    const closed = await this.prisma.courierShift.updateMany({
+      where: { id: shift.id, endedAt: null },
+      data: { endedAt: new Date(), endedBy: 'DISPATCH', state: 'AWAY', pauseUntil: null },
+    });
+    if (closed.count === 0) return { ended: false };
+    await this.prisma.courier.update({
+      where: { id: shift.courierId },
+      data: { completedShifts: { increment: 1 } },
+    });
+    await this.prisma.deliveryTaskEvent.create({
+      data: {
+        tenantId: shift.tenantId,
+        shiftId: shift.id,
+        courierId: shift.courierId,
+        type: 'SHIFT_END',
+        actor,
+      },
+    });
+    await this.cash?.createSettlement(shift.tenantId, shift.courier, shift.id, 'DISPATCH');
+    await this.assignment.sendToCourier(
+      shift.tenantId,
+      shift.courier.telegramUserId,
+      '🏁 Раздача закрыла вашу смену. Расчёт по смене — у кассира.',
+    );
+    return { ended: true };
+  }
+
+  /** Селфи курьера на смене у этой раздачи — для очереди с лицами */
+  async courierPhoto(device: DispatchDeviceValue, courierId: string) {
+    const shift = await this.prisma.courierShift.findFirst({
+      where: { courierId, venueId: device.venueId, endedAt: null },
+      select: { courier: { select: { selfieFileId: true } } },
+    });
+    const fileId = shift?.courier.selfieFileId;
+    const file = fileId && this.photos ? await this.photos.get(device.tenantId, fileId) : null;
+    if (!file) throw new NotFoundException('Нет фото');
+    return file;
+  }
+
+  /**
+   * Отделы Poster тенанта. Основной — первый по порядку (у него
+   * наименьший sortOrder, при равенстве — созданный раньше: cuid растёт
+   * со временем). Остальные помечаются на плитке.
+   */
+  private async departments(tenantId: string): Promise<Departments> {
+    const rows = await this.prisma.posterAccount.findMany({
+      where: { tenantId },
+      orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+      select: { id: true, name: true },
+    });
+    return { mainId: rows[0]?.id ?? null, names: new Map(rows.map((r) => [r.id, r.name])) };
   }
 
   // ─── Устройства (админка) ──────────────────────────────────────
@@ -432,6 +815,29 @@ export class DispatchBoardService {
       data: { tenantId, taskId, type, actor, ...(meta !== undefined ? { meta } : {}) },
     });
   }
+}
+
+type Departments = { mainId: string | null; names: Map<string, string> };
+type DeptItem = { qty: number; isUnavailable: boolean; product: { posterAccountId: string } | null };
+
+/** Отдел позиции, если он не основной: «Sunday» */
+export function departmentOf(item: DeptItem, d: Departments): string | null {
+  const id = item.product?.posterAccountId;
+  if (!id || d.names.size < 2 || id === d.mainId) return null;
+  return d.names.get(id) ?? null;
+}
+
+/** Сколько позиций каждого неосновного отдела в заказе: [{name: «Sunday», count: 2}] */
+export function otherDepartments(items: DeptItem[], d: Departments) {
+  const counts = new Map<string, number>();
+  for (const i of items) {
+    if (i.isUnavailable) continue;
+    const name = departmentOf(i, d);
+    if (name) counts.set(name, (counts.get(name) ?? 0) + i.qty);
+  }
+  const live = items.filter((i) => !i.isUnavailable).length;
+  const onlyOther = live > 0 && items.every((i) => i.isUnavailable || departmentOf(i, d));
+  return [...counts].map(([name, count]) => ({ name, count, only: onlyOther }));
 }
 
 const tengeText = (n: number) => `${n.toLocaleString('ru-RU')} ₸`;

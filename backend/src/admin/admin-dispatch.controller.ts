@@ -1,9 +1,11 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { IsBoolean, IsOptional, IsString, Length } from 'class-validator';
+import { CourierReportService } from '../couriers/courier-report.service';
 import { DispatchBoardService } from '../couriers/dispatch-board.service';
 import { AdminActor, AdminActorValue } from './admin-actor';
 import { AdminAuditService } from './admin-audit.service';
 import { AdminGuard } from './admin.guard';
+import { reportRange } from './admin.service';
 
 class CreateDispatchDeviceDto {
   @IsString() @Length(1, 60) name: string;
@@ -57,5 +59,22 @@ export class AdminDispatchController {
       summary: dto.isActive ? 'Планшет раздачи включён' : 'Планшет раздачи отключён',
     });
     return result;
+  }
+}
+
+/** Отчёт по доставкам курьерского модуля: период, дни, часы, курьеры */
+@Controller('admin/reports/deliveries')
+@UseGuards(AdminGuard)
+export class AdminDeliveryReportController {
+  constructor(private readonly reports: CourierReportService) {}
+
+  @Get()
+  report(
+    @AdminActor() actor: AdminActorValue,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    const range = reportRange(from, to);
+    return this.reports.report(actor.tenantId, range.from, range.to);
   }
 }

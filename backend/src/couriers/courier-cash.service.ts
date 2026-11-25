@@ -8,6 +8,7 @@ import { TgCallbackQuery, TgMessage, TgUpdate, tgUserLabel } from '../telegram/t
 import { AssignmentService } from './assignment.service';
 import { courierSettings } from './courier-settings';
 import { shortName } from './names';
+import { orderOf } from './task-order';
 
 /**
  * Наличка курьеров и расчёт в конце смены (docs/COURIER_SYSTEM_SPEC.md §8).
@@ -26,7 +27,12 @@ const CB = {
   other: 'cash:other:',
   settleOk: 'settle:ok:',
   settleNo: 'settle:no:',
+  payOk: 'pay:ok:',
+  payNo: 'pay:no:',
 };
+
+export type PaidBy = 'CARD' | 'KASPI';
+const PAID_BY_TEXT: Record<PaidBy, string> = { CARD: 'картой через терминал', KASPI: 'через Kaspi' };
 
 const tenge = (n: number) => `${n.toLocaleString('ru-RU')} ₸`;
 
@@ -110,14 +116,16 @@ export class CourierCashService implements OnModuleInit {
 
   /** Блок «Наличка» для экрана курьера */
   async summary(courierId: string) {
-    const [balance, pending, settlement] = await Promise.all([
+    const [balance, pending, settlement, cashOrders] = await Promise.all([
       this.balance(courierId),
       this.prisma.courierCashEntry.findFirst({
         where: { courierId, type: 'HANDED_IN', status: 'PENDING' },
       }),
       this.prisma.courierSettlement.findFirst({ where: { courierId, status: 'PENDING' } }),
+      this.cashOrders(courierId),
     ]);
     return {
+      cashOrders,
       balance,
       pendingHandover: pending
         ? { amount: pending.claimedAmount ?? -pending.amount, createdAt: pending.createdAt.toISOString() }
@@ -131,6 +139,144 @@ export class CourierCashService implements OnModuleInit {
           }
         : null,
     };
+  }
+
+  /**
+   * Заказы за наличные, которые курьер отвёз за последние сутки и деньги
+   * по которым ещё не сданы: по ним можно сказать «клиент оплатил иначе».
+   */
+  private async cashOrders(courierId: string) {
+    const since = new Date(Date.now() - 24 * 3_600_000);
+    const collected = await this.prisma.courierCashEntry.findMany({
+      where: { courierId, type: 'COLLECTED', status: 'CONFIRMED', createdAt: { gte: since }, taskId: { not: null } },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      include: { task: { include: { order: { select: { number: true } } } } },
+    });
+    if (collected.length === 0) return [];
+    const changes = await this.prisma.courierCashEntry.findMany({
+      where: { courierId, type: 'ADJUSTMENT', taskId: { in: collected.map((c) => c.taskId!) } },
+      orderBy: { createdAt: 'desc' },
+    });
+    return collected.map((c) => {
+      const change = changes.find((a) => a.taskId === c.taskId) ?? null;
+      return {
+        taskId: c.taskId!,
+        number: c.task ? orderOf(c.task).number : '—',
+        amount: c.amount,
+        paidOtherwise: change ? { status: change.status, paidBy: change.paidBy } : null,
+      };
+    });
+  }
+
+  // ─── «Клиент оплатил иначе» ────────────────────────────────────
+
+  /**
+   * Курьер отвёз заказ «за наличные», а клиент заплатил картой или
+   * через Kaspi (Дом, 25.11.2026). Курьер сам долг не списывает: кассиру
+   * приходит карточка, он сверяет по терминалу или Kaspi и подтверждает.
+   * До подтверждения наличные числятся на курьере.
+   */
+  async requestPaidOtherwise(tenantId: string, courier: Courier, taskId: string, paidBy: PaidBy) {
+    const collected = await this.prisma.courierCashEntry.findFirst({
+      where: { tenantId, courierId: courier.id, taskId, type: 'COLLECTED', status: 'CONFIRMED' },
+      include: { task: { include: { order: { select: { number: true } } } } },
+    });
+    if (!collected) throw new BadRequestException('По этому заказу наличных на вас нет');
+    const before = await this.prisma.courierCashEntry.findFirst({
+      where: { courierId: courier.id, taskId, type: 'ADJUSTMENT', status: { in: ['PENDING', 'CONFIRMED'] } },
+    });
+    if (before) {
+      throw new BadRequestException(before.status === 'PENDING' ? 'Уже отправлено кассиру, ждём ответа' : 'Кассир уже подтвердил');
+    }
+    const number = collected.task ? orderOf(collected.task).number : '—';
+    const entry = await this.prisma.courierCashEntry.create({
+      data: {
+        tenantId,
+        courierId: courier.id,
+        taskId,
+        type: 'ADJUSTMENT',
+        status: 'PENDING',
+        amount: -collected.amount,
+        paidBy,
+        note: `№${number}: клиент оплатил ${PAID_BY_TEXT[paidBy]}`,
+      },
+    });
+    const chat = await this.telegram.cashierTargetChat(tenantId);
+    if (chat) {
+      const { result } = await this.telegram.call(tenantId, 'sendMessage', {
+        chat_id: chat,
+        parse_mode: 'HTML',
+        text:
+          `💳 <b>${esc(shortName(courier.fullName))}: №${esc(number)} оплачен ${PAID_BY_TEXT[paidBy]}</b>\n` +
+          `Курьер говорит, что ${tenge(collected.amount)} клиент заплатил не наличными. ` +
+          (paidBy === 'CARD' ? 'Проверьте по терминалу' : 'Проверьте перевод в Kaspi') +
+          ' и подтвердите — тогда эта сумма снимется с курьера.',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: '✅ Подтверждаю', callback_data: `${CB.payOk}${entry.id}` },
+              { text: '✖ Нет, были наличные', callback_data: `${CB.payNo}${entry.id}` },
+            ],
+          ],
+        },
+      });
+      if (result?.message_id) {
+        await this.prisma.courierCashEntry.update({
+          where: { id: entry.id },
+          data: { cardChatId: chat, cardMessageId: result.message_id },
+        });
+      }
+    }
+    return entry;
+  }
+
+  async resolvePaidOtherwise(tenantId: string, entryId: string, who: string, ok: boolean) {
+    const entry = await this.prisma.courierCashEntry.findFirst({
+      where: { id: entryId, tenantId, type: 'ADJUSTMENT' },
+      include: { courier: true, task: { include: { order: { select: { number: true } } } } },
+    });
+    if (!entry) return false;
+    const changed = await this.prisma.courierCashEntry.updateMany({
+      where: { id: entryId, status: 'PENDING' },
+      data: { status: ok ? 'CONFIRMED' : 'REJECTED', resolvedBy: who, resolvedAt: new Date() },
+    });
+    if (changed.count === 0) return false;
+    const number = entry.task ? orderOf(entry.task).number : '—';
+    const amount = -entry.amount;
+    const paidBy = (entry.paidBy ?? 'CARD') as PaidBy;
+    if (ok && entry.taskId) {
+      // Заказ больше не «за наличные»: так он и попадёт в отчёты
+      await this.prisma.deliveryTask.update({
+        where: { id: entry.taskId },
+        data: { cashToCollect: 0, ...(paidBy === 'CARD' ? { needsTerminal: true } : {}) },
+      });
+      await this.prisma.deliveryTaskEvent.create({
+        data: {
+          tenantId,
+          taskId: entry.taskId,
+          courierId: entry.courierId,
+          type: 'PAYMENT_CHANGED',
+          actor: `CASHIER:${who}`,
+          meta: { from: 'CASH', to: paidBy, amount },
+        },
+      });
+    }
+    await this.closeCard(
+      tenantId,
+      entry.cardChatId,
+      entry.cardMessageId,
+      ok ? `✅ Подтвердил(а): ${esc(who)}` : `✖ Наличные были, долг остаётся: ${esc(who)}`,
+    );
+    const left = await this.balance(entry.courierId);
+    await this.assignment.sendToCourier(
+      tenantId,
+      entry.courier.telegramUserId,
+      ok
+        ? `Кассир подтвердил: №${number} оплачен ${PAID_BY_TEXT[paidBy]}, ${tenge(amount)} сняты с вас. На руках: ${tenge(left)}.`
+        : `Кассир не подтвердил оплату №${number} ${PAID_BY_TEXT[paidBy]}: ${tenge(amount)} остаются на вас. На руках: ${tenge(left)}.`,
+    );
+    return true;
   }
 
   // ─── Сдача налички ─────────────────────────────────────────────
@@ -215,7 +361,12 @@ export class CourierCashService implements OnModuleInit {
 
   // ─── Расчёт в конце смены ──────────────────────────────────────
 
-  async createSettlement(tenantId: string, courier: Courier, shiftId: string | null) {
+  async createSettlement(
+    tenantId: string,
+    courier: Courier,
+    shiftId: string | null,
+    closedBy: 'COURIER' | 'DISPATCH' | 'AUTO' = 'COURIER',
+  ) {
     // Неподтверждённая сдача входит в расчёт: две карточки на одни и те
     // же деньги кассира бы запутали
     const pending = await this.prisma.courierCashEntry.findMany({
@@ -266,7 +417,12 @@ export class CourierCashService implements OnModuleInit {
       const { result } = await this.telegram.call(tenantId, 'sendMessage', {
         chat_id: chat,
         parse_mode: 'HTML',
-        text: `🧾 <b>Расчёт: ${esc(name)} закончил смену</b>\n${body}`,
+        text:
+          closedBy === 'AUTO'
+            ? `🧾 <b>Расчёт: ${esc(name)} не закрыл смену</b> — её закрыла система ночью\n${body}`
+            : closedBy === 'DISPATCH'
+              ? `🧾 <b>Расчёт: ${esc(name)}</b> — смену закрыла раздача\n${body}`
+              : `🧾 <b>Расчёт: ${esc(name)} закончил смену</b>\n${body}`,
         reply_markup: {
           inline_keyboard: [
             [
@@ -286,7 +442,9 @@ export class CourierCashService implements OnModuleInit {
     await this.assignment.sendToCourier(
       tenantId,
       courier.telegramUserId,
-      `🧾 Смена закончена.\n${body}\n\nПодойдите к кассиру для расчёта.`,
+      (closedBy === 'AUTO'
+        ? '🧾 Вы не закрыли смену — система закрыла её сама.'
+        : '🧾 Смена закончена.') + `\n${body}\n\nПодойдите к кассиру для расчёта.`,
     );
     return settlement;
   }
@@ -295,7 +453,7 @@ export class CourierCashService implements OnModuleInit {
 
   async handle(tenantId: string, update: TgUpdate): Promise<boolean> {
     const cb = update.callback_query;
-    if (cb?.data && /^(cash|settle):/.test(cb.data)) {
+    if (cb?.data && /^(cash|settle|pay):/.test(cb.data)) {
       await this.onButton(tenantId, cb);
       return true;
     }
@@ -318,6 +476,12 @@ export class CourierCashService implements OnModuleInit {
       const ok = data.startsWith(CB.settleOk);
       const done = ok ? await this.confirmSettlement(tenantId, id, who) : await this.disputeSettlement(tenantId, id, who);
       return answer(done ? (ok ? 'Расчёт закрыт' : 'Отправлено руководству') : 'Уже обработано');
+    }
+
+    if (data.startsWith(CB.payOk) || data.startsWith(CB.payNo)) {
+      const ok = data.startsWith(CB.payOk);
+      const done = await this.resolvePaidOtherwise(tenantId, id, who, ok);
+      return answer(done ? (ok ? 'Подтверждено' : 'Отмечено') : 'Уже обработано');
     }
 
     const entry = await this.prisma.courierCashEntry.findFirst({
@@ -544,6 +708,66 @@ export class CourierCashService implements OnModuleInit {
     }
   }
 
+  /**
+   * Ночное автозакрытие (24.11.2026). Пока часть доставок идёт из старого
+   * приложения, курьеры часто уезжают домой, не закрыв смену, и утром
+   * продолжают вчерашнюю — расчёт за два дня смешивается. В час
+   * `shiftAutoCloseHour` открытые смены закрываются, расчёт уходит кассиру
+   * с пометкой. Смену с заказом на руках не трогаем: закроется в следующий раз.
+   */
+  @Cron('0 1 * * * *')
+  async autoCloseTick(now = new Date()) {
+    try {
+      const tenants = await this.prisma.tenant.findMany({
+        where: { dispatchDevices: { some: { isActive: true } } },
+        select: { id: true, settings: true },
+      });
+      for (const t of tenants) {
+        if (now.getHours() !== courierSettings(t.settings).shiftAutoCloseHour) continue;
+        await this.autoCloseShifts(t.id, now);
+      }
+    } catch (e) {
+      this.logger.error(`Автозакрытие смен: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  async autoCloseShifts(tenantId: string, now = new Date()): Promise<number> {
+    const shifts = await this.prisma.courierShift.findMany({
+      where: {
+        tenantId,
+        endedAt: null,
+        tasks: { none: { status: { in: ['ASSIGNED', 'PICKED_UP'] } } },
+      },
+      include: { courier: true },
+    });
+    let closed = 0;
+    for (const s of shifts) {
+      const changed = await this.prisma.courierShift.updateMany({
+        where: { id: s.id, endedAt: null },
+        data: { endedAt: now, endedBy: 'AUTO', state: 'AWAY', pauseUntil: null },
+      });
+      if (changed.count === 0) continue;
+      closed++;
+      await this.prisma.courier.update({
+        where: { id: s.courierId },
+        data: { completedShifts: { increment: 1 } },
+      });
+      await this.prisma.deliveryTaskEvent.create({
+        data: { tenantId, shiftId: s.id, courierId: s.courierId, type: 'SHIFT_END', actor: 'SYSTEM', meta: { auto: true } },
+      });
+      const settlement = await this.createSettlement(tenantId, s.courier, s.id, 'AUTO');
+      if (!settlement) {
+        await this.assignment.sendToCourier(
+          tenantId,
+          s.courier.telegramUserId,
+          '🏁 Вы не закрыли смену — система закрыла её сама. Рассчитываться не за что.',
+        );
+      }
+    }
+    if (closed > 0) this.logger.log(`Автозакрытие: закрыто смен ${closed}`);
+    return closed;
+  }
+
   async dailyReport(tenantId: string, now = new Date()): Promise<string | null> {
     const since = new Date(now);
     since.setHours(0, 0, 0, 0);
@@ -576,7 +800,7 @@ export class CourierCashService implements OnModuleInit {
       totalDeliveries += today;
       const state = settlement
         ? { PENDING: 'расчёт ждёт кассира', CONFIRMED: 'рассчитались', DISPUTED: 'расчёт не сошёлся' }[settlement.status]
-        : 'смену не закрыл';
+        : 'смену не закрыл (закроется ночью сама)';
       const owed = open.earned > 0 || held > 0
         ? ` · не выплачено ${tenge(open.earned)}, на руках ${tenge(held)}`
         : '';
@@ -585,11 +809,11 @@ export class CourierCashService implements OnModuleInit {
     // Довозы — отдельной строкой: по ним видно, кто ошибается при сборке
     const extra = await this.prisma.deliveryTask.findMany({
       where: { tenantId, kind: 'EXTRA_TRIP', createdAt: { gte: since }, status: { not: 'CANCELLED' } },
-      select: { extraReason: true, order: { select: { number: true } } },
+      select: { extraReason: true, external: true, order: { select: { number: true } } },
     });
     const extraLine = extra.length
       ? `\n\n↩️ Довозов: ${extra.length}\n` +
-        extra.map((e) => `• №${e.order.number}: ${esc(e.extraReason ?? '')}`).join('\n')
+        extra.map((e) => `• №${orderOf(e).number}: ${esc(e.extraReason ?? '')}`).join('\n')
       : '';
     return `📊 <b>Курьеры за день</b> · доставок ${totalDeliveries}\n${rows.join('\n')}${extraLine}`;
   }

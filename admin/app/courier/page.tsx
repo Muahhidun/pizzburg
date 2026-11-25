@@ -20,7 +20,9 @@ interface Task {
   id: string;
   kind: 'DELIVERY' | 'PICKUP' | 'EXTRA_TRIP';
   status: 'ASSIGNED' | 'PICKED_UP';
-  number: number;
+  number: number | string;
+  /** Заказ старого приложения или сайта (из Poster) */
+  external?: boolean;
   items: string;
   /** Что лежит в пакете — курьер сверяет галочками перед «Поехали» */
   checklist: { id: string; name: string; qty: number; note: string }[];
@@ -30,6 +32,11 @@ interface Task {
   assignedAt: string | null;
   pickedUpAt: string | null;
   extraReason: string | null;
+  /** Связка по 2 заказа: общий id и порядок развоза */
+  batchId: string | null;
+  batchSeq: number | null;
+  /** Второй заказ связки: адрес откроется после доставки этого номера */
+  afterNumber: number | string | null;
   address?: string | null;
   addressComment?: string | null;
   mapUrl?: string | null;
@@ -68,6 +75,13 @@ interface Me {
   cash: {
     balance: number;
     pendingHandover: { amount: number; createdAt: string } | null;
+    /** Наличные заказы за сутки: по ним можно отметить «клиент оплатил иначе» */
+    cashOrders?: {
+      taskId: string;
+      number: string;
+      amount: number;
+      paidOtherwise: { status: 'PENDING' | 'CONFIRMED' | 'REJECTED'; paidBy: 'CARD' | 'KASPI' | null } | null;
+    }[];
     settlement: { earned: number; cashHeld: number; courierPays: number; venuePays: number } | null;
   };
   pending?: boolean;
@@ -241,6 +255,14 @@ export default function CourierPage() {
   }
 
   const assigned = me.tasks.filter((t) => t.status === 'ASSIGNED');
+  // Заказы связки — одной карточкой, в порядке развоза
+  const assignedGroups: Task[][] = [];
+  for (const t of assigned) {
+    const g = t.batchId ? assignedGroups.find((x) => x[0].batchId === t.batchId) : undefined;
+    if (g) g.push(t);
+    else assignedGroups.push([t]);
+  }
+  for (const g of assignedGroups) g.sort((a, b) => (a.batchSeq ?? 0) - (b.batchSeq ?? 0));
   const onWay = me.tasks.filter((t) => t.status === 'PICKED_UP');
   const state = me.shift?.state;
   const canCheckIn = me.tasks.length === 0 && state !== 'WAITING' && state !== 'ON_PAUSE';
@@ -263,7 +285,18 @@ export default function CourierPage() {
         </Card>
       )}
 
-      {onWay.map((t) => (
+      {onWay.map((t) =>
+        t.afterNumber ? (
+          <Card key={t.id}>
+            <div className="mb-1 flex items-baseline justify-between">
+              <span className="text-3xl font-black">№{t.number}</span>
+              <span className="text-sm opacity-60">второй по пути</span>
+            </div>
+            <div className="opacity-70">Адрес откроется после доставки №{t.afterNumber}</div>
+            <div className="mt-2">{t.items}</div>
+            <div className="mt-1 font-semibold">{t.payment}</div>
+          </Card>
+        ) : (
         <Card key={t.id}>
           <div className="mb-1 flex items-baseline justify-between">
             <span className="text-3xl font-black">№{t.number}</span>
@@ -297,81 +330,117 @@ export default function CourierPage() {
             Не удалось доставить
           </button>
         </Card>
-      ))}
+        ),
+      )}
 
-      {assigned.map((t) => {
-        const left = t.assignedAt
-          ? me.pickupTimeoutMin * 60 -
-            Math.floor((nowMs - new Date(t.assignedAt).getTime()) / 1000)
-          : null;
-        const marks = checked[t.id] ?? [];
-        const done = t.checklist.filter((i) => marks.includes(i.id)).length;
-        const allChecked = done === t.checklist.length;
-        const toggle = (id: string) => {
-          tg()?.HapticFeedback?.selectionChanged();
-          setChecked((prev) => {
-            const cur = prev[t.id] ?? [];
-            return {
-              ...prev,
-              [t.id]: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id],
-            };
-          });
-        };
+      {assignedGroups.map((group) => {
+        // Связку забирают одним «Поехали»: оба пакета, одни галочки, один скан
+        const lead = group[0];
+        const left = group
+          .map((t) =>
+            t.assignedAt
+              ? me.pickupTimeoutMin * 60 -
+                Math.floor((nowMs - new Date(t.assignedAt).getTime()) / 1000)
+              : null,
+          )
+          .filter((x): x is number => x !== null)
+          .sort((a, b) => a - b)[0] ?? null;
+        const allMarks = group.flatMap((t) => checked[t.id] ?? []);
+        const total = group.reduce((n, t) => n + t.checklist.length, 0);
+        const done = group.reduce(
+          (n, t) => n + t.checklist.filter((i) => (checked[t.id] ?? []).includes(i.id)).length,
+          0,
+        );
+        const allChecked = done === total;
+        const batch = group.length > 1;
         return (
-          <Card key={t.id} tone="accent">
-            <div className="text-sm font-semibold uppercase opacity-70">
-              {t.kind === 'EXTRA_TRIP' ? 'Довоз' : 'Заберите на раздаче'}
-            </div>
-            <div className="text-4xl font-black">№{t.number}</div>
-            {t.checklist.length > 0 ? (
-              <>
-                <div className="mt-2 text-sm opacity-70">
-                  Проверьте пакет и отметьте каждую позицию
-                </div>
-                <ul className="mt-2">
-                  {t.checklist.map((i) => {
-                    const on = marks.includes(i.id);
-                    return (
-                      <li key={i.id}>
-                        <button
-                          type="button"
-                          role="checkbox"
-                          aria-checked={on}
-                          onClick={() => toggle(i.id)}
-                          className="flex w-full items-center gap-3 border-b py-3 text-left last:border-b-0"
-                          style={{ borderColor: 'var(--tg-theme-secondary-bg-color, #eee)' }}
-                        >
-                          <span
-                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border-2 text-lg font-black"
-                            style={
-                              on
-                                ? {
-                                    background: 'var(--tg-theme-button-color, #2481cc)',
-                                    borderColor: 'var(--tg-theme-button-color, #2481cc)',
-                                    color: 'var(--tg-theme-button-text-color, #fff)',
-                                  }
-                                : { borderColor: 'var(--tg-theme-hint-color, #999)' }
-                            }
-                          >
-                            {on ? '✓' : ''}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-lg leading-tight">{i.name}</span>
-                            {i.note && <span className="block text-sm opacity-60">{i.note}</span>}
-                          </span>
-                          {i.qty > 1 && (
-                            <span className="shrink-0 text-xl font-black">×{i.qty}</span>
-                          )}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </>
-            ) : (
-              <div className="mt-1 text-lg">{t.items}</div>
+          <Card key={lead.id} tone="accent">
+            {batch && (
+              <div className="mb-2 text-base font-semibold">
+                Два заказа по пути: сначала №{group[0].number}, потом №{group[1].number}
+              </div>
             )}
-            <div className="mt-2 font-semibold">{t.payment}</div>
+            {group.map((t, gi) => {
+              const marks = checked[t.id] ?? [];
+              const toggle = (id: string) => {
+                tg()?.HapticFeedback?.selectionChanged();
+                setChecked((prev) => {
+                  const cur = prev[t.id] ?? [];
+                  return {
+                    ...prev,
+                    [t.id]: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id],
+                  };
+                });
+              };
+              return (
+                <div
+                  key={t.id}
+                  className={gi > 0 ? 'mt-4 border-t pt-3' : ''}
+                  style={gi > 0 ? { borderColor: 'var(--tg-theme-hint-color, #ccc)' } : undefined}
+                >
+                  <div className="text-sm font-semibold uppercase opacity-70">
+                    {t.kind === 'EXTRA_TRIP'
+                      ? 'Довоз'
+                      : batch
+                        ? `Пакет ${gi + 1} из ${group.length}`
+                        : 'Заберите на раздаче'}
+                    {t.external && ' · старое приложение'}
+                  </div>
+                  <div className="text-4xl font-black">№{t.number}</div>
+                  {t.checklist.length > 0 ? (
+                    <>
+                      {gi === 0 && (
+                        <div className="mt-2 text-sm opacity-70">
+                          Проверьте {batch ? 'пакеты' : 'пакет'} и отметьте каждую позицию
+                        </div>
+                      )}
+                      <ul className="mt-2">
+                        {t.checklist.map((i) => {
+                          const on = marks.includes(i.id);
+                          return (
+                            <li key={i.id}>
+                              <button
+                                type="button"
+                                role="checkbox"
+                                aria-checked={on}
+                                onClick={() => toggle(i.id)}
+                                className="flex w-full items-center gap-3 border-b py-3 text-left last:border-b-0"
+                                style={{ borderColor: 'var(--tg-theme-secondary-bg-color, #eee)' }}
+                              >
+                                <span
+                                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border-2 text-lg font-black"
+                                  style={
+                                    on
+                                      ? {
+                                          background: 'var(--tg-theme-button-color, #2481cc)',
+                                          borderColor: 'var(--tg-theme-button-color, #2481cc)',
+                                          color: 'var(--tg-theme-button-text-color, #fff)',
+                                        }
+                                      : { borderColor: 'var(--tg-theme-hint-color, #999)' }
+                                  }
+                                >
+                                  {on ? '✓' : ''}
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block text-lg leading-tight">{i.name}</span>
+                                  {i.note && <span className="block text-sm opacity-60">{i.note}</span>}
+                                </span>
+                                {i.qty > 1 && (
+                                  <span className="shrink-0 text-xl font-black">×{i.qty}</span>
+                                )}
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </>
+                  ) : (
+                    <div className="mt-1 text-lg">{t.items}</div>
+                  )}
+                  <div className="mt-2 font-semibold">{t.payment}</div>
+                </div>
+              );
+            })}
             {left !== null && left > 0 && (
               <div className="mt-1 text-sm opacity-70">
                 заберите в течение {Math.ceil(left / 60)} мин
@@ -382,11 +451,11 @@ export default function CourierPage() {
                 label={
                   // Длинное «Поехали — сканировать QR» не влезает на узкий
                   // телефон; про QR скажет сам сканер
-                  allChecked ? 'Поехали' : `Отмечено ${done} из ${t.checklist.length}`
+                  allChecked ? 'Поехали' : `Отмечено ${done} из ${total}`
                 }
                 disabled={busy || !allChecked}
                 onComplete={() =>
-                  scan((qr) => act(`/tasks/${t.id}/picked-up`, { qr, items: marks }))
+                  scan((qr) => act(`/tasks/${lead.id}/picked-up`, { qr, items: allMarks }))
                 }
               />
             </div>
@@ -394,7 +463,7 @@ export default function CourierPage() {
               disabled={busy}
               onClick={() => {
                 if (confirm('Отметить без скана? Доставка засчитается с пометкой.')) {
-                  act(`/tasks/${t.id}/picked-up-manual`);
+                  act(`/tasks/${lead.id}/picked-up-manual`);
                 }
               }}
               className="btn-link mt-2"
@@ -475,7 +544,10 @@ export default function CourierPage() {
         </Card>
       )}
 
-      {!me.cash.settlement && (me.cash.balance > 0 || me.cash.pendingHandover) && (
+      {!me.cash.settlement &&
+        (me.cash.balance > 0 ||
+          me.cash.pendingHandover ||
+          me.cash.cashOrders?.some((o) => o.paidOtherwise?.status === 'PENDING')) && (
         <Card>
           <div className="flex items-baseline justify-between">
             <span className="opacity-70">Наличные на руках</span>
@@ -493,6 +565,53 @@ export default function CourierPage() {
             >
               Сдаю кассиру {tenge(me.cash.balance)}
             </button>
+          )}
+          {(me.cash.cashOrders?.length ?? 0) > 0 && (
+            <details className="mt-3 text-sm">
+              <summary className="cursor-pointer opacity-70">
+                Клиент заплатил не наличными? Отметьте заказ
+              </summary>
+              <ul className="mt-2 space-y-2">
+                {me.cash.cashOrders!.map((o) => (
+                  <li key={o.taskId} className="flex flex-wrap items-center justify-between gap-2">
+                    <span>
+                      №{o.number} · {tenge(o.amount)}
+                    </span>
+                    {o.paidOtherwise?.status === 'PENDING' ? (
+                      <span className="opacity-70">ждём кассира</span>
+                    ) : o.paidOtherwise?.status === 'CONFIRMED' ? (
+                      <span className="text-emerald-600">
+                        {o.paidOtherwise.paidBy === 'KASPI' ? 'Kaspi' : 'картой'} — подтверждено
+                      </span>
+                    ) : (
+                      <span className="flex gap-2">
+                        {o.paidOtherwise?.status === 'REJECTED' && <span className="text-red-600">кассир не подтвердил</span>}
+                        <button
+                          disabled={busy}
+                          className="btn-secondary px-2 py-1"
+                          onClick={() => {
+                            if (confirm(`№${o.number}: клиент оплатил картой через терминал? Кассир проверит.`))
+                              act(`/tasks/${o.taskId}/paid-otherwise`, { paidBy: 'CARD' });
+                          }}
+                        >
+                          Картой
+                        </button>
+                        <button
+                          disabled={busy}
+                          className="btn-secondary px-2 py-1"
+                          onClick={() => {
+                            if (confirm(`№${o.number}: клиент оплатил через Kaspi? Кассир проверит.`))
+                              act(`/tasks/${o.taskId}/paid-otherwise`, { paidBy: 'KASPI' });
+                          }}
+                        >
+                          Kaspi
+                        </button>
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </details>
           )}
         </Card>
       )}

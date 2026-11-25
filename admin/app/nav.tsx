@@ -72,6 +72,7 @@ const groups: {
     title: 'Отчёты',
     tint: 'text-rose-600 dark:text-rose-400',
     links: [
+      { href: '/deliveries', label: 'Доставки' },
       { href: '/feedback', label: 'Обратная связь' },
       { href: '/cancellations', label: 'Отмены' },
     ],
