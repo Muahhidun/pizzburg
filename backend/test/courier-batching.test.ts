@@ -225,6 +225,28 @@ test('первыми раздаются опоздавшие, а не раньш
   assert.equal(c.batchSeq, 2);
 });
 
+test('4 готовых, курьеров нет; пришёл курьер — сразу 2 заказа, следующий — ещё 2', async () => {
+  // Адреса без координат, как у большинства заказов старого приложения
+  const w = world({}, 0);
+  for (const [i, id] of ['a', 'b', 'c', 'd'].entries()) w.ready(id, i);
+  assert.equal(await w.service.assignVenue('v'), 0);
+  const arrive = async (n: number) => {
+    w.shifts.push({ id: `s${n}`, venueId: 'v', courierId: `c${n}`, state: 'WAITING', endedAt: null, queuedAt: n, scheduled: false });
+    return w.service.assignVenue('v');
+  };
+  assert.equal(await arrive(0), 2);
+  assert.deepEqual(w.tasks.map((t) => t.courierId), ['c0', 'c0', null, null]);
+  assert.equal(await arrive(1), 2);
+  assert.deepEqual(w.tasks.map((t) => t.courierId), ['c0', 'c0', 'c1', 'c1']);
+  assert.deepEqual(w.tasks.map((t) => t.batchSeq), [1, 2, 1, 2]);
+
+  // Старое правило «только в одну сторону»: без координат пришедшему — один заказ
+  const old = world({}, 0, { batchAnyDirection: false });
+  for (const [i, id] of ['a', 'b', 'c', 'd'].entries()) old.ready(id, i);
+  old.shifts.push({ id: 's0', venueId: 'v', courierId: 'c0', state: 'WAITING', endedAt: null, queuedAt: 0, scheduled: false });
+  assert.equal(await old.service.assignVenue('v'), 1);
+});
+
 test('при двух свободных курьерах связки нет: каждому по заказу', async () => {
   const w = world({ a: north2, b: north1 }, 2);
   w.ready('a', 0);
