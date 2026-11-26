@@ -11,13 +11,24 @@ import { esc, InlineButton } from '../telegram/telegram.service';
 /** Сколько позиций умещаем в выбор «нет позиции»: маска — число до 2^40 */
 const MAX_PICK_ITEMS = 40;
 
-export function actionsButton(orderId: string): InlineButton[][] {
-  return [[{ text: '⋯ Действия', callback_data: `o:m:${orderId}` }]];
+/**
+ * Принятый заказ (на планшете или кнопкой) помечен строкой «✅ Принят» над
+ * «Действиями»: кассир сразу видит, какие заказы ещё надо принять (Дом,
+ * 26.11.2026). Это метка, нажатие только подсказывает.
+ */
+export function actionsButton(orderId: string, accepted = false): InlineButton[][] {
+  const actions = [[{ text: '⋯ Действия', callback_data: `o:m:${orderId}` }]];
+  return accepted ? [[{ text: '✅ Принят', callback_data: `o:i:${orderId}` }], ...actions] : actions;
 }
 
-export function menuKeyboard(orderId: string): InlineButton[][] {
+/** Заказ уже принят: всё, кроме нового и отменённого */
+export function isAccepted(status: string): boolean {
+  return status !== 'NEW' && status !== 'CANCELLED';
+}
+
+export function menuKeyboard(orderId: string, accepted = false): InlineButton[][] {
   return [
-    [{ text: '✅ Принят', callback_data: `o:a:${orderId}` }],
+    ...(accepted ? [] : [[{ text: '✅ Принят', callback_data: `o:a:${orderId}` }]]),
     [
       { text: '❌ Отменить', callback_data: `o:c:${orderId}` },
       { text: '🚫 Нет позиции', callback_data: `o:s:${orderId}:` },

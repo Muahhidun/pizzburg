@@ -7,6 +7,7 @@ import {
   actionsButton,
   cancelledBanner,
   confirmKeyboard,
+  isAccepted,
   menuKeyboard,
   parseMask,
   PickItem,
@@ -90,6 +91,7 @@ export class OrderActionsService {
       return toast(`Заказ №${order.number} уже выполнен`, true);
     }
 
+    const accepted = isAccepted(order.status);
     const items: PickItem[] = order.items
       .filter((i) => !i.isGift)
       .map((i) => ({ id: i.id, name: i.name, qty: i.qty }));
@@ -97,11 +99,13 @@ export class OrderActionsService {
     try {
       switch (step) {
         case 'm':
-          await setKeyboard(menuKeyboard(order.id));
+          await setKeyboard(menuKeyboard(order.id, accepted));
           return toast('');
         case 'x':
-          await setKeyboard(actionsButton(order.id));
+          await setKeyboard(actionsButton(order.id, accepted));
           return toast('');
+        case 'i':
+          return toast(`Заказ №${order.number} принят`);
         case 'a':
         case 'ay': {
           // Запасной путь, когда планшет без интернета: кассир принял и
@@ -109,7 +113,7 @@ export class OrderActionsService {
           // до 15 минут висело «Ждём подтверждения» (Дом, 26.11.2026)
           const refusal = acceptRefusal(order);
           if (refusal) {
-            await setKeyboard(actionsButton(order.id));
+            await setKeyboard(actionsButton(order.id, accepted));
             return toast(refusal, true);
           }
           if (step === 'a') {
@@ -125,7 +129,7 @@ export class OrderActionsService {
             message_id: msg.message_id,
             parse_mode: 'HTML',
             text: `${acceptedBanner(who, new Date(), tz)}\n\n${newOrderMessage(order, live)}`,
-            reply_markup: { inline_keyboard: actionsButton(order.id) },
+            reply_markup: { inline_keyboard: actionsButton(order.id, true) },
           });
           return toast(`Заказ №${order.number} принят`);
         }
@@ -176,7 +180,7 @@ export class OrderActionsService {
           const ids = pickedIds(items, parseMask(arg));
           if (ids.length === 0) return toast('Ничего не отмечено', true);
           await this.shortage.markUnavailable(tenantId, order.id, ids, new Date(), who);
-          await setKeyboard(actionsButton(order.id));
+          await setKeyboard(actionsButton(order.id, accepted));
           return toast('Спросили клиента. Заказ в Poster пока не принимайте', true);
         }
       }

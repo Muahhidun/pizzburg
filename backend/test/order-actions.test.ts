@@ -19,7 +19,7 @@ const ID = 'cmabcdefghijklmnopqrstuvw'; // cuid, 25 знаков
 test('данные всех кнопок укладываются в 64 байта Телеграма', () => {
   const items = Array.from({ length: 40 }, (_, i) => ({ id: `i${i}`, name: `Позиция ${i}`, qty: 1 }));
   const all = [
-    ...actionsButton(ID),
+    ...actionsButton(ID, true),
     ...menuKeyboard(ID),
     ...shortageKeyboard(ID, items, 2 ** 40 - 1),
   ].flat();
@@ -176,7 +176,27 @@ test('принят в Телеграме: подтверждение → ста�
   const edit = calls.find((c) => c.method === 'editMessageText')!;
   assert.match(edit.payload.text, /^✅ <b>ПРИНЯТ<\/b> в Телеграме — Айгерим, \d\d:\d\d/);
   assert.match(edit.payload.text, /Заказ №157/);
-  assert.equal(edit.payload.reply_markup.inline_keyboard[0][0].text, '⋯ Действия');
+  assert.deepEqual(
+    edit.payload.reply_markup.inline_keyboard.map((r: any[]) => r[0].text),
+    ['✅ Принят', '⋯ Действия'],
+  );
+});
+
+test('принятый заказ: метка «Принят» над «Действиями», в меню нет кнопки принять', async () => {
+  const { calls, press } = setup({ ...sent, status: 'ACCEPTED' });
+  await press(`o:m:${ID}`);
+  const menu = calls[0].payload.reply_markup.inline_keyboard.flat().map((b: any) => b.text);
+  assert.ok(!menu.includes('✅ Принят'));
+  assert.ok(menu.includes('❌ Отменить'));
+  await press(`o:x:${ID}`);
+  assert.deepEqual(
+    calls.filter((c) => c.method === 'editMessageReplyMarkup').at(-1)!.payload.reply_markup.inline_keyboard.map((r: any[]) => r[0].text),
+    ['✅ Принят', '⋯ Действия'],
+  );
+  await press(`o:i:${ID}`);
+  assert.equal(calls.at(-1)!.payload.text, 'Заказ №157 принят');
+  // Новый заказ — метки нет
+  assert.deepEqual(actionsButton(ID).map((r) => r[0].text), ['⋯ Действия']);
 });
 
 test('принять нельзя: уже принят, ещё не на планшете, ждём клиента по нехватке', async () => {
@@ -191,4 +211,31 @@ test('принять нельзя: уже принят, ещё не на пла�
     assert.match(calls.at(-1)!.payload.text, re);
     assert.equal(calls.at(-1)!.payload.show_alert, true);
   }
+});
+
+import { OrdersService } from '../src/orders/orders.service';
+
+test('принят на планшете: в сообщении о заказе появляется метка «Принят»', async () => {
+  const calls: Array<{ method: string; payload: any }> = [];
+  const prisma = {
+    order: {
+      findFirst: async () => ({ id: ID, number: 157, tenantId: 't', status: 'NEW', cashierChatId: '-100', cashierMessageId: 9 }),
+      update: async () => ({ id: ID }),
+      updateMany: async () => ({ count: 0 }),
+      findUniqueOrThrow: async () => ({ id: ID }),
+    },
+  };
+  const telegram = { call: async (_t: string, method: string, payload: any) => (calls.push({ method, payload }), { error: null }) };
+  const svc = new OrdersService(
+    prisma as never, undefined as never, undefined as never,
+    { onStatusChanged: async () => 0 } as never,
+    { sendOrderStatus: async () => undefined } as never,
+    undefined as never, undefined as never, undefined as never, undefined as never,
+    telegram as never,
+  );
+  await svc.setStatus(ID, 'ACCEPTED' as never);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].method, 'editMessageReplyMarkup');
+  assert.equal(calls[0].payload.message_id, 9);
+  assert.deepEqual(calls[0].payload.reply_markup.inline_keyboard.map((r: any[]) => r[0].text), ['✅ Принят', '⋯ Действия']);
 });

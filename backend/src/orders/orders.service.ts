@@ -1600,6 +1600,7 @@ export class OrdersService {
     }
     await this.loyalty.onStatusChanged(order.id, next);
     if (next === "CANCELLED") await this.ensureKaspiRefund(order.id, options?.refund);
+    if (next === "ACCEPTED") await this.markAcceptedInChat(order);
     if (options?.notify !== false) {
       await this.notifications.sendOrderStatus(order.id, next);
     }
@@ -1608,6 +1609,33 @@ export class OrdersService {
       await this.announceCancellation(order.id);
     }
     return this.prisma.order.findUniqueOrThrow({ where: { id: updated.id } });
+  }
+
+  /**
+   * «✅ Принят» над «Действиями» в сообщении о заказе — кассир видит, какие
+   * заказы уже приняты, а какие ещё ждут (неважно, приняли на планшете или
+   * кнопкой). Сбой Телеграма статус не откатывает.
+   */
+  private async markAcceptedInChat(order: {
+    id: string;
+    number: number;
+    tenantId: string;
+    cashierChatId: string | null;
+    cashierMessageId: number | null;
+  }) {
+    if (!order.cashierChatId || !order.cashierMessageId || !this.telegram?.call) return;
+    try {
+      const { error } = await this.telegram.call(order.tenantId, "editMessageReplyMarkup", {
+        chat_id: order.cashierChatId,
+        message_id: order.cashierMessageId,
+        reply_markup: { inline_keyboard: actionsButton(order.id, true) },
+      });
+      if (error && !/not modified/i.test(error)) {
+        this.logger.warn(`Метка «Принят» у №${order.number} не поставлена: ${error}`);
+      }
+    } catch (e) {
+      this.logger.warn(`Метка «Принят» у №${order.number} не поставлена: ${e}`);
+    }
   }
 
   /**
