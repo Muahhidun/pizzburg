@@ -3,9 +3,9 @@ import { Cron } from '@nestjs/schedule';
 import { GeoService } from '../geo/geo.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { adminBaseUrl, esc, TelegramService } from '../telegram/telegram.service';
-import { pickHolder, Point, streetHouseOf } from './batching';
+import { pickHolder, Point, secondNow, streetHouseOf } from './batching';
 import { courierSettings } from './courier-settings';
-import { byLateness, dueAt, externalOf, externalPaymentLine, orderOf } from './task-order';
+import { byLateness, deadlineAt, dueAt, externalOf, externalPaymentLine, orderOf } from './task-order';
 
 /**
  * Раздача заказов курьерам (docs/COURIER_SYSTEM_SPEC.md §6).
@@ -19,7 +19,8 @@ import { byLateness, dueAt, externalOf, externalPaymentLine, orderOf } from './t
  *
  * Связки по два заказа (§6.4): когда свободных курьеров не осталось,
  * готовый заказ добавляется вторым тому, кто ещё стоит у раздачи со своим
- * заказом. По умолчанию в любую сторону (`batchAnyDirection`), иначе —
+ * заказом, — если ждать курьера, который едет назад, значит опоздать
+ * (`secondNow`). По умолчанию в любую сторону (`batchAnyDirection`), иначе —
  * только если оба адреса в одну сторону (batching.ts).
  */
 
@@ -70,7 +71,7 @@ export class AssignmentService {
   ) {}
 
   /** Раздать готовые заказы ожидающим курьерам точки. Возвращает число назначений */
-  async assignVenue(venueId: string): Promise<number> {
+  async assignVenue(venueId: string, at: Date = new Date()): Promise<number> {
     let assigned = 0;
     for (let i = 0; i < MAX_ASSIGN_PER_PASS; i++) {
       const ready = await this.prisma.deliveryTask.findMany({
@@ -131,7 +132,7 @@ export class AssignmentService {
     }
     // Свободных курьеров не осталось — оставшиеся готовые заказы пробуем
     // добавить вторыми тем, кто ещё стоит у раздачи
-    assigned += await this.attachSeconds(venueId);
+    assigned += await this.attachSeconds(venueId, at.getTime());
     return assigned;
   }
 
@@ -141,7 +142,7 @@ export class AssignmentService {
    * заказы — первыми. Зовётся только когда свободных курьеров в очереди
    * нет: при свободном курьере заказ быстрее увезти отдельно.
    */
-  private async attachSeconds(venueId: string): Promise<number> {
+  private async attachSeconds(venueId: string, now: number): Promise<number> {
     const venue = await this.prisma.venue.findUnique({
       where: { id: venueId },
       select: {
@@ -194,18 +195,41 @@ export class AssignmentService {
         point: await this.pointOf(slug, orderOf(s.tasks[0]).address),
       })),
     );
+    // Кто скоро будет у раздачи: ждёт или отвёз и едет назад. Каждый такой
+    // курьер «занимается» самым опоздавшим заказом, который решили ему оставить
+    const coming = (
+      await this.prisma.courierShift.findMany({
+        where: { venueId, endedAt: null, state: { in: ['WAITING', 'RETURNING'] }, courier: { status: 'ACTIVE' } },
+        select: { state: true, lastDeliveredAt: true },
+      })
+    )
+      .map((s) =>
+        s.state === 'RETURNING' && s.lastDeliveredAt
+          ? s.lastDeliveredAt.getTime() + cfg.etaReturnMin * 60_000
+          : now,
+      )
+      .sort((a, b) => a - b);
+
     let attached = 0;
     for (const second of ready) {
       if (free.length === 0) break;
+      const decision = secondNow(now, deadlineAt(second, cfg.deliveryTargetMin), coming[0] ?? null, cfg);
+      if (!decision.give) {
+        coming.shift();
+        continue;
+      }
       const point = await this.pointOf(slug, orderOf(second).address);
       const best = pickHolder(venuePoint, point, free, cfg.batchMaxDetourKm, cfg.batchAnyDirection);
       if (!best) continue;
       const holder = best.item;
       if (await this.attach(holder.shift.id, holder.shift.courierId, holder.task, second, best.detourKm)) {
         attached++;
+        const at = (ms: number) => new Date(ms).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
         this.logger.log(
           `Связка: №${orderOf(second).number} вторым к №${orderOf(holder.task).number}` +
-            (best.detourKm == null ? ' (без координат)' : ` (крюк ${best.detourKm.toFixed(1)} км)`),
+            (best.detourKm == null ? ' (без координат)' : ` (крюк ${best.detourKm.toFixed(1)} км)`) +
+            `; срок ${at(deadlineAt(second, cfg.deliveryTargetMin))}, так ~${at(decision.viaHolder)}` +
+            (decision.viaNext == null ? ', следующего курьера нет' : `, со следующим ~${at(decision.viaNext)}`),
         );
         await this.notifyAssigned(second.id);
       }
@@ -507,7 +531,7 @@ export class AssignmentService {
       select: { venueId: true },
       distinct: ['venueId'],
     });
-    for (const { venueId } of venues) await this.assignVenue(venueId);
+    for (const { venueId } of venues) await this.assignVenue(venueId, now);
   }
 
   async endPause(shiftId: string, actor: string) {

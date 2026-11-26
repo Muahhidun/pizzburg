@@ -77,6 +77,37 @@ export function pickHolder<T extends { point: Point | null }>(
 }
 
 /**
+ * Вторым сейчас или ждать следующего курьера (Дом, 26.11.2026).
+ *
+ * Считаем, когда клиент получит заказ в каждом варианте:
+ * - вторым у курьера у раздачи: сборы + поездка к первому + переезд ко второму;
+ * - следующим курьером: когда он будет у раздачи + сборы + поездка.
+ * Следующий успевает к сроку — ждём его: вовремя в обоих вариантах, работа
+ * достаётся всем. Не успевает — отдаём вторым, если так успеваем; не
+ * успевают оба — тот вариант, что раньше (при равенстве — сейчас).
+ * Курьеры, которые ещё везут заказ, «следующими» не считаются: когда они
+ * вернутся — слишком неточно.
+ */
+export type EtaMin = { etaPickupMin: number; etaTripMin: number; etaSecondLegMin: number };
+
+export function secondNow(
+  now: number,
+  deadline: number,
+  nextCourierAt: number | null,
+  eta: EtaMin,
+): { give: boolean; viaHolder: number; viaNext: number | null } {
+  const min = 60_000;
+  const viaHolder = now + (eta.etaPickupMin + eta.etaTripMin + eta.etaSecondLegMin) * min;
+  const viaNext =
+    nextCourierAt == null ? null : Math.max(now, nextCourierAt) + (eta.etaPickupMin + eta.etaTripMin) * min;
+  let give: boolean;
+  if (viaNext != null && viaNext <= deadline) give = false;
+  else if (viaHolder <= deadline || viaNext == null) give = true;
+  else give = viaHolder <= viaNext;
+  return { give, viaHolder, viaNext };
+}
+
+/**
  * Улица и дом из адреса точки: «Экибастуз, Ауэзова 47б, ТРЦ …» →
  * { street: «Ауэзова», house: «47б» }. Первая часть, где после слов
  * идёт номер. Нужно, когда у точки не заданы свои координаты.

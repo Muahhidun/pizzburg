@@ -34,6 +34,15 @@ export interface CourierSettings {
   /// Связка в любую сторону: второй заказ даётся, даже если адреса в разные
   /// стороны или без координат (крюк тогда только выбирает лучшего курьера)
   batchAnyDirection: boolean;
+  /// Цель: довезти за столько минут от оформления (предзаказ — ко времени клиента)
+  deliveryTargetMin: number;
+  /// Оценки для решения «вторым сейчас или ждать следующего курьера», мин:
+  /// сборы у раздачи (галочки, скан), поездка к клиенту, переезд ко второму
+  /// клиенту связки, дорога назад после «Доставлен»
+  etaPickupMin: number;
+  etaTripMin: number;
+  etaSecondLegMin: number;
+  etaReturnMin: number;
   /// Час (время сервера), когда незакрытые смены закрываются сами (−1 — не закрывать)
   shiftAutoCloseHour: number;
   /// Заказы старого приложения из Poster: берём принятые не раньше стольких минут назад (0 — не брать)
@@ -57,6 +66,13 @@ export const COURIER_DEFAULTS: CourierSettings = {
   // Дом, 25.11.2026: курьеров не хватает, за день ни одной связки —
   // второй заказ даём в любую сторону, первым везут более опоздавший
   batchAnyDirection: true,
+  // Дом, 26.11.2026: срок 60 минут от оформления; оценки — для начала,
+  // уточнить по отчёту «Доставки»
+  deliveryTargetMin: 60,
+  etaPickupMin: 4,
+  etaTripMin: 15,
+  etaSecondLegMin: 8,
+  etaReturnMin: 10,
   // Работаем до 21:30, последний заказ довозят до ~23:00
   shiftAutoCloseHour: 0,
   // Старше полутора часов заказ уже точно увезли по-старому
@@ -83,6 +99,11 @@ export function courierSettings(tenantSettings: unknown): CourierSettings {
     batchMaxDetourKm: num(raw.batchMaxDetourKm, COURIER_DEFAULTS.batchMaxDetourKm),
     batchAnyDirection:
       typeof raw.batchAnyDirection === 'boolean' ? raw.batchAnyDirection : COURIER_DEFAULTS.batchAnyDirection,
+    deliveryTargetMin: num(raw.deliveryTargetMin, COURIER_DEFAULTS.deliveryTargetMin),
+    etaPickupMin: num(raw.etaPickupMin, COURIER_DEFAULTS.etaPickupMin),
+    etaTripMin: num(raw.etaTripMin, COURIER_DEFAULTS.etaTripMin),
+    etaSecondLegMin: num(raw.etaSecondLegMin, COURIER_DEFAULTS.etaSecondLegMin),
+    etaReturnMin: num(raw.etaReturnMin, COURIER_DEFAULTS.etaReturnMin),
     shiftAutoCloseHour:
       raw.shiftAutoCloseHour === -1
         ? -1

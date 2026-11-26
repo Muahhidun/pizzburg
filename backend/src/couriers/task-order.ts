@@ -137,6 +137,15 @@ export function dueAt(t: { createdAt?: Date; order?: OurOrder | null; external?:
   return t.createdAt ? t.createdAt.getTime() : 0;
 }
 
+/** Крайний срок доставки: предзаказ — время клиента, иначе оформление + цель */
+export function deadlineAt(
+  t: { createdAt?: Date; order?: OurOrder | null; external?: unknown },
+  targetMin: number,
+): number {
+  const o = orderOf(t);
+  return o.scheduledAt ? o.scheduledAt.getTime() : dueAt(t) + targetMin * 60_000;
+}
+
 /** Сначала самые опоздавшие */
 export function byLateness<T extends { createdAt?: Date; order?: OurOrder | null; external?: unknown; id: string }>(
   rows: T[],

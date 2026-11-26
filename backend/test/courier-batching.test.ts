@@ -247,6 +247,56 @@ test('4 готовых, курьеров нет; пришёл курьер — �
   assert.equal(await old.service.assignVenue('v'), 1);
 });
 
+// Решение «вторым сейчас или ждать курьера, который едет назад»: срок 60 мин,
+// сборы 4, поездка 15, переезд ко второму 8, дорога назад 10
+function withReturning(...deliveredAtMin: number[]) {
+  const w = world({}, 1);
+  deliveredAtMin.forEach((m, i) =>
+    w.shifts.push({ id: `r${i}`, venueId: 'v', courierId: `r${i}`, state: 'RETURNING', endedAt: null, queuedAt: 100 + i, scheduled: false, lastDeliveredAt: new Date(T(m)) }),
+  );
+  return w;
+}
+
+test('оба варианта вовремя — заказ ждёт курьера, который едет назад', async () => {
+  const w = withReturning(-2); // отвёз 2 минуты назад
+  w.ready('a', 0, -30);
+  w.ready('b', 0, -25); // так ~52 мин, со следующим тоже ~52 — оба в срок
+  assert.equal(await w.service.assignVenue('v', new Date(T(0))), 1);
+  assert.equal(w.tasks[1].status, 'READY');
+});
+
+test('со следующим опоздаем, а вторым успеваем — отдаём вторым', async () => {
+  const w = withReturning(0);
+  w.ready('a', 0, -40);
+  w.ready('b', 0, -32); // срок через 28: вторым ~27, со следующим ~29
+  assert.equal(await w.service.assignVenue('v', new Date(T(0))), 2);
+  assert.equal(w.tasks[1].courierId, 'c0');
+});
+
+test('опаздываем в обоих вариантах — что раньше, при равенстве сейчас', async () => {
+  const w = withReturning(-2);
+  w.ready('a', 0, -45);
+  w.ready('b', 0, -40); // оба ~67 мин
+  assert.equal(await w.service.assignVenue('v', new Date(T(0))), 2);
+});
+
+test('3 готовых, двое едут назад: приехавшему один, остальные ждут своих', async () => {
+  const w = withReturning(-1, -3);
+  w.ready('a', 0, -10);
+  w.ready('b', 0, -8);
+  w.ready('c', 0, -6);
+  assert.equal(await w.service.assignVenue('v', new Date(T(0))), 1);
+  assert.deepEqual(w.tasks.map((t) => t.status), ['ASSIGNED', 'READY', 'READY']);
+});
+
+test('кто ещё везёт заказ, следующим не считается', async () => {
+  const w = world({}, 1);
+  w.shifts.push({ id: 'd', venueId: 'v', courierId: 'd', state: 'ON_DELIVERY', endedAt: null, queuedAt: 50, scheduled: false });
+  w.ready('a', 0, -10);
+  w.ready('b', 0, -8);
+  assert.equal(await w.service.assignVenue('v', new Date(T(0))), 2);
+});
+
 test('при двух свободных курьерах связки нет: каждому по заказу', async () => {
   const w = world({ a: north2, b: north1 }, 2);
   w.ready('a', 0);
