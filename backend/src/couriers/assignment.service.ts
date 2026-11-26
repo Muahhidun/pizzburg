@@ -618,17 +618,25 @@ export class AssignmentService {
     await this.sendToCourier(task.tenantId, task.courier.telegramUserId, text, task.tenant.slug);
   }
 
-  async sendToCourier(tenantId: string, chatId: string, text: string, tenantSlug?: string) {
+  async sendToCourier(
+    tenantId: string,
+    chatId: string,
+    text: string,
+    tenantSlug?: string,
+    /** Кнопки над «Открыть» (ответ курьера прямо из чата) */
+    rows: { text: string; callback_data: string }[][] = [],
+  ) {
     const slug =
       tenantSlug ??
       (await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { slug: true } }))
         ?.slug;
     const url = slug ? courierAppUrl(slug) : null;
+    const keyboard = [...rows, ...(url ? [[{ text: 'Открыть', web_app: { url } }]] : [])];
     const { error } = await this.telegram.call(tenantId, 'sendMessage', {
       chat_id: chatId,
       text,
       parse_mode: 'HTML',
-      ...(url ? { reply_markup: { inline_keyboard: [[{ text: 'Открыть', web_app: { url } }]] } } : {}),
+      ...(keyboard.length ? { reply_markup: { inline_keyboard: keyboard } } : {}),
     });
     if (error) this.logger.warn(`Курьеру ${chatId} не дошло: ${error}`);
   }

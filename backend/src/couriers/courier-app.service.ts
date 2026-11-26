@@ -1,8 +1,11 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { GeoService } from '../geo/geo.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { esc, TelegramService } from '../telegram/telegram.service';
+import { TelegramUpdatesService } from '../telegram/telegram-updates.service';
+import { TgCallbackQuery, TgUpdate } from '../telegram/telegram.types';
+import { CourierAlertsService, hm } from './courier-alerts.service';
 import { AssignmentService, itemsLine, paymentLine } from './assignment.service';
 import { CourierActorValue } from './courier-auth.guard';
 import { CourierCashService, PaidBy } from './courier-cash.service';
@@ -37,7 +40,7 @@ type Address = {
 const ACTIVE_TASK = ['ASSIGNED', 'PICKED_UP'] as const;
 
 @Injectable()
-export class CourierAppService {
+export class CourierAppService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly telegram: TelegramService,
@@ -46,7 +49,79 @@ export class CourierAppService {
     private readonly cash: CourierCashService,
     private readonly geo: GeoService,
     private readonly photos: CourierPhotoService,
+    private readonly updates?: TelegramUpdatesService,
+    private readonly alerts?: CourierAlertsService,
   ) {}
+
+  private readonly logger = new Logger(CourierAppService.name);
+
+  onModuleInit() {
+    this.updates?.register((tenantId, update) => this.onTelegram(tenantId, update));
+  }
+
+  // ─── Ответ на «вы уже долго в пути» прямо из чата ──────────────
+
+  async onTelegram(tenantId: string, update: TgUpdate): Promise<boolean> {
+    const cb = update.callback_query;
+    const m = cb?.data?.match(/^dv:(w|d):(.+)$/);
+    if (!cb || !m) return false;
+    await this.onReminderButton(tenantId, cb, m[1] as 'w' | 'd', m[2]);
+    return true;
+  }
+
+  private async onReminderButton(tenantId: string, cb: TgCallbackQuery, kind: 'w' | 'd', taskId: string) {
+    const answer = (text: string, alert = false) =>
+      this.telegram.call(tenantId, 'answerCallbackQuery', {
+        callback_query_id: cb.id,
+        text,
+        show_alert: alert,
+      });
+    const courier = await this.prisma.courier.findUnique({
+      where: { tenantId_telegramUserId: { tenantId, telegramUserId: String(cb.from.id) } },
+      include: { tenant: { select: { slug: true, settings: true } } },
+    });
+    if (!courier || courier.status !== 'ACTIVE') return answer('Нет доступа', true);
+    const actor: CourierActorValue = {
+      courier,
+      tenantId,
+      tenantSlug: courier.tenant.slug,
+      tenantSettings: courier.tenant.settings,
+    };
+    const task = await this.prisma.deliveryTask.findFirst({
+      where: { id: taskId, courierId: courier.id },
+      include: { order: { select: { number: true } } },
+    });
+    if (!task) return answer('Заказ не найден', true);
+    const n = orderOf(task).number;
+    const now = new Date();
+    const close = (line: string) =>
+      cb.message
+        ? this.telegram.call(tenantId, 'editMessageText', {
+            chat_id: cb.message.chat.id,
+            message_id: cb.message.message_id,
+            text: `${cb.message.text ?? ''}\n\n${line}`,
+          })
+        : null;
+
+    if (task.status !== 'PICKED_UP') {
+      await close(task.status === 'DELIVERED' ? '✅ Уже отмечен доставленным' : 'Заказ уже закрыт');
+      return answer(`№${n} уже не в пути`);
+    }
+    if (kind === 'w') {
+      await this.stillOnWay(actor, task.id, now);
+      await close(`🚗 Вы ответили: ещё везу (${hm(now)})`);
+      return answer('Хорошо. Когда отдадите, нажмите «Уже отдал» или протяните «Заказ доставлен»');
+    }
+    try {
+      await this.delivered(actor, task.id);
+    } catch (e) {
+      const text = (e as any)?.response?.message ?? (e as Error)?.message ?? String(e);
+      return answer(String(text), true);
+    }
+    this.logger.log(`№${n} отмечен доставленным из чата курьера ${courier.id}`);
+    await close(`✅ Отмечено: №${n} доставлен (${hm(now)})`);
+    return answer(`№${n} доставлен`);
+  }
 
   // ─── Экран курьера ─────────────────────────────────────────────
 
@@ -93,6 +168,19 @@ export class CourierAppService {
         venue: { select: { address: true } },
       },
     });
+
+    // «Вы уже долго в пути»: была тревога, а курьер ещё не ответил
+    const pickedIds = tasks.filter((t) => t.status === 'PICKED_UP').map((t) => t.id);
+    const prompts = pickedIds.length
+      ? await this.prisma.deliveryTaskEvent.findMany({
+          where: { taskId: { in: pickedIds }, type: { in: ['ALERT_ON_WAY', 'STILL_ON_WAY'] } },
+          select: { taskId: true, type: true },
+        })
+      : [];
+    const answered = new Set(prompts.filter((p) => p.type === 'STILL_ON_WAY').map((p) => p.taskId));
+    const askOnWay = new Set(
+      prompts.filter((p) => p.type === 'ALERT_ON_WAY' && !answered.has(p.taskId)).map((p) => p.taskId),
+    );
 
     // Очередь у раздачи целиком: кто ждёт, кто в пути, кто на паузе.
     // Видно, что очередь честная, — главный вопрос курьеров к раздаче
@@ -152,6 +240,8 @@ export class CourierAppService {
           kind: t.kind,
           status: t.status,
           number: o.number,
+          /// Спросить «Ещё везу / Уже отдал»: тревога «долго в пути» без ответа
+          askOnWay: askOnWay.has(t.id),
           /// Заказ старого приложения или сайта, подтянутый из Poster
           external: o.external,
           items:
@@ -417,6 +507,15 @@ export class CourierAppService {
     if (!done) return this.me(actor);
     await this.afterTrip(actor, task.shiftId, now);
     await this.event(actor, taskId, 'DELIVERED', lat != null ? { lat, lng } : undefined);
+    return this.me(actor);
+  }
+
+  /** «Ещё везу» в ответ на «вы уже долго в пути» — из приложения или из чата */
+  async stillOnWay(actor: CourierActorValue, taskId: string, now = new Date()) {
+    const task = await this.ownTask(actor, taskId);
+    if (task.status !== 'PICKED_UP') throw new BadRequestException(`№${orderOf(task).number} уже не в пути`);
+    await this.event(actor, taskId, 'STILL_ON_WAY');
+    await this.alerts?.noteCourierReply(taskId, `🚗 Курьер ответил: ещё везу (${hm(now)})`);
     return this.me(actor);
   }
 

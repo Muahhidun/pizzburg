@@ -103,6 +103,13 @@ export class CourierAppController {
     return this.app.failed(actor, id, dto.reason);
   }
 
+  /** «Ещё везу» в ответ на «вы уже долго в пути» */
+  @Post('tasks/:id/still-on-way')
+  @HttpCode(200)
+  stillOnWay(@CourierActor() actor: CourierActorValue, @Param('id') id: string) {
+    return this.app.stillOnWay(actor, id);
+  }
+
   /** Номер клиента — сообщением от бота: там он нажимается всегда */
   @Post('tasks/:id/phone')
   @HttpCode(200)

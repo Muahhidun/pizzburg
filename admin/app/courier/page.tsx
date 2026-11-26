@@ -43,6 +43,8 @@ interface Task {
   phone?: string | null;
   customerName?: string | null;
   comment?: string | null;
+  /** Была тревога «долго в пути», курьер ещё не ответил */
+  askOnWay?: boolean;
 }
 
 interface QueuePerson {
@@ -338,6 +340,25 @@ export default function CourierPage() {
             )}
           </div>
           {t.phone && <div className="mt-2 select-all text-sm opacity-70">Телефон: {t.phone}</div>}
+          {t.askOnWay && (
+            <div className="mt-3 rounded-xl bg-amber-100 p-3 text-amber-900">
+              <div className="font-semibold">Вы уже долго в пути. Заказ ещё у вас?</div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <button disabled={busy} className="btn-secondary" onClick={() => act(`/tasks/${t.id}/still-on-way`)}>
+                  🚗 Ещё везу
+                </button>
+                <button
+                  disabled={busy}
+                  className="btn-secondary"
+                  onClick={() => {
+                    if (confirm(`№${t.number} уже у клиента? Отметим доставленным.`)) delivered(t);
+                  }}
+                >
+                  ✅ Уже отдал
+                </button>
+              </div>
+            </div>
+          )}
           <div className="mt-3">
             <SlideButton label="Заказ доставлен" disabled={busy} onComplete={() => delivered(t)} />
           </div>

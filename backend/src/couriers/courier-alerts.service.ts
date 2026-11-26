@@ -158,7 +158,7 @@ export class CourierAlertsService {
           const meta: AlertMeta = { text, messages };
           await this.prisma.deliveryTaskEvent.update({ where: { id: event.id }, data: { meta } });
         }
-        if (alert === 'ON_WAY') await this.remindCourier(v.tenantId, t);
+        if (alert === 'ON_WAY') await this.remindCourier(v.tenantId, t.id, t);
         sent++;
       }
     }
@@ -172,19 +172,50 @@ export class CourierAlertsService {
    */
   private async remindCourier(
     tenantId: string,
+    taskId: string,
     t: { order: { number: number | string }; courier?: { telegramUserId: string } | null },
   ) {
     if (!t.courier?.telegramUserId || !this.assignment) return;
     try {
+      // Нет ответа — значит, ещё везёт (Дом, 26.11.2026)
       await this.assignment.sendToCourier(
         tenantId,
         t.courier.telegramUserId,
         `⏰ <b>№${t.order.number}: вы уже долго в пути</b>\n` +
-          'Если заказ у клиента — откройте приложение и протяните «Заказ доставлен». ' +
-          'Пока не отметите, касса считает, что вы его везёте.',
+          'Если заказ уже у клиента, нажмите «Уже отдал». Пока не отметите, касса считает, что вы его везёте.',
+        undefined,
+        [
+          [{ text: '🚗 Ещё везу', callback_data: `dv:w:${taskId}` }],
+          [{ text: '✅ Уже отдал клиенту', callback_data: `dv:d:${taskId}` }],
+        ],
       );
     } catch (e) {
       this.logger.warn(`Напоминание курьеру о №${t.order.number} не ушло: ${e}`);
+    }
+  }
+
+  /**
+   * Ответ курьера на напоминание — строкой под тревогой «долго в пути» в
+   * группе. Строка входит в текст, поэтому итог допишется уже после неё.
+   */
+  async noteCourierReply(taskId: string, line: string) {
+    const event = await this.prisma.deliveryTaskEvent.findFirst({
+      where: { taskId, type: 'ALERT_ON_WAY' },
+      orderBy: { at: 'desc' },
+    });
+    const meta = event?.meta as AlertMeta | null;
+    if (!event || !meta?.messages?.length || meta.resolvedAt) return;
+    const next: AlertMeta = { ...meta, text: `${meta.text}\n${line}` };
+    await this.prisma.deliveryTaskEvent.update({ where: { id: event.id }, data: { meta: next } });
+    for (const m of meta.messages) {
+      const { error } = await this.telegram.call(event.tenantId, 'editMessageText', {
+        chat_id: m.chatId,
+        message_id: m.messageId,
+        text: next.text,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+      });
+      if (error) this.logger.warn(`Ответ курьера под тревогой не дописан: ${error}`);
     }
   }
 
@@ -249,7 +280,7 @@ type AlertMeta = {
   outcome?: string;
 };
 
-const hm = (d: Date) =>
+export const hm = (d: Date) =>
   d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Almaty' });
 const minutes = (from: Date, to: Date) => Math.max(0, Math.round((to.getTime() - from.getTime()) / 60_000));
 

@@ -164,3 +164,53 @@ test('долго в пути: курьеру приходит напоминан
   assert.equal(sent.length, 1);
   assert.match(sent[0], /^555:⏰ <b>№1492: вы уже долго в пути/);
 });
+
+import { CourierAppService } from '../src/couriers/courier-app.service';
+
+function reminderWorld(status = 'PICKED_UP') {
+  const calls: any[] = [];
+  const notes: string[] = [];
+  const delivered: string[] = [];
+  const events: string[] = [];
+  const prisma: any = {
+    courier: {
+      findUnique: async () => ({ id: 'c1', status: 'ACTIVE', fullName: 'Әбенов Марлен', tenant: { slug: 'pb', settings: {} } }),
+    },
+    deliveryTask: { findFirst: async () => ({ id: 'k', status, order: { number: 1492 } }) },
+    deliveryTaskEvent: { create: async ({ data }: any) => (events.push(data.type), data) },
+  };
+  const telegram: any = { call: async (_t: string, method: string, p: any) => (calls.push({ method, ...p }), { error: null }) };
+  const alerts: any = { noteCourierReply: async (_id: string, line: string) => notes.push(line) };
+  const svc = new CourierAppService(prisma, telegram, {} as any, {} as any, {} as any, {} as any, {} as any, undefined, alerts);
+  (svc as any).delivered = async (_a: unknown, id: string) => delivered.push(id);
+  (svc as any).me = async () => ({});
+  const press = (data: string) =>
+    svc.onTelegram('t', {
+      callback_query: { id: 'q', from: { id: 555 }, data, message: { message_id: 7, chat: { id: 555 }, text: '⏰ №1492: вы уже долго в пути' } },
+    });
+  return { calls, notes, delivered, events, press };
+}
+
+test('напоминание: «Ещё везу» — пометка курьеру и под тревогой в группе', async () => {
+  const w = reminderWorld();
+  assert.equal(await w.press('dv:w:k'), true);
+  assert.equal(w.delivered.length, 0);
+  assert.match(w.notes[0], /^🚗 Курьер ответил: ещё везу \(\d\d:\d\d\)$/);
+  // Ответ запомнили: в приложении вопрос больше не висит
+  assert.deepEqual(w.events, ['STILL_ON_WAY']);
+  const edit = w.calls.find((c) => c.method === 'editMessageText');
+  assert.match(edit.text, /🚗 Вы ответили: ещё везу/);
+});
+
+test('напоминание: «Уже отдал» — заказ доставлен из чата', async () => {
+  const w = reminderWorld();
+  await w.press('dv:d:k');
+  assert.deepEqual(w.delivered, ['k']);
+  assert.match(w.calls.find((c) => c.method === 'editMessageText').text, /✅ Отмечено: №1492 доставлен/);
+  // Уже доставлен в приложении — ничего не делаем
+  const done = reminderWorld('DELIVERED');
+  await done.press('dv:d:k');
+  assert.equal(done.delivered.length, 0);
+  // Чужие кнопки не трогаем
+  assert.equal(await w.press('cash:x'), false);
+});
