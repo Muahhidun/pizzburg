@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { orderClockStart, taskAlert } from '../src/couriers/courier-alerts.service';
+import { alertOutcome, CourierAlertsService, orderClockStart, taskAlert } from '../src/couriers/courier-alerts.service';
+import { telNumber } from '../src/couriers/task-order';
 import { COURIER_DEFAULTS } from '../src/couriers/courier-settings';
 
 const NOW = new Date('2026-11-23T13:00:00Z');
@@ -43,4 +44,83 @@ test('предзаказ считается оформленным за час �
   assert.equal(taskAlert(task({ status: 'READY', order }), none, COURIER_DEFAULTS, NOW), null);
   const soon = { createdAt: ago(300), scheduledAt: new Date(NOW.getTime() - 5 * 60_000) };
   assert.equal(taskAlert(task({ status: 'READY', order: soon }), none, COURIER_DEFAULTS, NOW), 'NO_COURIER');
+});
+
+// ─── Итог тревоги ────────────────────────────────────────────────────
+
+const at = (h: number, m: number) => new Date(Date.UTC(2026, 10, 23, h - 5, m)); // время Экибастуза
+const done = (over: Partial<Parameters<typeof alertOutcome>[1]> = {}) => ({
+  status: 'NEW' as const,
+  readyAt: null,
+  pickedUpAt: null,
+  deliveredAt: null,
+  order: { createdAt: at(18, 0), scheduledAt: null },
+  courier: { fullName: 'Әбенов Марлен' },
+  ...over,
+});
+
+test('итог тревоги: забрали, доставлен, готов, отменён; пока идёт — пусто', () => {
+  assert.equal(alertOutcome('NO_COURIER', done({ status: 'READY' })), null);
+  assert.equal(alertOutcome('NO_COURIER', done({ status: 'ASSIGNED' as any })), null);
+  assert.equal(
+    alertOutcome('NO_COURIER', done({ status: 'PICKED_UP' as any, pickedUpAt: at(18, 52) })),
+    '✅ Марлен Ә. забрал в 18:52, заказу было 52 мин',
+  );
+  assert.equal(alertOutcome('ON_WAY', done({ status: 'PICKED_UP' as any, pickedUpAt: at(18, 52) })), null);
+  assert.equal(
+    alertOutcome('ON_WAY', done({ status: 'DELIVERED' as any, pickedUpAt: at(18, 52), deliveredAt: at(19, 20) })),
+    '✅ Доставлен в 19:20, в пути 28 мин, всего 80 мин',
+  );
+  assert.equal(alertOutcome('NOT_READY', done({ status: 'READY', readyAt: at(18, 30) })), '✅ Готов в 18:30');
+  assert.equal(alertOutcome('ON_WAY', done({ status: 'CANCELLED' as any })), '✖️ Заказ отменён');
+  assert.equal(
+    alertOutcome('ON_WAY', done({ status: 'FAILED' as any, failedReason: 'Клиент не отвечает' })),
+    '❌ Не доставлен: Клиент не отвечает',
+  );
+});
+
+test('итог дописывается в оба сообщения тревоги один раз', async () => {
+  const calls: any[] = [];
+  const updates: any[] = [];
+  const event = {
+    id: 'e1',
+    tenantId: 't',
+    type: 'ALERT_ON_WAY',
+    meta: {
+      text: '🐢 <b>№1431 в пути уже 20 мин</b>',
+      messages: [
+        { chatId: '-100cash', messageId: 10 },
+        { chatId: '-100own', messageId: 20 },
+      ],
+    } as any,
+    task: {
+      ...done({ status: 'DELIVERED' as any, pickedUpAt: at(18, 52), deliveredAt: at(19, 20) }),
+      order: { number: 1431, createdAt: at(18, 0), scheduledAt: null },
+    },
+  };
+  const prisma: any = {
+    deliveryTaskEvent: {
+      findMany: async () => [event],
+      update: async ({ data }: any) => (updates.push(data), Object.assign(event, data)),
+    },
+  };
+  const telegram: any = { call: async (_t: string, method: string, p: any) => (calls.push({ method, ...p }), { error: null }) };
+  const s = new CourierAlertsService(prisma, telegram);
+  assert.equal(await s.resolve(at(19, 21)), 1);
+  assert.deepEqual(calls.map((c) => [c.method, c.chat_id, c.message_id]), [
+    ['editMessageText', '-100cash', 10],
+    ['editMessageText', '-100own', 20],
+  ]);
+  assert.equal(calls[0].text, '🐢 <b>№1431 в пути уже 20 мин</b>\n\n✅ Доставлен в 19:20, в пути 28 мин, всего 80 мин');
+  assert.ok(updates[0].meta.resolvedAt);
+  // Второй проход ничего не правит
+  assert.equal(await s.resolve(at(19, 22)), 0);
+  assert.equal(calls.length, 2);
+});
+
+test('номер для звонка: только плюс и цифры', () => {
+  assert.equal(telNumber('+7 705 866 33 23'), '+77058663323');
+  assert.equal(telNumber('8 (705) 866-33-23'), '+77058663323');
+  assert.equal(telNumber('77058663323'), '+77058663323');
+  assert.equal(telNumber('+77768147963'), '+77768147963');
 });

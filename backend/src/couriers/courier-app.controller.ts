@@ -103,6 +103,13 @@ export class CourierAppController {
     return this.app.failed(actor, id, dto.reason);
   }
 
+  /** Номер клиента — сообщением от бота: там он нажимается всегда */
+  @Post('tasks/:id/phone')
+  @HttpCode(200)
+  phone(@CourierActor() actor: CourierActorValue, @Param('id') id: string) {
+    return this.app.sendPhone(actor, id);
+  }
+
   @Post('pause')
   @HttpCode(200)
   pause(@CourierActor() actor: CourierActorValue) {

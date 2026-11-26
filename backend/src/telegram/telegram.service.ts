@@ -166,15 +166,18 @@ export class TelegramService {
    * Сообщение руководству. Ошибку не поднимаем: стоп-лист должен
    * поставиться, даже если телеграм лежит.
    */
-  async notify(tenantId: string, text: string) {
+  async notify(
+    tenantId: string,
+    text: string,
+  ): Promise<{ sent: boolean; chatId?: string; messageId?: number }> {
     const s = await this.settings(tenantId);
     if (!s.enabled || !s.botToken || !s.chatId) return { sent: false };
-    const { error } = await this.deliver(s, await this.linkOrders(tenantId, text));
+    const { error, messageId } = await this.deliver(s, await this.linkOrders(tenantId, text));
     if (error) {
       this.logger.warn(`Телеграм не принял сообщение: ${error}`);
       return { sent: false };
     }
-    return { sent: true };
+    return { sent: true, chatId: s.chatId, messageId };
   }
 
   /**

@@ -12,7 +12,7 @@ import { courierSettings } from './courier-settings';
 import { verifyQrToken } from './dispatch-qr';
 import { completeDelivery } from './delivery-completion';
 import { shortName } from './names';
-import { externalOf, externalPaymentLine, orderOf } from './task-order';
+import { externalOf, externalPaymentLine, orderOf, telNumber } from './task-order';
 
 /**
  * Что курьер делает в Mini App (docs/COURIER_SYSTEM_SPEC.md §5–7):
@@ -174,7 +174,7 @@ export class CourierAppService {
                 address: addr ? formatAddress(addr) : null,
                 addressComment: addr?.comment || null,
                 mapUrl: addr ? mapUrl(addr, cityOf(t.venue.address)) : null,
-                phone: o.phone,
+                phone: o.phone ? telNumber(o.phone) : null,
                 customerName: o.customerName,
                 comment: o.comment || null,
               }
@@ -444,6 +444,29 @@ export class CourierAppService {
       });
     }
     return this.me(actor);
+  }
+
+  /**
+   * Номер клиента сообщением от бота. В части телефонов Telegram не даёт
+   * Mini App открыть звонилку по tel:, а номер в чате нажимается всегда.
+   */
+  async sendPhone(actor: CourierActorValue, taskId: string) {
+    const task = await this.prisma.deliveryTask.findFirst({
+      where: { id: taskId, courierId: actor.courier.id, status: 'PICKED_UP' },
+      include: { order: { select: { number: true, customer: { select: { phone: true, name: true } } } } },
+    });
+    if (!task) throw new NotFoundException('Заказ не найден');
+    const o = orderOf(task);
+    if (!o.phone) throw new BadRequestException('У заказа нет телефона');
+    const { error } = await this.telegram.call(actor.tenantId, 'sendMessage', {
+      chat_id: actor.courier.telegramUserId,
+      parse_mode: 'HTML',
+      text:
+        `📞 <b>Клиент №${esc(o.number)}</b>${o.customerName ? `, ${esc(o.customerName)}` : ''}\n` +
+        `${telNumber(o.phone)}\n\nНажмите на номер, чтобы позвонить.`,
+    });
+    if (error) throw new BadRequestException('Телеграм не принял сообщение, попробуйте ещё раз');
+    return { sent: true };
   }
 
   // ─── Конец смены ───────────────────────────────────────────────

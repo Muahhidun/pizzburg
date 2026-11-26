@@ -106,6 +106,7 @@ export default function CourierPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [failFor, setFailFor] = useState<Task | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -198,6 +199,19 @@ export default function CourierPage() {
         .catch(() => {});
     }
   }, [me?.queue]);
+
+  // Звонилку открывает tel:, но в части телефонов Telegram её не пускает —
+  // поэтому номер ещё и приходит сообщением от бота, там он нажимается
+  async function phoneToChat(t: Task) {
+    setNotice(null);
+    try {
+      await request(`/tasks/${t.id}/phone`, {});
+      setNotice('Номер клиента отправлен в чат с ботом. Если звонок не начался, нажмите на номер там.');
+      setTimeout(() => setNotice(null), 8000);
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+    }
+  }
 
   async function act(path: string, body: unknown = {}) {
     setBusy(true);
@@ -313,7 +327,7 @@ export default function CourierPage() {
           <div className="mt-1 font-semibold">{t.payment}</div>
           <div className="mt-3 grid grid-cols-2 gap-2">
             {t.phone && (
-              <a href={`tel:${t.phone}`} className="btn-secondary">
+              <a href={`tel:${t.phone}`} onClick={() => phoneToChat(t)} className="btn-secondary">
                 Позвонить{t.customerName ? ` · ${t.customerName}` : ''}
               </a>
             )}
@@ -323,6 +337,7 @@ export default function CourierPage() {
               </a>
             )}
           </div>
+          {t.phone && <div className="mt-2 select-all text-sm opacity-70">Телефон: {t.phone}</div>}
           <div className="mt-3">
             <SlideButton label="Заказ доставлен" disabled={busy} onComplete={() => delivered(t)} />
           </div>
@@ -625,6 +640,12 @@ export default function CourierPage() {
           className="btn-link mt-6"
         >
           Закончить смену
+        </button>
+      )}
+
+      {notice && (
+        <button onClick={() => setNotice(null)} className="mt-4 w-full rounded-xl bg-green-600 p-3 text-white">
+          {notice}
         </button>
       )}
 

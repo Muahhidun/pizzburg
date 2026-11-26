@@ -82,6 +82,7 @@ export class CourierAlertsService {
   async tick() {
     try {
       await this.check();
+      await this.resolve();
     } catch (e) {
       this.logger.error(`Тревоги курьеров: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -125,16 +126,132 @@ export class CourierAlertsService {
           select: { id: true },
         });
         if (already) continue;
-        await this.prisma.deliveryTaskEvent.create({
+        const event = await this.prisma.deliveryTaskEvent.create({
           data: { tenantId: v.tenantId, taskId: t.id, type, actor: 'SYSTEM' },
         });
-        const text = alertText(alert, t, now);
-        await this.telegram.notifyCashier(v.tenantId, text);
-        await this.telegram.notify(v.tenantId, text);
+        // Ссылки на номер ставим один раз: тот же текст потом дополняем итогом
+        const text = await this.telegram.linkOrders(v.tenantId, alertText(alert, t, now));
+        const sentTo = [
+          await this.telegram.notifyCashier(v.tenantId, text, undefined, { links: false }),
+          await this.telegram.notify(v.tenantId, text),
+        ];
+        const messages = sentTo
+          .filter((r) => r.sent && r.chatId && r.messageId)
+          .map((r) => ({ chatId: r.chatId!, messageId: r.messageId! }));
+        if (messages.length) {
+          const meta: AlertMeta = { text, messages };
+          await this.prisma.deliveryTaskEvent.update({ where: { id: event.id }, data: { meta } });
+        }
         sent++;
       }
     }
     return sent;
+  }
+
+  /**
+   * Итог тревоги — в то же сообщение (Дом, 26.11.2026: «потом видеть, когда
+   * по итогу забрали / доставили»). Правим, а не шлём новое: в группе
+   * остаётся одно сообщение на заказ, и в нём вся история — тревога и чем
+   * кончилось.
+   */
+  async resolve(now = new Date()) {
+    const events = await this.prisma.deliveryTaskEvent.findMany({
+      where: {
+        type: { in: ALERT_TYPES },
+        at: { gt: new Date(now.getTime() - 12 * 60 * 60_000) },
+        taskId: { not: null },
+      },
+      include: {
+        task: {
+          include: {
+            order: { select: { number: true, createdAt: true, scheduledAt: true } },
+            courier: { select: { fullName: true } },
+          },
+        },
+      },
+    });
+    let done = 0;
+    for (const e of events) {
+      const meta = e.meta as AlertMeta | null;
+      if (!meta?.messages?.length || meta.resolvedAt || !e.task) continue;
+      const view = orderOf(e.task);
+      const line = alertOutcome(e.type.replace('ALERT_', '') as TaskAlert, {
+        ...e.task,
+        order: { createdAt: view.createdAt, scheduledAt: view.scheduledAt },
+      });
+      if (!line) continue;
+      for (const m of meta.messages) {
+        const { error } = await this.telegram.call(e.tenantId, 'editMessageText', {
+          chat_id: m.chatId,
+          message_id: m.messageId,
+          text: `${meta.text}\n\n${line}`,
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+        });
+        if (error) this.logger.warn(`Итог тревоги №${view.number} не дописан: ${error}`);
+      }
+      // Помечаем и при ошибке: иначе будем стучаться в Телеграм каждую минуту
+      const next: AlertMeta = { ...meta, resolvedAt: now.toISOString(), outcome: line };
+      await this.prisma.deliveryTaskEvent.update({ where: { id: e.id }, data: { meta: next } });
+      done++;
+    }
+    return done;
+  }
+}
+
+const ALERT_TYPES = ['ALERT_NO_COURIER', 'ALERT_NOT_READY', 'ALERT_ON_WAY'];
+
+/** Что запомнили о тревоге: текст и куда ушла — чтобы дописать итог */
+type AlertMeta = {
+  text: string;
+  messages: { chatId: string; messageId: number }[];
+  resolvedAt?: string;
+  outcome?: string;
+};
+
+const hm = (d: Date) =>
+  d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Almaty' });
+const minutes = (from: Date, to: Date) => Math.max(0, Math.round((to.getTime() - from.getTime()) / 60_000));
+
+/**
+ * Чем кончилась тревога. null — ещё не кончилась.
+ * «Нет курьера» — когда курьер забрал; «курьер ждёт» — когда заказ готов;
+ * «долго в пути» — когда доставлен.
+ */
+export function alertOutcome(
+  alert: TaskAlert,
+  t: {
+    status: DeliveryTaskStatus;
+    readyAt: Date | null;
+    pickedUpAt: Date | null;
+    deliveredAt: Date | null;
+    failedReason?: string | null;
+    order: { createdAt: Date; scheduledAt: Date | null };
+    courier?: { fullName: string } | null;
+  },
+): string | null {
+  if (t.status === 'CANCELLED') return '✖️ Заказ отменён';
+  if (t.status === 'FAILED') {
+    return `❌ Не доставлен${t.failedReason ? `: ${esc(t.failedReason)}` : ''}`;
+  }
+  const delivered = () =>
+    t.deliveredAt
+      ? `✅ Доставлен в ${hm(t.deliveredAt)}` +
+        (t.pickedUpAt ? `, в пути ${minutes(t.pickedUpAt, t.deliveredAt)} мин` : '') +
+        `, всего ${minutes(orderClockStart(t.order), t.deliveredAt)} мин`
+      : null;
+  switch (alert) {
+    case 'NO_COURIER':
+      if (t.pickedUpAt) {
+        const who = t.courier ? esc(shortName(t.courier.fullName)) : 'Курьер';
+        return `✅ ${who} забрал в ${hm(t.pickedUpAt)}, заказу было ${minutes(orderClockStart(t.order), t.pickedUpAt)} мин`;
+      }
+      return t.status === 'DELIVERED' ? delivered() : null;
+    case 'NOT_READY':
+      if (t.readyAt) return `✅ Готов в ${hm(t.readyAt)}`;
+      return t.status === 'NEW' ? null : '✅ Готов';
+    case 'ON_WAY':
+      return t.status === 'DELIVERED' ? delivered() : null;
   }
 }
 
