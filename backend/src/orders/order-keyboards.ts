@@ -17,6 +17,7 @@ export function actionsButton(orderId: string): InlineButton[][] {
 
 export function menuKeyboard(orderId: string): InlineButton[][] {
   return [
+    [{ text: '✅ Принят', callback_data: `o:a:${orderId}` }],
     [
       { text: '❌ Отменить', callback_data: `o:c:${orderId}` },
       { text: '🚫 Нет позиции', callback_data: `o:s:${orderId}:` },
@@ -51,6 +52,14 @@ export function confirmKeyboard(
       },
     ],
     [{ text: '↩️ Не отменять', callback_data: `o:x:${orderId}` }],
+  ];
+}
+
+/** Подтверждение «Принят»: клиенту сразу уходит пуш, поэтому — второй шаг */
+export function acceptKeyboard(orderId: string): InlineButton[][] {
+  return [
+    [{ text: '✅ Да, заказ принят', callback_data: `o:ay:${orderId}` }],
+    [{ text: '◂ Назад', callback_data: `o:m:${orderId}` }],
   ];
 }
 
@@ -95,6 +104,11 @@ export function shortageKeyboard(
 /** Выбранные id позиций по маске */
 export function pickedIds(items: PickItem[], mask: number): string[] {
   return items.slice(0, MAX_PICK_ITEMS).filter((_, i) => (mask & 2 ** i) !== 0).map((it) => it.id);
+}
+
+export function acceptedBanner(by: string, at: Date, tz: string): string {
+  const time = at.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: tz });
+  return `✅ <b>ПРИНЯТ</b> в Телеграме — ${esc(by)}, ${time}`;
 }
 
 export function cancelledBanner(by: string, at: Date, reason: string, tz: string): string {

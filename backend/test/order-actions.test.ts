@@ -55,7 +55,11 @@ function setup(order: Record<string, unknown>) {
       return { error: null };
     },
   };
-  const orders = { cancelByOperator: async (...a: unknown[]) => cancels.push(a) };
+  const accepted: unknown[][] = [];
+  const orders = {
+    cancelByOperator: async (...a: unknown[]) => cancels.push(a),
+    setStatus: async (...a: unknown[]) => accepted.push(a),
+  };
   const shortage = { markUnavailable: async (...a: unknown[]) => marks.push(a) };
   const reasons = {
     list: async () => [{ id: 'r1', label: 'Нет курьеров' }],
@@ -66,7 +70,7 @@ function setup(order: Record<string, unknown>) {
   );
   const press = (data: string, chat = -100) =>
     svc.handle('t', { id: 'q', from: { id: 1 }, data, message: { message_id: 9, chat: { id: chat } } }, 'Айгерим');
-  return { calls, cancels, marks, press };
+  return { calls, cancels, marks, accepted, press };
 }
 
 const baseOrder = {
@@ -155,4 +159,36 @@ test('ошибку сервиса показываем кассиру окном
   assert.equal(toast.method, 'answerCallbackQuery');
   assert.equal(toast.payload.show_alert, true);
   assert.match(toast.payload.text, /уже приняла/);
+});
+
+const sent = { ...baseOrder, dispatches: [{ status: 'SENT', posterOrderId: '501' }] };
+
+test('принят в Телеграме: подтверждение → статус ACCEPTED, в карточке кто принял, «Действия» остаются', async () => {
+  const { calls, accepted, press } = setup(sent);
+  assert.equal(menuKeyboard(ID)[0][0].text, '✅ Принят');
+  await press(`o:a:${ID}`);
+  assert.equal(accepted.length, 0, 'до подтверждения не принимаем');
+  const confirm = calls.filter((c) => c.method === 'editMessageReplyMarkup').at(-1)!;
+  assert.equal(confirm.payload.reply_markup.inline_keyboard[0][0].callback_data, `o:ay:${ID}`);
+
+  await press(`o:ay:${ID}`);
+  assert.deepEqual(accepted[0].slice(0, 3), [ID, 'ACCEPTED', 't']);
+  const edit = calls.find((c) => c.method === 'editMessageText')!;
+  assert.match(edit.payload.text, /^✅ <b>ПРИНЯТ<\/b> в Телеграме — Айгерим, \d\d:\d\d/);
+  assert.match(edit.payload.text, /Заказ №157/);
+  assert.equal(edit.payload.reply_markup.inline_keyboard[0][0].text, '⋯ Действия');
+});
+
+test('принять нельзя: уже принят, ещё не на планшете, ждём клиента по нехватке', async () => {
+  for (const [order, re] of [
+    [{ ...sent, status: 'ACCEPTED' }, /уже принят/],
+    [{ ...sent, dispatches: [] }, /ещё не ушёл на планшет/],
+    [{ ...sent, shortageState: 'AWAITING_CUSTOMER' }, /ждём ответ клиента/],
+  ] as const) {
+    const { calls, accepted, press } = setup(order);
+    await press(`o:ay:${ID}`);
+    assert.equal(accepted.length, 0);
+    assert.match(calls.at(-1)!.payload.text, re);
+    assert.equal(calls.at(-1)!.payload.show_alert, true);
+  }
 });

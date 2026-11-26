@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { InlineButton, TelegramService } from '../telegram/telegram.service';
 import {
+  acceptedBanner,
+  acceptKeyboard,
   actionsButton,
   cancelledBanner,
   confirmKeyboard,
@@ -62,6 +64,7 @@ export class OrderActionsService {
         items: { orderBy: { id: 'asc' } },
         customer: true,
         tenant: { select: { settings: true } },
+        dispatches: { select: { status: true, posterOrderId: true } },
       },
     });
     if (!order) return toast('Заказ не найден');
@@ -99,6 +102,33 @@ export class OrderActionsService {
         case 'x':
           await setKeyboard(actionsButton(order.id));
           return toast('');
+        case 'a':
+        case 'ay': {
+          // Запасной путь, когда планшет без интернета: кассир принял и
+          // распечатал, а Poster узнает об этом только при связи — у клиента
+          // до 15 минут висело «Ждём подтверждения» (Дом, 26.11.2026)
+          const refusal = acceptRefusal(order);
+          if (refusal) {
+            await setKeyboard(actionsButton(order.id));
+            return toast(refusal, true);
+          }
+          if (step === 'a') {
+            await setKeyboard(acceptKeyboard(order.id));
+            return toast('Подтвердите: клиенту придёт «Заказ принят»');
+          }
+          await this.orders.setStatus(order.id, 'ACCEPTED', tenantId);
+          this.logger.log(`Заказ №${order.number} принят кнопкой в Телеграме: ${who}`);
+          const tz = (order.tenant?.settings as any)?.timezone ?? 'Asia/Almaty';
+          const live = order.items.filter((i) => !i.isUnavailable);
+          await this.telegram.call(tenantId, 'editMessageText', {
+            chat_id: msg.chat.id,
+            message_id: msg.message_id,
+            parse_mode: 'HTML',
+            text: `${acceptedBanner(who, new Date(), tz)}\n\n${newOrderMessage(order, live)}`,
+            reply_markup: { inline_keyboard: actionsButton(order.id) },
+          });
+          return toast(`Заказ №${order.number} принят`);
+        }
         case 'c': {
           const reasons = await this.cancelReasons.list(tenantId);
           await setKeyboard(reasonsKeyboard(order.id, reasons));
@@ -159,4 +189,21 @@ export class OrderActionsService {
     }
     return toast('Не получилось');
   }
+}
+
+/** Почему «Принят» нажать нельзя; null — можно */
+export function acceptRefusal(order: {
+  number: number;
+  status: string;
+  shortageState?: string | null;
+  dispatches: { status: string; posterOrderId: string | null }[];
+}): string | null {
+  if (order.status !== 'NEW') return `Заказ №${order.number} уже принят`;
+  if (!order.dispatches.some((d) => d.status === 'SENT' && d.posterOrderId)) {
+    return `Заказ №${order.number} ещё не ушёл на планшет: идёт окно отмены или ждём оплату`;
+  }
+  if (order.shortageState === 'AWAITING_CUSTOMER') {
+    return `По заказу №${order.number} ждём ответ клиента о нехватке — принимать рано`;
+  }
+  return null;
 }
