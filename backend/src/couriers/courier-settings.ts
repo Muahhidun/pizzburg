@@ -29,6 +29,8 @@ export interface CourierSettings {
   alertNotReadyMin: number;
   /// Тревога «долго в пути»: от «Забрал» прошло столько минут
   alertOnWayMin: number;
+  /// Второй заказ связки: сверх `alertOnWayMin` — его везут после первого
+  alertOnWaySecondMin: number;
   /// Связка по 2 заказа: максимальный лишний путь, км по прямой (0 — связок нет совсем)
   batchMaxDetourKm: number;
   /// Связка в любую сторону: второй заказ даётся, даже если адреса в разные
@@ -62,6 +64,9 @@ export const COURIER_DEFAULTS: CourierSettings = {
   alertNoCourierAtMin: 40,
   alertNotReadyMin: 25,
   alertOnWayMin: 20,
+  // Дом, 26.11.2026: курьер забрал два заказа — тревога о втором позже,
+  // его везут после первого
+  alertOnWaySecondMin: 10,
   batchMaxDetourKm: 1.5,
   // Дом, 25.11.2026: курьеров не хватает, за день ни одной связки —
   // второй заказ даём в любую сторону, первым везут более опоздавший
@@ -96,6 +101,7 @@ export function courierSettings(tenantSettings: unknown): CourierSettings {
     alertNoCourierAtMin: num(raw.alertNoCourierAtMin, COURIER_DEFAULTS.alertNoCourierAtMin),
     alertNotReadyMin: num(raw.alertNotReadyMin, COURIER_DEFAULTS.alertNotReadyMin),
     alertOnWayMin: num(raw.alertOnWayMin, COURIER_DEFAULTS.alertOnWayMin),
+    alertOnWaySecondMin: num(raw.alertOnWaySecondMin, COURIER_DEFAULTS.alertOnWaySecondMin),
     batchMaxDetourKm: num(raw.batchMaxDetourKm, COURIER_DEFAULTS.batchMaxDetourKm),
     batchAnyDirection:
       typeof raw.batchAnyDirection === 'boolean' ? raw.batchAnyDirection : COURIER_DEFAULTS.batchAnyDirection,

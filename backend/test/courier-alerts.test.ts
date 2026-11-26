@@ -124,3 +124,43 @@ test('номер для звонка: только плюс и цифры', () =
   assert.equal(telNumber('77058663323'), '+77058663323');
   assert.equal(telNumber('+77768147963'), '+77768147963');
 });
+
+test('связка: о втором заказе тревога позже — его везут после первого', () => {
+  const first = task({ status: 'PICKED_UP', pickedUpAt: ago(21), batchSeq: 1 });
+  const second = task({ status: 'PICKED_UP', pickedUpAt: ago(21), batchSeq: 2 });
+  assert.equal(taskAlert(first, none, COURIER_DEFAULTS, NOW), 'ON_WAY');
+  assert.equal(taskAlert(second, none, COURIER_DEFAULTS, NOW), null);
+  assert.equal(taskAlert({ ...second, pickedUpAt: ago(30) }, none, COURIER_DEFAULTS, NOW), 'ON_WAY');
+});
+
+test('долго в пути: курьеру приходит напоминание протянуть «Доставлен»', async () => {
+  const sent: string[] = [];
+  const prisma: any = {
+    dispatchDevice: { findMany: async () => [{ venueId: 'v', tenantId: 't', tenant: { settings: {} } }] },
+    courierShift: { findMany: async () => [] },
+    deliveryTask: {
+      findMany: async () => [
+        {
+          id: 'k', kind: 'DELIVERY', status: 'PICKED_UP', createdAt: ago(40), pickedUpAt: ago(21), batchSeq: null,
+          order: { number: 1492, createdAt: ago(40), scheduledAt: null },
+          courier: { fullName: 'Әбенов Марлен', phone: '+7', telegramUserId: '555' },
+        },
+      ],
+    },
+    deliveryTaskEvent: {
+      findFirst: async () => null,
+      create: async () => ({ id: 'e' }),
+      update: async () => ({}),
+    },
+  };
+  const telegram: any = {
+    linkOrders: async (_t: string, text: string) => text,
+    notifyCashier: async () => ({ sent: false }),
+    notify: async () => ({ sent: false }),
+  };
+  const assignment: any = { sendToCourier: async (_t: string, chat: string, text: string) => sent.push(`${chat}:${text}`) };
+  const s = new CourierAlertsService(prisma, telegram, assignment);
+  assert.equal(await s.check(NOW), 1);
+  assert.equal(sent.length, 1);
+  assert.match(sent[0], /^555:⏰ <b>№1492: вы уже долго в пути/);
+});

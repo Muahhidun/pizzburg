@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { DeliveryTaskKind, DeliveryTaskStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { esc, TelegramService } from '../telegram/telegram.service';
+import { AssignmentService } from './assignment.service';
 import { CourierSettings, courierSettings } from './courier-settings';
 import { shortName } from './names';
 import { orderOf } from './task-order';
@@ -22,6 +23,8 @@ export interface AlertTask {
   status: DeliveryTaskStatus;
   createdAt: Date;
   pickedUpAt: Date | null;
+  /// Порядок в связке: 2 — везут после первого
+  batchSeq?: number | null;
   order: { createdAt: Date; scheduledAt: Date | null };
 }
 
@@ -37,7 +40,10 @@ export function orderClockStart(order: { createdAt: Date; scheduledAt: Date | nu
 export function taskAlert(
   task: AlertTask,
   ctx: { waitingCouriers: number; firstWaitingSince: Date | null },
-  cfg: Pick<CourierSettings, 'alertNoCourierAtMin' | 'alertNotReadyMin' | 'alertOnWayMin'>,
+  cfg: Pick<
+    CourierSettings,
+    'alertNoCourierAtMin' | 'alertNotReadyMin' | 'alertOnWayMin' | 'alertOnWaySecondMin'
+  >,
   now = new Date(),
 ): TaskAlert | null {
   if (task.kind === 'PICKUP') return null;
@@ -46,7 +52,8 @@ export function taskAlert(
   if (start > now) return null;
 
   if (task.status === 'PICKED_UP') {
-    return task.pickedUpAt && min(task.pickedUpAt) >= cfg.alertOnWayMin ? 'ON_WAY' : null;
+    const limit = onWayLimit(task, cfg);
+    return task.pickedUpAt && min(task.pickedUpAt) >= limit ? 'ON_WAY' : null;
   }
   if (task.status === 'NEW' && ctx.waitingCouriers > 0 && ctx.firstWaitingSince) {
     // От более позднего: появился заказ или пришёл курьер
@@ -59,6 +66,14 @@ export function taskAlert(
   return null;
 }
 
+/** Через сколько минут после «Забрал» заказ «долго в пути»: второй в связке — позже */
+export function onWayLimit(
+  task: { batchSeq?: number | null },
+  cfg: Pick<CourierSettings, 'alertOnWayMin' | 'alertOnWaySecondMin'>,
+): number {
+  return cfg.alertOnWayMin + (task.batchSeq === 2 ? cfg.alertOnWaySecondMin : 0);
+}
+
 @Injectable()
 export class CourierAlertsService {
   private readonly logger = new Logger(CourierAlertsService.name);
@@ -66,6 +81,7 @@ export class CourierAlertsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly telegram: TelegramService,
+    private readonly assignment?: AssignmentService,
   ) {}
 
   /** Очередь точки: сколько ждут и с какого времени ждёт первый */
@@ -107,7 +123,7 @@ export class CourierAlertsService {
         },
         include: {
           order: { select: { number: true, createdAt: true, scheduledAt: true } },
-          courier: { select: { fullName: true, phone: true } },
+          courier: { select: { fullName: true, phone: true, telegramUserId: true } },
         },
       });
       for (const raw of tasks) {
@@ -142,10 +158,34 @@ export class CourierAlertsService {
           const meta: AlertMeta = { text, messages };
           await this.prisma.deliveryTaskEvent.update({ where: { id: event.id }, data: { meta } });
         }
+        if (alert === 'ON_WAY') await this.remindCourier(v.tenantId, t);
         sent++;
       }
     }
     return sent;
+  }
+
+  /**
+   * «Долго в пути» часто значит, что заказ давно у клиента, а курьер не
+   * протянул «Заказ доставлен» (Дом, 26.11.2026). Напоминаем ему самому —
+   * кнопка открывает приложение.
+   */
+  private async remindCourier(
+    tenantId: string,
+    t: { order: { number: number | string }; courier?: { telegramUserId: string } | null },
+  ) {
+    if (!t.courier?.telegramUserId || !this.assignment) return;
+    try {
+      await this.assignment.sendToCourier(
+        tenantId,
+        t.courier.telegramUserId,
+        `⏰ <b>№${t.order.number}: вы уже долго в пути</b>\n` +
+          'Если заказ у клиента — откройте приложение и протяните «Заказ доставлен». ' +
+          'Пока не отметите, касса считает, что вы его везёте.',
+      );
+    } catch (e) {
+      this.logger.warn(`Напоминание курьеру о №${t.order.number} не ушло: ${e}`);
+    }
   }
 
   /**
@@ -281,7 +321,8 @@ export function alertText(
       const who = t.courier
         ? `${esc(shortName(t.courier.fullName))}${t.courier.phone ? `, ${t.courier.phone}` : ''}`
         : 'курьер';
-      return `🐢 <b>№${n} в пути уже ${on} мин</b>\n${who}`;
+      const second = t.batchSeq === 2 ? ' (второй заказ в связке)' : '';
+      return `🐢 <b>№${n} в пути уже ${on} мин</b>${second}\n${who}`;
     }
   }
 }
