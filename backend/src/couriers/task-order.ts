@@ -123,16 +123,9 @@ export function orderOf(t: { order?: OurOrder | null; external?: unknown }): Ord
   };
 }
 
-/**
- * К какому времени заказ должен уехать: предзаказ — ко времени клиента,
- * остальные — чем раньше оформлен, тем сильнее опаздывает. Готовые заказы
- * раздаются в этом порядке (Дом, 25.11.2026: «в первую очередь те, что
- * опаздывают»).
- */
-export function dueAt(t: { createdAt?: Date; order?: OurOrder | null; external?: unknown }): number {
-  const o = orderOf(t);
-  if (o.scheduledAt) return o.scheduledAt.getTime();
-  const created = o.createdAt.getTime();
+/** Когда заказ оформлен (у снимка Poster без времени — когда создана плитка) */
+export function orderedAt(t: { createdAt?: Date; order?: OurOrder | null; external?: unknown }): number {
+  const created = orderOf(t).createdAt.getTime();
   if (created > 0) return created;
   return t.createdAt ? t.createdAt.getTime() : 0;
 }
@@ -143,14 +136,21 @@ export function deadlineAt(
   targetMin: number,
 ): number {
   const o = orderOf(t);
-  return o.scheduledAt ? o.scheduledAt.getTime() : dueAt(t) + targetMin * 60_000;
+  return o.scheduledAt ? o.scheduledAt.getTime() : orderedAt(t) + targetMin * 60_000;
 }
 
-/** Сначала самые опоздавшие */
+/**
+ * Сначала те, чей срок наступает раньше (Дом, 25–26.11.2026: «в первую
+ * очередь те, что опаздывают»). Предзаказ на 11:00 уходит раньше обычного
+ * заказа из 10:40: у того срок 11:40.
+ */
 export function byLateness<T extends { createdAt?: Date; order?: OurOrder | null; external?: unknown; id: string }>(
   rows: T[],
+  targetMin: number,
 ): T[] {
-  return [...rows].sort((a, b) => dueAt(a) - dueAt(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return [...rows].sort(
+    (a, b) => deadlineAt(a, targetMin) - deadlineAt(b, targetMin) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+  );
 }
 
 const tenge = (n: number) => `${n.toLocaleString('ru-RU')} ₸`;

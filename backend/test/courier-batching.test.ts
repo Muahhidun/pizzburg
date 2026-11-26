@@ -297,6 +297,20 @@ test('кто ещё везёт заказ, следующим не считае�
   assert.equal(await w.service.assignVenue('v', new Date(T(0))), 2);
 });
 
+test('предзаказ на 11:00 уходит раньше обычного заказа из 10:40', async () => {
+  const w = world({}, 1);
+  w.ready('a', 0, -20); // обычный, оформлен 20 минут назад: срок через 40
+  w.ready('pre', 0, -120); // предзаказ, оформлен давно, клиент ждёт через 20
+  w.tasks[1].order.scheduledAt = new Date(T(20));
+  w.ready('b', 0, -15);
+  assert.equal(await w.service.assignVenue('v', new Date(T(0))), 2);
+  const [a, pre, b] = w.tasks;
+  assert.equal(pre.courierId, 'c0');
+  assert.equal(pre.batchSeq, 1); // срок раньше — везут первым
+  assert.equal(a.batchSeq, 2);
+  assert.equal(b.status, 'READY');
+});
+
 test('при двух свободных курьерах связки нет: каждому по заказу', async () => {
   const w = world({ a: north2, b: north1 }, 2);
   w.ready('a', 0);

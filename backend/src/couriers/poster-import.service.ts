@@ -175,6 +175,9 @@ export class PosterImportService {
       }
       // Сводка без личных данных: сколько пришло и почему не взяли
       const why = { принято: 0, наши: 0, яндекс: 0, вЗале: 0, старые: 0, безАдреса: 0, уже: 0 };
+      // Сколько в каком статусе Poster: 0 — новый, 1 — принят, 7 — отклонён
+      const statuses = new Map<number, number>();
+      for (const io of list) statuses.set(num(io.status), (statuses.get(num(io.status)) ?? 0) + 1);
       for (const io of list) {
         const id = str(io.incoming_order_id);
         if (!id) continue;
@@ -208,7 +211,10 @@ export class PosterImportService {
         if (res === 'skipped') why.безАдреса++;
         known.set(key, { id: '', status: 'NEW' });
       }
-      const summary = `всего ${list.length}, ${Object.entries(why).map(([k, v]) => `${k} ${v}`).join(', ')}`;
+      const byStatus = [...statuses].sort(([a], [b]) => a - b).map(([k, v]) => `${k}:${v}`).join(' ');
+      const summary =
+        `всего ${list.length} (статусы ${byStatus || '—'}), ` +
+        Object.entries(why).map(([k, v]) => `${k} ${v}`).join(', ');
       if (this.lastSummary.get(acc.id) !== summary) {
         this.lastSummary.set(acc.id, summary);
         this.logger.log(`Poster онлайн-заказы за день (${acc.name}): ${summary}`);

@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { adminBaseUrl, esc, TelegramService } from '../telegram/telegram.service';
 import { pickHolder, Point, secondNow, streetHouseOf } from './batching';
 import { courierSettings } from './courier-settings';
-import { byLateness, deadlineAt, dueAt, externalOf, externalPaymentLine, orderOf } from './task-order';
+import { byLateness, deadlineAt, externalOf, externalPaymentLine, orderOf } from './task-order';
 
 /**
  * Раздача заказов курьерам (docs/COURIER_SYSTEM_SPEC.md §6).
@@ -72,6 +72,11 @@ export class AssignmentService {
 
   /** Раздать готовые заказы ожидающим курьерам точки. Возвращает число назначений */
   async assignVenue(venueId: string, at: Date = new Date()): Promise<number> {
+    const venue = await this.prisma.venue.findUnique({
+      where: { id: venueId },
+      select: { tenant: { select: { settings: true } } },
+    });
+    const targetMin = courierSettings(venue?.tenant.settings).deliveryTargetMin;
     let assigned = 0;
     for (let i = 0; i < MAX_ASSIGN_PER_PASS; i++) {
       const ready = await this.prisma.deliveryTask.findMany({
@@ -83,7 +88,7 @@ export class AssignmentService {
         },
         include: { order: ORDER_TIMES },
       });
-      const task = byLateness(ready)[0];
+      const task = byLateness(ready, targetMin)[0];
       if (!task) break;
       const shift = await this.prisma.courierShift.findFirst({
         where: { venueId, endedAt: null, state: 'WAITING', courier: { status: 'ACTIVE' } },
@@ -161,6 +166,7 @@ export class AssignmentService {
         where: { venueId, status: 'READY', courierId: null, kind: 'DELIVERY' },
         include: { order: ORDER_TIMES },
       }),
+      cfg.deliveryTargetMin,
     );
     if (ready.length === 0) return 0;
 
@@ -222,7 +228,7 @@ export class AssignmentService {
       const best = pickHolder(venuePoint, point, free, cfg.batchMaxDetourKm, cfg.batchAnyDirection);
       if (!best) continue;
       const holder = best.item;
-      if (await this.attach(holder.shift.id, holder.shift.courierId, holder.task, second, best.detourKm)) {
+      if (await this.attach(holder.shift.id, holder.shift.courierId, holder.task, second, best.detourKm, cfg.deliveryTargetMin)) {
         attached++;
         const at = (ms: number) => new Date(ms).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
         this.logger.log(
@@ -244,9 +250,10 @@ export class AssignmentService {
     first: { id: string; tenantId: string; createdAt?: Date; order?: { number: number; createdAt: Date } | null; external?: unknown },
     second: { id: string; createdAt?: Date; order?: { number: number; createdAt: Date } | null; external?: unknown },
     detourKm: number | null,
+    targetMin: number,
   ): Promise<boolean> {
-    // Первым везут более опоздавший заказ
-    const firstGoesFirst = dueAt(first) <= dueAt(second);
+    // Первым везут тот, чей срок раньше
+    const firstGoesFirst = deadlineAt(first, targetMin) <= deadlineAt(second, targetMin);
     const batchId = first.id;
     return this.prisma
       .$transaction(async (tx) => {
