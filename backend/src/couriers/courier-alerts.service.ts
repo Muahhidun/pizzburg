@@ -305,21 +305,27 @@ export function alertOutcome(
   if (t.status === 'FAILED') {
     return `❌ Не доставлен${t.failedReason ? `: ${esc(t.failedReason)}` : ''}`;
   }
+  // «Всего N мин» кассиры не понимали (Дом, 27.11.2026): пишем, от чего
+  // считаем. У предзаказа от оформления считать бессмысленно — время клиента
+  const since = (to: Date) =>
+    t.order.scheduledAt
+      ? `предзаказ к ${hm(t.order.scheduledAt)}`
+      : `с оформления ${minutes(t.order.createdAt, to)} мин`;
   const delivered = () =>
     t.deliveredAt
       ? `✅ Доставлен в ${hm(t.deliveredAt)}` +
         (t.pickedUpAt ? `, в пути ${minutes(t.pickedUpAt, t.deliveredAt)} мин` : '') +
-        `, всего ${minutes(orderClockStart(t.order), t.deliveredAt)} мин`
+        `, ${since(t.deliveredAt)}`
       : null;
   switch (alert) {
     case 'NO_COURIER':
       if (t.pickedUpAt) {
         const who = t.courier ? esc(shortName(t.courier.fullName)) : 'Курьер';
-        return `✅ ${who} забрал в ${hm(t.pickedUpAt)}, заказу было ${minutes(orderClockStart(t.order), t.pickedUpAt)} мин`;
+        return `✅ ${who} забрал в ${hm(t.pickedUpAt)}, ${since(t.pickedUpAt)}`;
       }
       return t.status === 'DELIVERED' ? delivered() : null;
     case 'NOT_READY':
-      if (t.readyAt) return `✅ Готов в ${hm(t.readyAt)}`;
+      if (t.readyAt) return `✅ Готов в ${hm(t.readyAt)}, ${since(t.readyAt)}`;
       return t.status === 'NEW' ? null : '✅ Готов';
     case 'ON_WAY':
       return t.status === 'DELIVERED' ? delivered() : null;

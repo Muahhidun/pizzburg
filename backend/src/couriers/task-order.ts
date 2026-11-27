@@ -155,6 +155,27 @@ export function byLateness<T extends { createdAt?: Date; order?: OurOrder | null
   );
 }
 
+/** За сколько до времени доставки предзаказ со вчера появляется на раздаче */
+export const PREORDER_LEAD_MS = 60 * 60_000;
+
+/**
+ * С какого момента заказ нужен раздаче (27.11.2026). Обычный и
+ * сегодняшний предзаказ — сразу, как кассир принял (у предзаказа срок всё
+ * равно по времени клиента). Предзаказ, оформленный раньше сегодняшнего
+ * дня, — за час до доставки: вчерашняя плитка висела бы на раздаче всю ночь.
+ */
+export function releaseAt(createdAt: Date, scheduledAt: Date | null, dayStart: Date): Date {
+  if (!scheduledAt || createdAt >= dayStart) return createdAt;
+  return new Date(scheduledAt.getTime() - PREORDER_LEAD_MS);
+}
+
+/** Начало сегодняшнего дня по часам сервера (= заведения) */
+export function startOfDay(now: Date): Date {
+  const d = new Date(now);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
 /**
  * Номер для ссылки tel: и для Телеграма — только «+» и цифры. С пробелами
  * и скобками из Poster кнопка «Позвонить» в Mini App не срабатывала.

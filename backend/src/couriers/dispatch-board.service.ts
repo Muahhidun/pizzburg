@@ -13,7 +13,7 @@ import { courierSettings } from './courier-settings';
 import { DispatchDeviceValue, hashDeviceToken } from './dispatch-device.guard';
 import { createQrToken } from './dispatch-qr';
 import { shortName } from './names';
-import { externalOf, externalPaymentLine, orderOf } from './task-order';
+import { externalOf, externalPaymentLine, orderOf, PREORDER_LEAD_MS, releaseAt, startOfDay } from './task-order';
 import { formatAddress } from './courier-app.service';
 import { completeDelivery } from './delivery-completion';
 import { paymentLine } from './assignment.service';
@@ -79,16 +79,31 @@ export class DispatchBoardService {
 
   async syncVenue(venueId: string, now = new Date()) {
     const since = new Date(now.getTime() - BOARD_HORIZON_MS);
-    const fresh = await this.prisma.order.findMany({
-      where: {
-        venueId,
-        createdAt: { gt: since },
-        // Принят на планшете Poster; дальше статусы ставит этот модуль
-        status: { in: ['ACCEPTED', 'COOKING', 'READY', 'ON_WAY'] },
-        deliveryTasks: { none: { kind: { in: ['DELIVERY', 'PICKUP'] } } },
-      },
-      select: { id: true, tenantId: true, type: true, paymentMethod: true, total: true },
-    });
+    const dayStart = startOfDay(now);
+    const fresh = (
+      await this.prisma.order.findMany({
+        where: {
+          venueId,
+          // Предзаказ, оформленный вчера и раньше, — по времени доставки
+          OR: [
+            { createdAt: { gt: since } },
+            { scheduledAt: { gt: since, lte: new Date(now.getTime() + PREORDER_LEAD_MS) } },
+          ],
+          // Принят на планшете Poster; дальше статусы ставит этот модуль
+          status: { in: ['ACCEPTED', 'COOKING', 'READY', 'ON_WAY'] },
+          deliveryTasks: { none: { kind: { in: ['DELIVERY', 'PICKUP'] } } },
+        },
+        select: {
+          id: true,
+          tenantId: true,
+          type: true,
+          paymentMethod: true,
+          total: true,
+          createdAt: true,
+          scheduledAt: true,
+        },
+      })
+    ).filter((o) => releaseAt(o.createdAt, o.scheduledAt, dayStart) <= now);
     if (fresh.length > 0) {
       await this.prisma.deliveryTask.createMany({
         data: fresh.map((o) => ({

@@ -273,3 +273,30 @@ test('онлайн-заказы запрашиваются за вчера и с
   assert.equal(q.get('date_to'), '2026-11-25 23:59:59');
   assert.equal(q.get('timezone'), 'client');
 });
+
+// ─── Предзаказ нашего приложения со вчера (27.11.2026) ───────────────
+
+test('наш предзаказ со вчера: плитка за час до доставки, не с вечера', async () => {
+  const created: any[] = [];
+  const orders = [
+    // вчера 20:00 на сегодня 13:30 — с 12:30
+    { id: 'pre', tenantId: 't', type: 'DELIVERY', paymentMethod: 'CASH', total: 5000, createdAt: new Date(2026, 10, 24, 20, 0), scheduledAt: new Date(2026, 10, 25, 13, 30) },
+    // вчера 20:00 на сегодня 15:00 — ещё рано
+    { id: 'later', tenantId: 't', type: 'DELIVERY', paymentMethod: 'KASPI', total: 3000, createdAt: new Date(2026, 10, 24, 20, 0), scheduledAt: new Date(2026, 10, 25, 15, 0) },
+    // обычный сегодняшний
+    { id: 'now', tenantId: 't', type: 'PICKUP', paymentMethod: 'CASH', total: 2000, createdAt: new Date(2026, 10, 25, 12, 50), scheduledAt: null },
+  ];
+  const prisma: any = {
+    order: { findMany: async () => orders },
+    deliveryTask: {
+      createMany: async ({ data }: any) => created.push(...data),
+      findMany: async () => [],
+    },
+  };
+  const svc = new DispatchBoardService(prisma, {} as any, {} as any);
+  const r = await svc.syncVenue('v', NOW);
+  assert.equal(r.created, 2);
+  assert.deepEqual(created.map((t) => t.orderId), ['pre', 'now']);
+  assert.equal(created[0].cashToCollect, 5000);
+  assert.equal(created[1].kind, 'PICKUP');
+});

@@ -4,7 +4,9 @@ import { Prisma } from '@prisma/client';
 import { PosterClient } from '../poster/poster.client';
 import { PrismaService } from '../prisma/prisma.service';
 import { courierSettings } from './courier-settings';
-import { externalOf, ExternalOrder } from './task-order';
+import { externalOf, ExternalOrder, releaseAt } from './task-order';
+
+export { releaseAt };
 
 /**
  * Заказы, пришедшие в Poster мимо нас, — на планшет раздачи (24.11.2026).
@@ -27,15 +29,13 @@ import { externalOf, ExternalOrder } from './task-order';
  *
  * Предзаказ (27.11.2026): клиент оформил вчера на сегодня, кассир принял
  * вчера. Поэтому спрашиваем Poster за вчера и сегодня, а предзаказ со
- * вчера ставим на раздачу за `PREORDER_LEAD_MS` до времени доставки.
+ * вчера ставим на раздачу за час до времени доставки (`releaseAt`).
  * Срок у такой плитки — время доставки, а не время оформления.
  */
 
 const MERGE_WINDOW_MS = 20 * 60_000;
 /** Разница «доставка − оформление», с которой заказ считаем предзаказом */
 const PREORDER_GAP_MS = 60 * 60_000;
-/** За сколько до времени доставки предзаказ появляется на раздаче */
-const PREORDER_LEAD_MS = 60 * 60_000;
 
 type Raw = Record<string, unknown>;
 
@@ -92,16 +92,6 @@ export function posterTime(v: unknown): Date | null {
 export function preorderAt(io: Raw, createdAt: Date): Date | null {
   const at = posterTime(io.delivery_time);
   return at && at.getTime() - createdAt.getTime() >= PREORDER_GAP_MS ? at : null;
-}
-
-/**
- * С какого момента заказ нужен раздаче. Обычный и сегодняшний предзаказ —
- * сразу, как кассир принял (у предзаказа срок всё равно по времени
- * клиента). Предзаказ со вчера — за час до доставки.
- */
-export function releaseAt(createdAt: Date, scheduledAt: Date | null, dayStart: Date): Date {
-  if (!scheduledAt || createdAt >= dayStart) return createdAt;
-  return new Date(scheduledAt.getTime() - PREORDER_LEAD_MS);
 }
 
 export function isForeignAggregator(io: Raw): boolean {

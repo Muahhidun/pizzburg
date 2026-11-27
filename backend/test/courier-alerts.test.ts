@@ -64,14 +64,27 @@ test('итог тревоги: забрали, доставлен, готов, �
   assert.equal(alertOutcome('NO_COURIER', done({ status: 'ASSIGNED' as any })), null);
   assert.equal(
     alertOutcome('NO_COURIER', done({ status: 'PICKED_UP' as any, pickedUpAt: at(18, 52) })),
-    '✅ Марлен Ә. забрал в 18:52, заказу было 52 мин',
+    '✅ Марлен Ә. забрал в 18:52, с оформления 52 мин',
   );
   assert.equal(alertOutcome('ON_WAY', done({ status: 'PICKED_UP' as any, pickedUpAt: at(18, 52) })), null);
   assert.equal(
     alertOutcome('ON_WAY', done({ status: 'DELIVERED' as any, pickedUpAt: at(18, 52), deliveredAt: at(19, 20) })),
-    '✅ Доставлен в 19:20, в пути 28 мин, всего 80 мин',
+    '✅ Доставлен в 19:20, в пути 28 мин, с оформления 80 мин',
   );
-  assert.equal(alertOutcome('NOT_READY', done({ status: 'READY', readyAt: at(18, 30) })), '✅ Готов в 18:30');
+  assert.equal(alertOutcome('NOT_READY', done({ status: 'READY', readyAt: at(18, 30) })), '✅ Готов в 18:30, с оформления 30 мин');
+  // Предзаказ: от оформления не считаем, пишем время клиента
+  assert.equal(
+    alertOutcome(
+      'ON_WAY',
+      done({
+        status: 'DELIVERED' as any,
+        pickedUpAt: at(18, 52),
+        deliveredAt: at(19, 20),
+        order: { createdAt: at(10, 0), scheduledAt: at(19, 30) },
+      }),
+    ),
+    '✅ Доставлен в 19:20, в пути 28 мин, предзаказ к 19:30',
+  );
   assert.equal(alertOutcome('ON_WAY', done({ status: 'CANCELLED' as any })), '✖️ Заказ отменён');
   assert.equal(
     alertOutcome('ON_WAY', done({ status: 'FAILED' as any, failedReason: 'Клиент не отвечает' })),
@@ -111,7 +124,7 @@ test('итог дописывается в оба сообщения трево�
     ['editMessageText', '-100cash', 10],
     ['editMessageText', '-100own', 20],
   ]);
-  assert.equal(calls[0].text, '🐢 <b>№1431 в пути уже 20 мин</b>\n\n✅ Доставлен в 19:20, в пути 28 мин, всего 80 мин');
+  assert.equal(calls[0].text, '🐢 <b>№1431 в пути уже 20 мин</b>\n\n✅ Доставлен в 19:20, в пути 28 мин, с оформления 80 мин');
   assert.ok(updates[0].meta.resolvedAt);
   // Второй проход ничего не правит
   assert.equal(await s.resolve(at(19, 22)), 0);
