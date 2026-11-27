@@ -74,6 +74,13 @@ export async function completeDelivery(
  */
 async function changeFloat(tx: Prisma.TransactionClient, orderId: string, cash: number): Promise<number> {
   const order = await tx.order.findUnique({ where: { id: orderId }, select: { changeFrom: true } });
-  const from = order?.changeFrom ?? 0;
-  return from > cash ? from - cash : 0;
+  return changeFloatOf(order?.changeFrom, cash);
 }
+
+/** Сдача, которую касса кладёт в пакет: «сдача с» минус наличные к оплате */
+export function changeFloatOf(changeFrom: number | null | undefined, cash: number): number {
+  return cash > 0 && changeFrom != null && changeFrom > cash ? changeFrom - cash : 0;
+}
+
+/** Галочка «сдача в пакете» в списке комплектации курьера */
+export const changeMarkId = (taskId: string) => `change:${taskId}`;

@@ -87,6 +87,41 @@ interface Me {
     settlement: { earned: number; cashHeld: number; courierPays: number; venuePays: number } | null;
   };
   pending?: boolean;
+  /** Заказы с последнего расчёта — для сверки, без данных клиента */
+  history?: History;
+}
+
+interface HistoryRow {
+  id: string;
+  number: string;
+  status: 'DELIVERED' | 'FAILED';
+  at: string;
+  address: string;
+  items: string;
+  total: number;
+  payment: string;
+  cash: {
+    order: number;
+    change: number;
+    owed: number;
+    state: 'ON_HAND' | 'PARTLY' | 'HANDED_IN';
+    paidOtherwise: { status: string; paidBy: string | null } | null;
+  } | null;
+}
+
+interface History {
+  since: string;
+  rows: HistoryRow[];
+  /** От новых к старым: заступил, пауза, забрал, отвёз… */
+  timeline: { at: string; kind: 'shift' | 'pause' | 'order' | 'warn'; text: string }[];
+  stats: {
+    delivered: number;
+    failed: number;
+    avgOnWayMin: number | null;
+    avgAtVenueMin: number | null;
+    pauseMin: number;
+  };
+  totals: { orders: number; change: number; owed: number; handedIn: number; onHand: number };
 }
 
 const FAIL_REASONS = ['Клиент не отвечает', 'Неверный адрес', 'Клиент отказался'];
@@ -652,6 +687,10 @@ export default function CourierPage() {
         </Card>
       )}
 
+      {me.history && (me.history.rows.length > 0 || me.history.timeline.length > 0) && (
+        <ShiftHistory history={me.history} />
+      )}
+
       {me.shift && me.tasks.length === 0 && (
         <button
           disabled={busy}
@@ -709,6 +748,131 @@ export default function CourierPage() {
         </div>
       )}
     </Shell>
+  );
+}
+
+const hhmm = (iso: string) =>
+  new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
+const CASH_STATE = {
+  ON_HAND: 'на руках',
+  PARTLY: 'частично сдано',
+  HANDED_IN: 'сдано',
+} as const;
+
+/**
+ * Мои заказы с последнего расчёта (Дом, 27.11.2026): сверить поездки и
+ * наличные. Телефона и имени клиента нет — только для отчёта.
+ */
+function ShiftHistory({ history }: { history: History }) {
+  const { rows, totals, timeline, stats } = history;
+  const [tab, setTab] = useState<'timeline' | 'orders'>('timeline');
+  const facts = [
+    `доставлено ${stats.delivered}`,
+    stats.failed > 0 && `не доставлено ${stats.failed}`,
+    stats.avgAtVenueMin != null && `у раздачи в среднем ${stats.avgAtVenueMin} мин`,
+    stats.avgOnWayMin != null && `в пути в среднем ${stats.avgOnWayMin} мин`,
+    stats.pauseMin > 0 && `паузы ${stats.pauseMin} мин`,
+  ].filter(Boolean);
+  return (
+    <details className="mt-6">
+      <summary className="cursor-pointer text-base font-semibold">Моя смена</summary>
+      <div className="mt-2 text-sm opacity-80">{facts.join(' · ')}</div>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        {(['timeline', 'orders'] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className="rounded-xl py-2 text-sm font-semibold"
+            style={
+              tab === t
+                ? { background: 'var(--tg-theme-button-color, #2481cc)', color: 'var(--tg-theme-button-text-color, #fff)' }
+                : { background: 'var(--tg-theme-secondary-bg-color, #f2f2f2)' }
+            }
+          >
+            {t === 'timeline' ? 'Хронология' : `Заказы · ${rows.length}`}
+          </button>
+        ))}
+      </div>
+      {tab === 'timeline' ? (
+        <ul className="mt-2">
+          {timeline.map((e, i) => (
+            <li
+              key={i}
+              className="flex gap-3 border-b py-2 text-sm last:border-b-0"
+              style={{ borderColor: 'var(--tg-theme-secondary-bg-color, #eee)' }}
+            >
+              <span className="w-12 shrink-0 tabular-nums opacity-60">{hhmm(e.at)}</span>
+              <span className={e.kind === 'warn' ? 'text-red-600' : e.kind === 'pause' ? 'opacity-70' : ''}>
+                {e.text}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+      <>
+      {totals.owed > 0 && (
+        <div className="mt-2 rounded-xl p-3 text-sm" style={{ background: 'var(--tg-theme-secondary-bg-color, #f2f2f2)' }}>
+          <div>
+            Наличные: заказы {tenge(totals.orders)}
+            {totals.change > 0 && ` + сдача из кассы ${tenge(totals.change)}`}
+          </div>
+          <div>Сдано кассиру: {tenge(totals.handedIn)}</div>
+          <div className="font-semibold">На руках: {tenge(Math.max(totals.onHand, 0))}</div>
+        </div>
+      )}
+      <ul className="mt-2">
+        {rows.map((r) => (
+          <li
+            key={r.id}
+            className="border-b py-3 last:border-b-0"
+            style={{ borderColor: 'var(--tg-theme-secondary-bg-color, #eee)' }}
+          >
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-lg font-bold">№{r.number}</span>
+              <span className="text-sm opacity-60">
+                {r.status === 'FAILED' ? 'не доставлен · ' : ''}
+                {hhmm(r.at)}
+              </span>
+            </div>
+            <div className="text-sm">{r.address}</div>
+            <div className="text-sm opacity-70">{r.items}</div>
+            <div className="mt-1 text-sm">
+              {tenge(r.total)} · {r.payment}
+            </div>
+            {r.cash && (
+              <div className="mt-1 text-sm">
+                {r.cash.owed > 0 && (
+                <>
+                {r.cash.change > 0
+                  ? `Сдать ${tenge(r.cash.owed)}: заказ ${tenge(r.cash.order)} + сдача ${tenge(r.cash.change)}`
+                  : `Сдать ${tenge(r.cash.owed)}`}
+                {' · '}
+                <span className={r.cash.state === 'HANDED_IN' ? 'text-emerald-600' : 'font-semibold'}>
+                  {CASH_STATE[r.cash.state]}
+                </span>
+                </>
+                )}
+                {r.cash.paidOtherwise && (
+                  <span className="opacity-70">
+                    {r.cash.owed > 0 && ' · '}
+                    {r.cash.paidOtherwise.paidBy === 'KASPI' ? 'Kaspi' : 'картой'}:{' '}
+                    {r.cash.paidOtherwise.status === 'CONFIRMED'
+                      ? 'подтверждено'
+                      : r.cash.paidOtherwise.status === 'PENDING'
+                        ? 'ждём кассира'
+                        : 'кассир не подтвердил'}
+                  </span>
+                )}
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+      </>
+      )}
+    </details>
   );
 }
 

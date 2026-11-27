@@ -13,7 +13,8 @@ import { CourierPhotoService } from './courier-photo.service';
 import { CourierRegistrationService } from './courier-registration.service';
 import { courierSettings } from './courier-settings';
 import { verifyQrToken } from './dispatch-qr';
-import { completeDelivery } from './delivery-completion';
+import { changeFloatOf, changeMarkId, completeDelivery } from './delivery-completion';
+import { historyRows, shiftStats, TIMELINE_TYPES, timelineRows } from './courier-history';
 import { shortName } from './names';
 import { externalOf, externalPaymentLine, orderOf, telNumber } from './task-order';
 
@@ -248,8 +249,13 @@ export class CourierAppService implements OnModuleInit {
             t.kind === 'EXTRA_TRIP'
               ? `Довоз: ${t.extraReason ?? 'без причины'}`
               : itemsLine(o.items),
-          // Галочки комплектации: по ним курьер сверяет пакет перед «Поехали»
-          checklist: t.kind === 'EXTRA_TRIP' ? [] : checklist(o.items),
+          // Галочки комплектации: по ним курьер сверяет пакет перед «Поехали».
+          // Сдача из кассы — тоже галочкой: курьер пересчитал и подтвердил,
+          // что она в пакете (27.11.2026)
+          checklist:
+            t.kind === 'EXTRA_TRIP'
+              ? []
+              : [...checklist(o.items), ...changeCheck(t.id, o.changeFrom, t.cashToCollect)],
           payment: ext ? externalPaymentLine(ext) : paymentLine({ ...t, changeFrom: o.changeFrom }),
           cash: t.cashToCollect,
           needsTerminal: t.needsTerminal,
@@ -272,6 +278,97 @@ export class CourierAppService implements OnModuleInit {
         };
       })),
       today: { deliveries: today._count._all, earned: today._sum.amount ?? 0 },
+      history: await this.history(courier.id),
+    };
+  }
+
+  /**
+   * Заказы с последнего закрытого расчёта (но не старше 36 часов): курьер
+   * сверяет поездки и видит, сколько наличных должен кассе и за что.
+   */
+  private async history(courierId: string, now = new Date()) {
+    const floor = new Date(now.getTime() - 36 * 3_600_000);
+    const last = await this.prisma.courierSettlement.findFirst({
+      where: { courierId, status: 'CONFIRMED', resolvedAt: { gt: floor } },
+      orderBy: { resolvedAt: 'desc' },
+      select: { resolvedAt: true },
+    });
+    const since = last?.resolvedAt ?? floor;
+    const tasks = await this.prisma.deliveryTask.findMany({
+      where: {
+        courierId,
+        kind: { in: ['DELIVERY', 'EXTRA_TRIP'] },
+        OR: [
+          { status: 'DELIVERED', deliveredAt: { gte: since } },
+          { status: 'FAILED', updatedAt: { gte: since } },
+        ],
+      },
+      orderBy: [{ deliveredAt: { sort: 'desc', nulls: 'last' } }, { updatedAt: 'desc' }],
+      take: 60,
+      select: {
+        id: true,
+        kind: true,
+        status: true,
+        deliveredAt: true,
+        updatedAt: true,
+        assignedAt: true,
+        pickedUpAt: true,
+        extraReason: true,
+        external: true,
+        order: {
+          select: {
+            number: true,
+            total: true,
+            paymentMethod: true,
+            address: true,
+            items: {
+              select: { id: true, name: true, qty: true, modifiers: true, isGift: true, isUnavailable: true },
+              orderBy: { id: 'asc' },
+            },
+          },
+        },
+      },
+    });
+    const [events, entries, handed, onHand] = await Promise.all([
+      this.prisma.deliveryTaskEvent.findMany({
+        where: { courierId, type: { in: [...TIMELINE_TYPES] }, at: { gte: since } },
+        orderBy: { at: 'asc' },
+        take: 300,
+        select: {
+          type: true,
+          at: true,
+          meta: true,
+          task: { select: { external: true, order: { select: { number: true } } } },
+        },
+      }),
+      tasks.length
+        ? this.prisma.courierCashEntry.findMany({
+            where: { courierId, taskId: { in: tasks.map((t) => t.id) } },
+            select: { taskId: true, type: true, status: true, amount: true, paidBy: true },
+          })
+        : [],
+      this.prisma.courierCashEntry.aggregate({
+        where: { courierId, type: { in: ['HANDED_IN', 'PAYOUT_OFFSET'] }, status: 'CONFIRMED', createdAt: { gte: since } },
+        _sum: { amount: true },
+      }),
+      this.cash.balance(courierId),
+    ]);
+    const rows = historyRows(tasks, entries, onHand);
+    const cash = rows.flatMap((r) => (r.cash ? [r.cash] : []));
+    return {
+      since: since.toISOString(),
+      rows,
+      timeline: timelineRows(events).reverse(),
+      stats: shiftStats(tasks, events, now),
+      totals: {
+        /// Наличные за заказы и сдача из кассы — всё, что прошло через руки
+        // За вычетом подтверждённых «клиент заплатил картой / Kaspi»
+        orders: cash.reduce((s, c) => s + c.owed - c.change, 0),
+        change: cash.reduce((s, c) => s + c.change, 0),
+        owed: cash.reduce((s, c) => s + c.owed, 0),
+        handedIn: -(handed._sum.amount ?? 0),
+        onHand,
+      },
     };
   }
 
@@ -446,6 +543,12 @@ export class CourierAppService implements OnModuleInit {
         // добавил замену) — тогда пусть сверит ещё раз по свежему списку
         if (missingItems(items, confirmedItemIds).length > 0) {
           throw new BadRequestException('Состав заказа обновился. Отметьте все позиции ещё раз');
+        }
+        if (t.orderId && t.cashToCollect > 0 && !confirmedItemIds.includes(changeMarkId(t.id))) {
+          const order = await this.prisma.order.findUnique({ where: { id: t.orderId }, select: { changeFrom: true } });
+          if (changeFloatOf(order?.changeFrom, t.cashToCollect) > 0) {
+            throw new BadRequestException('Проверьте сдачу в пакете и отметьте её');
+          }
         }
         confirmed.set(t.id, items.length);
       }
@@ -791,6 +894,19 @@ export function nextInBatch<
         o.batchSeq < t.batchSeq!,
     ) ?? null
   );
+}
+
+/** Строка «Сдача N ₸» для галочек комплектации; пусто, если сдачи нет */
+export function changeCheck(taskId: string, changeFrom: number | null, cash: number) {
+  const change = changeFloatOf(changeFrom, cash);
+  return change > 0
+    ? [{
+        id: changeMarkId(taskId),
+        name: `Сдача ${change.toLocaleString('ru-RU')} ₸`,
+        qty: 1,
+        note: `пересчитайте: клиент даст ${changeFrom!.toLocaleString('ru-RU')} ₸`,
+      }]
+    : [];
 }
 
 /** Каких позиций курьер не отметил */
