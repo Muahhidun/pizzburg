@@ -1089,6 +1089,8 @@ model Promotion {
   // --- условия ---
   /// Витринная категория (AppCategory) для GIFT_FOR_QTY
   conditionCategoryId String?
+  /// Условие по одной позиции вместо категории («Крылышки - 24шт» → кола)
+  conditionProductId  String?
   conditionQty        Int     @default(2)
   /// Минимальная сумма товаров, ₸. Для GIFT_FOR_SUM обязательна,
   /// остальным типам служит дополнительным порогом.
@@ -1097,6 +1099,10 @@ model Promotion {
   // --- эффект ---
   giftProductId String?
   giftQty       Int     @default(1)
+  /// Что дарит GIFT_FOR_QTY: FIXED — giftProductId; CHEAPEST — самые
+  /// дешёвые из подходящих позиций корзины (4+1 бургеры); SAME — каждая
+  /// позиция считается отдельно, подарок такой же (4+1 донеры)
+  giftMode      String  @default("FIXED")
   /// Проценты для PERCENT_OFF, тенге для FIXED_OFF
   discountValue Int     @default(0)
   /// Потолок скидки в ₸ для процента: без него «−50%» на крупном заказе

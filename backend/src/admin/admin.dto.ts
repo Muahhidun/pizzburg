@@ -77,11 +77,14 @@ export class PromotionDto {
   kind?: PromotionKind;
 
   @IsOptional() @IsString() conditionCategoryId?: string | null;
+  @IsOptional() @IsString() conditionProductId?: string | null;
   @IsOptional() @IsInt() @Min(1) @Max(100) conditionQty?: number;
   @IsOptional() @IsInt() @Min(1) minOrderSum?: number | null;
 
   @IsOptional() @IsString() giftProductId?: string | null;
   @IsOptional() @IsInt() @Min(1) @Max(100) giftQty?: number;
+  /// FIXED | CHEAPEST | SAME — см. Promotion.giftMode
+  @IsOptional() @IsIn(['FIXED', 'CHEAPEST', 'SAME']) giftMode?: string;
   /// Проценты для PERCENT_OFF, тенге для FIXED_OFF
   @IsOptional() @IsInt() @Min(1) discountValue?: number;
   @IsOptional() @IsInt() @Min(1) maxDiscount?: number | null;

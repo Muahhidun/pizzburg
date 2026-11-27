@@ -48,6 +48,9 @@ export interface PromoResult {
   nextGift: { name: string; missing: number; giftName: string } | null;
 }
 
+/** Позиции корзины: витринная категория и цена, по которой их продаём */
+type CartProducts = Map<string, { categoryId: string | null; price: number }>;
+
 const EMPTY: PromoResult = {
   gifts: [],
   giftValue: 0,
@@ -104,9 +107,14 @@ export class PromotionsService {
 
     const products = await this.prisma.product.findMany({
       where: { id: { in: items.map((i) => i.productId) } },
-      select: { id: true, appCategoryId: true },
+      select: { id: true, appCategoryId: true, price: true, priceOverride: true },
     });
-    const catById = new Map(products.map((p) => [p.id, p.appCategoryId]));
+    const byId: CartProducts = new Map(
+      products.map((p) => [
+        p.id,
+        { categoryId: p.appCategoryId, price: p.priceOverride ?? p.price },
+      ]),
+    );
 
     const result: PromoResult = {
       gifts: [],
@@ -124,7 +132,7 @@ export class PromotionsService {
       const before = result.moneyDiscount + result.giftValue;
       switch (promo.kind) {
         case 'GIFT_FOR_QTY':
-          await this.applyGiftForQty(promo, items, catById, result);
+          await this.applyGiftForQty(promo, items, byId, result);
           break;
         case 'GIFT_FOR_SUM':
           await this.applyGiftForSum(promo, context, result);
@@ -250,27 +258,80 @@ export class PromotionsService {
     });
   }
 
+  /**
+   * «N штук → подарок». Что дарим, решает `giftMode` (27.11.2026, Дом):
+   * — FIXED: заранее выбранная позиция (2+1 пицца, кола за крылья);
+   * — CHEAPEST: самые дешёвые из подходящих позиций корзины. 4+1 бургеры:
+   *   за 4 любых бургера пятым идёт самый дешёвый из заказанных;
+   * — SAME: каждая позиция считается отдельно, подарок — такая же.
+   *   4+1 донеры: 4 маленьких → пятый маленький, 2 маленьких + 2 больших
+   *   → ничего.
+   * Условие — категория или одна позиция (`conditionProductId`, «Крылышки
+   * - 24шт»: 6 и 12 штук не в счёт).
+   */
   private async applyGiftForQty(
     promo: Promotion,
     items: CartItemInput[],
-    catById: Map<string, string | null>,
+    byId: CartProducts,
     result: PromoResult,
   ) {
-    if (!promo.conditionCategoryId) return;
-    const qtyInCategory = items.reduce(
-      (sum, i) =>
-        catById.get(i.productId) === promo.conditionCategoryId
-          ? sum + i.qty
-          : sum,
-      0,
-    );
-    const times = promo.repeatPerCart
-      ? Math.floor(qtyInCategory / promo.conditionQty)
-      : qtyInCategory >= promo.conditionQty
-        ? 1
-        : 0;
-    if (times === 0) return;
-    await this.addGift(promo, times * promo.giftQty, result);
+    if (!promo.conditionCategoryId && !promo.conditionProductId) return;
+    const counts = (productId: string) =>
+      promo.conditionProductId
+        ? productId === promo.conditionProductId
+        : byId.get(productId)?.categoryId === promo.conditionCategoryId;
+
+    // Одна позиция может прийти несколькими строками (разные модификаторы)
+    const qtyById = new Map<string, number>();
+    for (const i of items) {
+      if (i.qty > 0 && counts(i.productId)) {
+        qtyById.set(i.productId, (qtyById.get(i.productId) ?? 0) + i.qty);
+      }
+    }
+    const times = (qty: number) =>
+      promo.repeatPerCart
+        ? Math.floor(qty / promo.conditionQty)
+        : qty >= promo.conditionQty
+          ? 1
+          : 0;
+
+    const gifts = new Map<string, number>();
+    if (promo.giftMode === 'SAME') {
+      for (const [id, qty] of qtyById) {
+        const n = times(qty) * promo.giftQty;
+        if (n > 0) gifts.set(id, n);
+      }
+    } else if (promo.giftMode === 'CHEAPEST') {
+      const total = [...qtyById.values()].reduce((a, b) => a + b, 0);
+      let n = Math.min(times(total) * promo.giftQty, total);
+      const cheapFirst = [...qtyById.keys()].sort(
+        (a, b) => (byId.get(a)?.price ?? 0) - (byId.get(b)?.price ?? 0) || (a < b ? -1 : 1),
+      );
+      for (const id of cheapFirst) {
+        if (n <= 0) break;
+        const take = Math.min(n, qtyById.get(id)!);
+        gifts.set(id, take);
+        n -= take;
+      }
+    } else {
+      const total = [...qtyById.values()].reduce((a, b) => a + b, 0);
+      const n = times(total) * promo.giftQty;
+      if (n > 0 && promo.giftProductId) gifts.set(promo.giftProductId, n);
+    }
+
+    let value = 0;
+    for (const [id, qty] of gifts) {
+      const added = await this.addGift(promo, id, qty, result);
+      // Нет в кассе хоть одного подарка — акция не срабатывает целиком,
+      // как и раньше: полподарка хуже, чем честное «не сработало».
+      if (added === null) {
+        result.gifts = result.gifts.filter((g) => g.promotionId !== promo.id);
+        result.giftValue -= value;
+        return;
+      }
+      value += added;
+    }
+    if (value > 0) this.markApplied(promo, value, result);
   }
 
   private async applyGiftForSum(
@@ -279,18 +340,21 @@ export class PromotionsService {
     result: PromoResult,
   ) {
     // Порог уже проверен в isAllowed через minOrderSum
-    if (promo.minOrderSum == null) return;
-    await this.addGift(promo, promo.giftQty, result);
+    if (promo.minOrderSum == null || !promo.giftProductId) return;
+    const added = await this.addGift(promo, promo.giftProductId, promo.giftQty, result);
+    if (added) this.markApplied(promo, added, result);
   }
 
+  /** Кладёт подарок в результат; null — позиции нет в кассе */
   private async addGift(
     promo: Promotion,
+    productId: string,
     qty: number,
     result: PromoResult,
-  ) {
-    if (!promo.giftProductId || qty <= 0) return;
+  ): Promise<number | null> {
+    if (qty <= 0) return 0;
     const gift = await this.prisma.product.findUnique({
-      where: { id: promo.giftProductId },
+      where: { id: productId },
       include: { category: true, posterAccount: true },
     });
     // Подарок должен быть доступен в кассе, иначе акцию пропускаем:
@@ -301,7 +365,7 @@ export class PromotionsService {
       !gift.category.isActive ||
       !gift.posterAccount.isActive
     ) {
-      return;
+      return null;
     }
 
     const price = gift.priceOverride ?? gift.price;
@@ -314,7 +378,7 @@ export class PromotionsService {
       promotionName: promo.name,
     });
     result.giftValue += price * qty;
-    this.markApplied(promo, price * qty, result);
+    return price * qty;
   }
 
   private applyMoneyDiscount(

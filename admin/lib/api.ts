@@ -445,6 +445,23 @@ export const PROMOTION_KINDS: { value: PromotionKind; label: string; hint: strin
   },
 ];
 
+/** Что дарит «N товаров → подарок» */
+export type GiftMode = 'FIXED' | 'CHEAPEST' | 'SAME';
+
+export const GIFT_MODES: { value: GiftMode; label: string; hint: string }[] = [
+  { value: 'FIXED', label: 'Выбранную позицию', hint: '2+1 пицца, кола за крылья' },
+  {
+    value: 'CHEAPEST',
+    label: 'Самую дешёвую из заказанных',
+    hint: '4+1 бургеры: за 4 любых пятым идёт самый дешёвый из них',
+  },
+  {
+    value: 'SAME',
+    label: 'Такую же',
+    hint: '4+1 донеры: каждая позиция считается отдельно; 4 маленьких → пятый маленький, 2+2 разных — ничего',
+  },
+];
+
 export interface Promotion {
   id: string;
   name: string;
@@ -452,10 +469,14 @@ export interface Promotion {
   code: string | null;
   isActive: boolean;
   conditionCategoryId: string | null;
+  /** Условие по одной позиции вместо категории */
+  conditionProductId: string | null;
   conditionQty: number;
   minOrderSum: number | null;
   giftProductId: string | null;
   giftQty: number;
+  /** FIXED — выбранная позиция, CHEAPEST — самая дешёвая из корзины, SAME — такая же */
+  giftMode: GiftMode;
   discountValue: number;
   maxDiscount: number | null;
   repeatPerCart: boolean;

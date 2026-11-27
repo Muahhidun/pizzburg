@@ -733,7 +733,7 @@ export class AdminService {
       .map((p) => p.conditionCategoryId)
       .filter((id): id is string => id !== null);
     const prodIds = promos
-      .map((p) => p.giftProductId)
+      .flatMap((p) => [p.giftProductId, p.conditionProductId])
       .filter((id): id is string => id !== null);
     const [cats, prods] = await Promise.all([
       this.prisma.appCategory.findMany({ where: { id: { in: catIds } } }),
@@ -744,12 +744,19 @@ export class AdminService {
 
     return promos.map((p) => ({
       ...p,
-      conditionCategoryName: p.conditionCategoryId
-        ? (catById.get(p.conditionCategoryId) ?? '—')
-        : '—',
-      giftProductName: p.giftProductId
-        ? (prodById.get(p.giftProductId) ?? '—')
-        : '—',
+      conditionCategoryName: p.conditionProductId
+        ? (prodById.get(p.conditionProductId) ?? '—')
+        : p.conditionCategoryId
+          ? (catById.get(p.conditionCategoryId) ?? '—')
+          : '—',
+      giftProductName:
+        p.kind === 'GIFT_FOR_QTY' && p.giftMode === 'CHEAPEST'
+          ? 'самый дешёвый из корзины'
+          : p.kind === 'GIFT_FOR_QTY' && p.giftMode === 'SAME'
+            ? 'такой же'
+            : p.giftProductId
+              ? (prodById.get(p.giftProductId) ?? '—')
+              : '—',
     }));
   }
 
@@ -761,11 +768,14 @@ export class AdminService {
     // class-validator не умеет «обязательно, если kind такой-то», а
     // акция без подарка или без процента просто ничего не делает и
     // выглядит как поломка.
-    const needsGift = kind === 'GIFT_FOR_QTY' || kind === 'GIFT_FOR_SUM';
+    // «Самый дешёвый» и «такой же» берут подарок из корзины — выбирать его не нужно
+    const giftMode = kind === 'GIFT_FOR_QTY' ? (dto.giftMode ?? 'FIXED') : 'FIXED';
+    const needsGift =
+      (kind === 'GIFT_FOR_QTY' && giftMode === 'FIXED') || kind === 'GIFT_FOR_SUM';
     const needsValue = kind === 'PERCENT_OFF' || kind === 'FIXED_OFF';
 
-    if (kind === 'GIFT_FOR_QTY' && !dto.conditionCategoryId) {
-      throw new BadRequestException('Для «N товаров → подарок» нужна категория');
+    if (kind === 'GIFT_FOR_QTY' && !dto.conditionCategoryId && !dto.conditionProductId) {
+      throw new BadRequestException('Для «N товаров → подарок» нужна категория или позиция');
     }
     if (kind === 'GIFT_FOR_SUM' && !dto.minOrderSum) {
       throw new BadRequestException('Для «сумма → подарок» нужна минимальная сумма');
@@ -786,6 +796,13 @@ export class AdminService {
         select: { id: true },
       });
       if (!category) throw new BadRequestException('Категория акции не найдена');
+    }
+    if (dto.conditionProductId) {
+      const product = await this.prisma.product.findFirst({
+        where: { id: dto.conditionProductId, tenantId: tenant.id },
+        select: { id: true },
+      });
+      if (!product) throw new BadRequestException('Позиция условия не найдена');
     }
     if (dto.giftProductId) {
       const gift = await this.prisma.product.findFirst({
@@ -808,11 +825,14 @@ export class AdminService {
         name: dto.name.trim(),
         kind,
         code: dto.code?.trim().toUpperCase() || null,
-        conditionCategoryId: dto.conditionCategoryId || null,
+        // Позиция точнее категории: если выбрана она, категорию не храним
+        conditionCategoryId: dto.conditionProductId ? null : dto.conditionCategoryId || null,
+        conditionProductId: dto.conditionProductId || null,
         conditionQty: dto.conditionQty ?? 2,
         minOrderSum: dto.minOrderSum ?? null,
-        giftProductId: dto.giftProductId || null,
+        giftProductId: needsGift ? dto.giftProductId || null : null,
         giftQty: dto.giftQty ?? 1,
+        giftMode,
         discountValue: dto.discountValue ?? 0,
         maxDiscount: dto.maxDiscount ?? null,
         repeatPerCart: dto.repeatPerCart ?? true,
