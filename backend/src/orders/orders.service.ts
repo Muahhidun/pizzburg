@@ -1030,7 +1030,7 @@ export class OrdersService {
                     comment: addr.comment,
                   }
                 : undefined,
-            products: items.map((it) => {
+            products: mergePosterProducts(items.map((it) => {
               const selected = (it.modifiers as any[]) ?? [];
               const posterMods = posterModifications(
                 it.product?.modifiers,
@@ -1045,7 +1045,7 @@ export class OrdersService {
                     ? JSON.stringify(posterMods)
                     : undefined,
               };
-            }),
+            })),
             // Стоимость доставки вешаем на первую часть, чтобы не задвоить
             delivery_price:
               i === 0 && order.deliveryFee > 0
@@ -1943,6 +1943,26 @@ export function payStatus(
             ? `, у клиента ${change.from} тг`
             : ''),
   };
+}
+
+/**
+ * Одинаковые позиции — одной строкой. Poster отклоняет весь чек, если
+ * товар повторяется: «products cannot be duplicated» (27.11.2026, №357 —
+ * 4 маленьких донера и пятый подарком по 4+1 не дошли до планшета).
+ * Подарок от этого не теряется: он оплачен «Личной интеграцией» суммой,
+ * а не отдельной строкой.
+ */
+export function mergePosterProducts<
+  T extends { product_id: number; count: number; modification?: string },
+>(products: T[]): T[] {
+  const byKey = new Map<string, T>();
+  for (const p of products) {
+    const key = `${p.product_id}|${p.modification ?? ""}`;
+    const same = byKey.get(key);
+    if (same) same.count += p.count;
+    else byKey.set(key, { ...p });
+  }
+  return [...byKey.values()];
 }
 
 /** Сколько сдачи положить курьеру; null — клиент про сдачу не писал */
