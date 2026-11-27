@@ -134,12 +134,13 @@ export class PosterClient {
    * заказов, пришедших мимо нас (старое приложение, старый сайт).
    * Ответ разбираем по факту (poster-import.ts): поля у источников разные.
    */
-  getIncomingOrders(token: string, date: string) {
+  /** Онлайн-заказы с `from` по `date` включительно (по умолчанию за один день) */
+  getIncomingOrders(token: string, date: string, from = date) {
     // Poster ждёт дату со временем («Y-m-d H:i:s»). Голая дата в обоих
     // полях — это промежуток 00:00–00:00, и ответ всегда пустой
     // (так было 25.11.2026). timezone=client — время по часам заведения.
     return this.call<Record<string, unknown>[]>(token, 'incomingOrders.getIncomingOrders', {
-      date_from: `${date} 00:00:00`,
+      date_from: `${from} 00:00:00`,
       date_to: `${date} 23:59:59`,
       timezone: 'client',
     });

@@ -24,9 +24,18 @@ import { externalOf, ExternalOrder } from './task-order';
  * Общий заказ старое приложение делит на два чека — PizzBurg и Sunday,
  * с одним телефоном. Их склеиваем в одну плитку: тот же телефон, другой
  * аккаунт Poster, разница во времени не больше `MERGE_WINDOW_MS`.
+ *
+ * Предзаказ (27.11.2026): клиент оформил вчера на сегодня, кассир принял
+ * вчера. Поэтому спрашиваем Poster за вчера и сегодня, а предзаказ со
+ * вчера ставим на раздачу за `PREORDER_LEAD_MS` до времени доставки.
+ * Срок у такой плитки — время доставки, а не время оформления.
  */
 
 const MERGE_WINDOW_MS = 20 * 60_000;
+/** Разница «доставка − оформление», с которой заказ считаем предзаказом */
+const PREORDER_GAP_MS = 60 * 60_000;
+/** За сколько до времени доставки предзаказ появляется на раздаче */
+const PREORDER_LEAD_MS = 60 * 60_000;
 
 type Raw = Record<string, unknown>;
 
@@ -79,6 +88,22 @@ export function posterTime(v: unknown): Date | null {
   return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] ?? 0));
 }
 
+/** Время доставки предзаказа; у обычного заказа — null */
+export function preorderAt(io: Raw, createdAt: Date): Date | null {
+  const at = posterTime(io.delivery_time);
+  return at && at.getTime() - createdAt.getTime() >= PREORDER_GAP_MS ? at : null;
+}
+
+/**
+ * С какого момента заказ нужен раздаче. Обычный и сегодняшний предзаказ —
+ * сразу, как кассир принял (у предзаказа срок всё равно по времени
+ * клиента). Предзаказ со вчера — за час до доставки.
+ */
+export function releaseAt(createdAt: Date, scheduledAt: Date | null, dayStart: Date): Date {
+  if (!scheduledAt || createdAt >= dayStart) return createdAt;
+  return new Date(scheduledAt.getTime() - PREORDER_LEAD_MS);
+}
+
 export function isForeignAggregator(io: Raw): boolean {
   return /^\s*Яндекс\s*Еда/i.test(str(io.comment));
 }
@@ -122,6 +147,9 @@ export class PosterImportService {
     const since = new Date(now.getTime() - cfg.posterImportWindowMin * 60_000);
     const dayStart = new Date(now);
     dayStart.setHours(0, 0, 0, 0);
+    // Вчера: там предзаказы на сегодня
+    const yesterday = new Date(dayStart);
+    yesterday.setDate(yesterday.getDate() - 1);
 
     const accounts = await this.prisma.posterAccount.findMany({
       where: { tenantId, isActive: true, kind: 'POSTER' },
@@ -132,7 +160,7 @@ export class PosterImportService {
 
     // Наши заказы: их входящие номера в Poster записаны при отправке
     const dispatches = await this.prisma.orderDispatch.findMany({
-      where: { order: { tenantId }, createdAt: { gte: new Date(dayStart.getTime() - 3_600_000) } },
+      where: { order: { tenantId }, createdAt: { gte: new Date(yesterday.getTime() - 3_600_000) } },
       select: { posterAccountId: true, posterOrderId: true, replacedOrders: true },
     });
     const ours = new Set<string>();
@@ -144,7 +172,7 @@ export class PosterImportService {
     }
 
     const imported = await this.prisma.deliveryTask.findMany({
-      where: { tenantId, source: 'POSTER', createdAt: { gte: new Date(dayStart.getTime() - 3_600_000) } },
+      where: { tenantId, source: 'POSTER', createdAt: { gte: new Date(yesterday.getTime() - 3_600_000) } },
       select: { id: true, status: true, external: true },
     });
     const known = new Map<string, { id: string; status: string }>();
@@ -154,13 +182,16 @@ export class PosterImportService {
       }
     }
 
-    const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const ymd = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const date = ymd(now);
+    const from = ymd(yesterday);
     let created = 0;
     let merged = 0;
     for (const acc of accounts) {
       let list: Raw[];
       try {
-        list = (await this.poster.getIncomingOrders(acc.token, date)) ?? [];
+        list = (await this.poster.getIncomingOrders(acc.token, date, from)) ?? [];
       } catch (e) {
         this.logger.warn(`Poster (${acc.name}): входящие заказы не получены: ${e instanceof Error ? e.message : String(e)}`);
         continue;
@@ -174,7 +205,7 @@ export class PosterImportService {
         this.logger.log(`Poster входящий заказ, поля: ${Object.keys(list[0]).sort().join(', ')}`);
       }
       // Сводка без личных данных: сколько пришло и почему не взяли
-      const why = { принято: 0, наши: 0, яндекс: 0, вЗале: 0, старые: 0, безАдреса: 0, уже: 0 };
+      const why = { принято: 0, наши: 0, яндекс: 0, вЗале: 0, старые: 0, предзаказЖдёт: 0, безАдреса: 0, уже: 0 };
       // Сколько в каком статусе Poster: 0 — новый, 1 — принят, 7 — отклонён
       const statuses = new Map<number, number>();
       for (const io of list) statuses.set(num(io.status), (statuses.get(num(io.status)) ?? 0) + 1);
@@ -190,7 +221,12 @@ export class PosterImportService {
           else if (ours.has(key)) why.наши++;
           else if (isForeignAggregator(io)) why.яндекс++;
           else if (![2, 3].includes(num(io.service_mode))) why.вЗале++;
-          else if ((posterTime(io.created_at) ?? now) < since) why.старые++;
+          else {
+            const c = posterTime(io.created_at) ?? now;
+            const r = releaseAt(c, preorderAt(io, c), dayStart);
+            if (r < since) why.старые++;
+            else if (r > now) why.предзаказЖдёт++;
+          }
         }
 
         // Кассир отклонил — плитку, которую ещё не взяли в работу, снимаем
@@ -203,9 +239,11 @@ export class PosterImportService {
         const mode = num(io.service_mode);
         if (mode !== 2 && mode !== 3) continue;
         const createdAt = posterTime(io.created_at) ?? now;
-        if (createdAt < since) continue;
+        const scheduledAt = preorderAt(io, createdAt);
+        const release = releaseAt(createdAt, scheduledAt, dayStart);
+        if (release < since || release > now) continue;
 
-        const res = await this.importOne(tenantId, venueId, acc.id, acc.token, io, createdAt, mode === 2, now);
+        const res = await this.importOne(tenantId, venueId, acc.id, acc.token, io, createdAt, scheduledAt, mode === 2, now);
         if (res === 'created') created++;
         if (res === 'merged') merged++;
         if (res === 'skipped') why.безАдреса++;
@@ -217,7 +255,7 @@ export class PosterImportService {
         Object.entries(why).map(([k, v]) => `${k} ${v}`).join(', ');
       if (this.lastSummary.get(acc.id) !== summary) {
         this.lastSummary.set(acc.id, summary);
-        this.logger.log(`Poster онлайн-заказы за день (${acc.name}): ${summary}`);
+        this.logger.log(`Poster онлайн-заказы за вчера и сегодня (${acc.name}): ${summary}`);
       }
     }
     if (created || merged) this.logger.log(`Из Poster: новых плиток ${created}, склеено ${merged}`);
@@ -231,6 +269,7 @@ export class PosterImportService {
     token: string,
     io: Raw,
     createdAt: Date,
+    scheduledAt: Date | null,
     pickup: boolean,
     now: Date,
   ): Promise<'created' | 'merged' | 'skipped'> {
@@ -305,6 +344,7 @@ export class PosterImportService {
           address: e.address ?? address,
           comment: [e.comment, str(io.comment)].filter(Boolean).join(' · '),
           items: [...e.items, ...items],
+          scheduledAt: e.scheduledAt ?? scheduledAt?.toISOString() ?? null,
           cash: e.cash + cash,
           card: e.card + card,
           total: e.total + total,
@@ -328,6 +368,7 @@ export class PosterImportService {
     const external: ExternalOrder = {
       label: (transactionId ?? incomingOrderId).slice(-4),
       createdAt: createdAt.toISOString(),
+      scheduledAt: scheduledAt?.toISOString() ?? null,
       phone,
       name,
       address,

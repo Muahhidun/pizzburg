@@ -36,6 +36,35 @@ const PAID_BY_TEXT: Record<PaidBy, string> = { CARD: 'картой через т
 
 const tenge = (n: number) => `${n.toLocaleString('ru-RU')} ₸`;
 
+type CashOrder = {
+  taskId: string;
+  number: string;
+  amount: number;
+  paidOtherwise: { status: string; paidBy: string | null } | null;
+};
+
+/**
+ * Какие заказы ещё можно отметить «оплачен иначе»: от новых к старым,
+ * пока их сумма умещается в наличку на руках. Счёт не связан с заказами
+ * (сдача — одной суммой), поэтому считаем, что на руках деньги последних.
+ * Отправленные кассиру показываем со статусом, подтверждённые — нет: сумма
+ * уже снята.
+ */
+export function stillOnHand(orders: CashOrder[], available: number): CashOrder[] {
+  let left = available;
+  const out: CashOrder[] = [];
+  for (const o of orders) {
+    const status = o.paidOtherwise?.status;
+    if (status === 'PENDING') out.push(o);
+    else if (status === 'CONFIRMED') continue;
+    else if (o.amount <= left) {
+      out.push(o);
+      left -= o.amount;
+    }
+  }
+  return out;
+}
+
 /** Взаимозачёт: кто кому сколько отдаёт */
 export function netting(earned: number, cashHeld: number) {
   return {
@@ -142,8 +171,25 @@ export class CourierCashService implements OnModuleInit {
   }
 
   /**
-   * Заказы за наличные, которые курьер отвёз за последние сутки и деньги
-   * по которым ещё не сданы: по ним можно сказать «клиент оплатил иначе».
+   * Наличные, которые ещё на курьере: подтверждённый счёт минус отметки
+   * «оплатил иначе», которые ждут кассира.
+   */
+  async onHand(courierId: string): Promise<number> {
+    const [balance, pending] = await Promise.all([
+      this.balance(courierId),
+      this.prisma.courierCashEntry.aggregate({
+        where: { courierId, type: 'ADJUSTMENT', status: 'PENDING' },
+        _sum: { amount: true },
+      }),
+    ]);
+    return balance + (pending._sum.amount ?? 0);
+  }
+
+  /**
+   * Заказы за наличные за последние сутки, по которым можно сказать
+   * «клиент оплатил иначе». Только те, чьи деньги ещё на курьере: сданные
+   * кассиру и вошедшие в расчёт смены не показываем (27.11.2026 курьер
+   * отметил «картой» уже сданные заказы, и наличка ушла в минус 22 510 ₸).
    */
   private async cashOrders(courierId: string) {
     const since = new Date(Date.now() - 24 * 3_600_000);
@@ -154,19 +200,25 @@ export class CourierCashService implements OnModuleInit {
       include: { task: { include: { order: { select: { number: true } } } } },
     });
     if (collected.length === 0) return [];
-    const changes = await this.prisma.courierCashEntry.findMany({
-      where: { courierId, type: 'ADJUSTMENT', taskId: { in: collected.map((c) => c.taskId!) } },
-      orderBy: { createdAt: 'desc' },
-    });
-    return collected.map((c) => {
-      const change = changes.find((a) => a.taskId === c.taskId) ?? null;
-      return {
-        taskId: c.taskId!,
-        number: c.task ? orderOf(c.task).number : '—',
-        amount: c.amount,
-        paidOtherwise: change ? { status: change.status, paidBy: change.paidBy } : null,
-      };
-    });
+    const [changes, available] = await Promise.all([
+      this.prisma.courierCashEntry.findMany({
+        where: { courierId, type: 'ADJUSTMENT', taskId: { in: collected.map((c) => c.taskId!) } },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.onHand(courierId),
+    ]);
+    return stillOnHand(
+      collected.map((c) => {
+        const change = changes.find((a) => a.taskId === c.taskId) ?? null;
+        return {
+          taskId: c.taskId!,
+          number: c.task ? orderOf(c.task).number : '—',
+          amount: c.amount,
+          paidOtherwise: change ? { status: change.status, paidBy: change.paidBy } : null,
+        };
+      }),
+      available,
+    );
   }
 
   // ─── «Клиент оплатил иначе» ────────────────────────────────────
@@ -188,6 +240,11 @@ export class CourierCashService implements OnModuleInit {
     });
     if (before) {
       throw new BadRequestException(before.status === 'PENDING' ? 'Уже отправлено кассиру, ждём ответа' : 'Кассир уже подтвердил');
+    }
+    if (collected.amount > (await this.onHand(courier.id))) {
+      throw new BadRequestException(
+        'Деньги за этот заказ вы уже сдали кассиру. Если клиент правда платил картой или Kaspi, скажите кассиру',
+      );
     }
     const number = collected.task ? orderOf(collected.task).number : '—';
     const entry = await this.prisma.courierCashEntry.create({
@@ -237,14 +294,35 @@ export class CourierCashService implements OnModuleInit {
       include: { courier: true, task: { include: { order: { select: { number: true } } } } },
     });
     if (!entry) return false;
+    const number = entry.task ? orderOf(entry.task).number : '—';
+    const amount = -entry.amount;
+    const paidBy = (entry.paidBy ?? 'CARD') as PaidBy;
+    if (ok && entry.status === 'PENDING' && amount > (await this.balance(entry.courierId))) {
+      // Пока карточка ждала, курьер сдал наличку: снимать с него уже нечего,
+      // иначе счёт уйдёт в минус
+      const closed = await this.prisma.courierCashEntry.updateMany({
+        where: { id: entryId, status: 'PENDING' },
+        data: { status: 'REJECTED', resolvedBy: who, resolvedAt: new Date(), note: 'Наличные уже сданы' },
+      });
+      if (closed.count === 0) return false;
+      await this.closeCard(
+        tenantId,
+        entry.cardChatId,
+        entry.cardMessageId,
+        `↩️ Не снято: курьер уже сдал наличные кассе. Если клиент платил картой, разберитесь вручную (${esc(who)})`,
+      );
+      await this.assignment.sendToCourier(
+        tenantId,
+        entry.courier.telegramUserId,
+        `По №${number} ничего не снято: наличные вы уже сдали кассиру. Если клиент правда платил ${PAID_BY_TEXT[paidBy]}, скажите кассиру.`,
+      );
+      return true;
+    }
     const changed = await this.prisma.courierCashEntry.updateMany({
       where: { id: entryId, status: 'PENDING' },
       data: { status: ok ? 'CONFIRMED' : 'REJECTED', resolvedBy: who, resolvedAt: new Date() },
     });
     if (changed.count === 0) return false;
-    const number = entry.task ? orderOf(entry.task).number : '—';
-    const amount = -entry.amount;
-    const paidBy = (entry.paidBy ?? 'CARD') as PaidBy;
     if (ok && entry.taskId) {
       // Заказ больше не «за наличные»: так он и попадёт в отчёты
       await this.prisma.deliveryTask.update({

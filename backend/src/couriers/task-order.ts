@@ -16,6 +16,8 @@ export type ExternalOrder = {
   /** Номер для плитки: последние цифры чека Poster */
   label: string;
   createdAt: string;
+  /** Предзаказ: время доставки, которое выбрал клиент */
+  scheduledAt?: string | null;
   phone: string | null;
   name: string | null;
   address: {
@@ -104,7 +106,7 @@ export function orderOf(t: { order?: OurOrder | null; external?: unknown }): Ord
   return {
     number: e?.label ?? '—',
     createdAt: e ? new Date(e.createdAt) : new Date(0),
-    scheduledAt: null,
+    scheduledAt: e?.scheduledAt ? new Date(e.scheduledAt) : null,
     address: e?.address ?? null,
     phone: e?.phone ?? null,
     customerName: e?.name ?? null,

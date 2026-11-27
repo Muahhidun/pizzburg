@@ -6,6 +6,8 @@ import {
   phoneKey,
   PosterImportService,
   posterTime,
+  preorderAt,
+  releaseAt,
   splitAddress,
 } from '../src/couriers/poster-import.service';
 import { externalPaymentLine, orderOf } from '../src/couriers/task-order';
@@ -168,6 +170,41 @@ test('кассир отклонил заказ в Poster — плитка сни
   assert.equal(w.tasks[0].status, 'CANCELLED');
 });
 
+// ─── Предзаказы (27.11.2026: оформили вчера на сегодня) ──────────────
+
+test('предзаказ: время доставки и когда он нужен раздаче', () => {
+  const created = new Date(2026, 10, 26, 20, 0);
+  assert.deepEqual(preorderAt({ delivery_time: '2026-11-27 13:30:00' }, created), new Date(2026, 10, 27, 13, 30));
+  // Обычный заказ: доставка почти сразу или поля нет
+  assert.equal(preorderAt({ delivery_time: '2026-11-26 20:40:00' }, created), null);
+  assert.equal(preorderAt({ delivery_time: '0000-00-00 00:00:00' }, created), null);
+  assert.equal(preorderAt({}, created), null);
+  const today = new Date(2026, 10, 27);
+  assert.deepEqual(releaseAt(created, new Date(2026, 10, 27, 13, 30), today), new Date(2026, 10, 27, 12, 30));
+  // Сегодняшний предзаказ — сразу
+  const morning = new Date(2026, 10, 27, 9, 0);
+  assert.deepEqual(releaseAt(morning, new Date(2026, 10, 27, 18, 0), today), morning);
+  assert.deepEqual(releaseAt(created, null, today), created);
+});
+
+test('предзаказ со вчера попадает на раздачу за час до доставки, срок — время клиента', async () => {
+  const yesterday = '2026-11-24 20:00:00';
+  const w = world({
+    'tok-pb': [
+      io({ incoming_order_id: '901', created_at: yesterday, delivery_time: '2026-11-25 13:30:00' }),
+      io({ incoming_order_id: '902', created_at: yesterday, delivery_time: '2026-11-25 15:00:00', phone: '+77011111111' }),
+      io({ incoming_order_id: '903', created_at: yesterday, phone: '+77022222222' }),
+    ],
+  });
+  assert.deepEqual(await w.service.importTenant('t', 'v', NOW), { created: 1, merged: 0 });
+  const view = orderOf(w.tasks[0]);
+  assert.deepEqual(view.scheduledAt, new Date(2026, 10, 25, 13, 30));
+  assert.equal(w.tasks[0].externalKey, 'pb:901');
+  // 15:00 появится в 14:00
+  assert.deepEqual(await w.service.importTenant('t', 'v', new Date(2026, 10, 25, 14, 0)), { created: 1, merged: 0 });
+  assert.equal(w.tasks[1].externalKey, 'pb:902');
+});
+
 // ─── Отмена на планшете ──────────────────────────────────────────────
 
 import { DispatchBoardService } from '../src/couriers/dispatch-board.service';
@@ -218,7 +255,7 @@ test('наш заказ и уже уехавший на планшете не о
 
 import { PosterClient } from '../src/poster/poster.client';
 
-test('онлайн-заказы запрашиваются за весь день, по часам заведения', async () => {
+test('онлайн-заказы запрашиваются за вчера и сегодня, по часам заведения', async () => {
   const orig = globalThis.fetch;
   let url = '';
   globalThis.fetch = (async (u: string) => {
@@ -226,13 +263,13 @@ test('онлайн-заказы запрашиваются за весь ден�
     return { ok: true, json: async () => ({ response: [] }) };
   }) as any;
   try {
-    await new PosterClient().getIncomingOrders('x', '2026-11-25');
+    await new PosterClient().getIncomingOrders('x', '2026-11-25', '2026-11-24');
   } finally {
     globalThis.fetch = orig;
   }
   const q = new URL(url).searchParams;
   // Голая дата в обоих полях — пустой промежуток 00:00–00:00
-  assert.equal(q.get('date_from'), '2026-11-25 00:00:00');
+  assert.equal(q.get('date_from'), '2026-11-24 00:00:00');
   assert.equal(q.get('date_to'), '2026-11-25 23:59:59');
   assert.equal(q.get('timezone'), 'client');
 });

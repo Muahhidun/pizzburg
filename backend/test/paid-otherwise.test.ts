@@ -40,7 +40,7 @@ function world() {
         return { count: rows.length };
       },
       aggregate: async ({ where }: any) => ({
-        _sum: { amount: entries.filter((e) => e.courierId === where.courierId && e.status === 'CONFIRMED').reduce((n, e) => n + e.amount, 0) },
+        _sum: { amount: entries.filter((e) => match(e, where)).reduce((n, e) => n + e.amount, 0) },
       }),
     },
     deliveryTask: { update: async ({ data }: any) => Object.assign(task, data) },
@@ -102,4 +102,41 @@ test('без наличных по заказу отметить нельзя', 
   const w = world();
   w.entries.length = 0;
   await assert.rejects(w.service.requestPaidOtherwise('t', w.courier, 'k', 'CARD'), /наличных на вас нет/);
+});
+
+// ─── Уже сданные деньги (27.11.2026: наличка ушла в минус 22 510 ₸) ──
+
+import { stillOnHand } from '../src/couriers/courier-cash.service';
+
+test('сданный заказ отметить «картой» нельзя — счёт не уходит в минус', async () => {
+  const w = world();
+  w.entries.push({ id: 'h', courierId: 'c1', type: 'HANDED_IN', status: 'CONFIRMED', amount: -5000, createdAt: new Date() });
+  assert.equal(await w.service.balance('c1'), 0);
+  assert.deepEqual((await w.service.summary('c1')).cashOrders, []);
+  await assert.rejects(w.service.requestPaidOtherwise('t', w.courier, 'k', 'CARD'), /уже сдали кассиру/);
+  assert.equal(w.entries.filter((e) => e.type === 'ADJUSTMENT').length, 0);
+});
+
+test('курьер сдал наличку, пока карточка ждала кассира — подтверждение ничего не снимает', async () => {
+  const w = world();
+  const adj = await w.service.requestPaidOtherwise('t', w.courier, 'k', 'CARD');
+  w.entries.push({ id: 'h', courierId: 'c1', type: 'HANDED_IN', status: 'CONFIRMED', amount: -5000, createdAt: new Date() });
+  assert.equal(await w.service.resolvePaidOtherwise('t', adj.id, 'Кассир', true), true);
+  assert.equal(adj.status, 'REJECTED');
+  assert.equal(await w.service.balance('c1'), 0);
+  assert.equal(w.task.cashToCollect, 5000);
+  assert.match(w.sent.at(-1)!, /ничего не снято/);
+});
+
+test('список «оплатил иначе»: только то, что умещается в наличку на руках', () => {
+  const o = (taskId: string, amount: number, status?: string) => ({
+    taskId,
+    number: taskId,
+    amount,
+    paidOtherwise: status ? { status, paidBy: 'CARD' } : null,
+  });
+  const list = [o('new', 3000), o('wait', 2000, 'PENDING'), o('done', 4000, 'CONFIRMED'), o('mid', 2500), o('old', 6000)];
+  // На руках 5 500 (ожидающие кассира уже вычтены)
+  assert.deepEqual(stillOnHand(list, 5500).map((x) => x.taskId), ['new', 'wait', 'mid']);
+  assert.deepEqual(stillOnHand(list, 0).map((x) => x.taskId), ['wait']);
 });
