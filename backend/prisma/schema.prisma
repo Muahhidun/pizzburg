@@ -1518,6 +1518,9 @@ enum CourierCashType {
   PAYOUT_OFFSET
   /// Ручная поправка админа
   ADJUSTMENT
+  /// Сдача, которую касса выдала курьеру для клиента (сдача с 10 000 у
+  /// заказа на 6 920 — 3 080). Курьер возвращает её вместе с выручкой
+  CHANGE_FLOAT
 }
 
 enum CourierCashStatus {
