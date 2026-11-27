@@ -8,6 +8,7 @@ import { TgCallbackQuery, TgMessage, TgUpdate, tgUserLabel } from '../telegram/t
 import { AssignmentService } from './assignment.service';
 import { courierSettings } from './courier-settings';
 import { shortName } from './names';
+import { cashStates } from './courier-history';
 import { orderOf } from './task-order';
 
 /**
@@ -33,6 +34,36 @@ const CB = {
 
 export type PaidBy = 'CARD' | 'KASPI';
 const PAID_BY_TEXT: Record<PaidBy, string> = { CARD: 'картой через терминал', KASPI: 'через Kaspi' };
+
+export type HandoverOrder = { number: string; external: boolean; order: number; change: number; owed: number };
+
+/**
+ * За какие заказы эти наличные (Дом, 27.11.2026: «кассир сразу понимала
+ * бы, о какой наличке речь»). Сдают общей суммой, поэтому считаем сданным
+ * самое раннее: в карточку идут последние заказы на эту сумму. Наш заказ —
+ * «№357» (ссылкой на его карточку в группе), из Poster — «чек №1622»:
+ * его номер не наш и ссылкой стать не должен.
+ */
+export function handoverLines(rows: HandoverOrder[], amount: number): string {
+  const states = cashStates(rows.map((r) => r.owed), amount);
+  const lines: string[] = [];
+  let covered = 0;
+  rows.forEach((r, i) => {
+    if (states[i] === 'HANDED_IN') return;
+    const part = states[i] === 'PARTLY' ? amount - covered : r.owed;
+    covered += part;
+    const label = r.external ? `чек №${r.number}` : `№${r.number}`;
+    const detail =
+      r.change > 0 ? ` (заказ ${tenge(r.owed - r.change)} + сдача ${tenge(r.change)})` : '';
+    lines.push(`• ${label} — ${tenge(part)}${states[i] === 'PARTLY' ? ' из ' + tenge(r.owed) : ''}${detail}`);
+  });
+  if (lines.length === 0) return '';
+  // По времени: от раннего к позднему, как кассир их и отдавал
+  lines.reverse();
+  const rest = amount - covered;
+  if (rest > 0) lines.push(`• ещё ${tenge(rest)} — с прошлых смен или поправка`);
+  return `За заказы:\n${lines.join('\n')}`;
+}
 
 const tenge = (n: number) => `${n.toLocaleString('ru-RU')} ₸`;
 
@@ -391,11 +422,17 @@ export class CourierCashService implements OnModuleInit {
     const name = shortName(courier.fullName);
     const chat = await this.telegram.cashierTargetChat(tenantId);
     if (chat) {
+      // №357 — ссылка на карточку заказа в группе (чек Poster не ссылается)
+      const orders = await this.telegram.linkOrders(
+        tenantId,
+        handoverLines(await this.cashByOrder(courier.id), amount),
+      );
       const { result } = await this.telegram.call(tenantId, 'sendMessage', {
         chat_id: chat,
         parse_mode: 'HTML',
         text:
           `💵 <b>${esc(name)} сдаёт ${tenge(amount)}</b>\n` +
+          (orders ? `${orders}\n` : '') +
           (source === 'ARRIVAL'
             ? 'Курьер приехал. Заберите у него наличные и подтвердите.'
             : 'Курьер нажал «Сдаю». Примите наличные и подтвердите.'),
@@ -424,6 +461,40 @@ export class CourierCashService implements OnModuleInit {
       );
     }
     return entry;
+  }
+
+  /**
+   * Наличные по заказам за последние 36 часов, от новых к старым: сколько
+   * курьер должен за каждый (оплата + сдача из кассы − «оплатил картой»).
+   */
+  private async cashByOrder(courierId: string): Promise<HandoverOrder[]> {
+    const since = new Date(Date.now() - 36 * 3_600_000);
+    const entries = await this.prisma.courierCashEntry.findMany({
+      where: {
+        courierId,
+        taskId: { not: null },
+        type: { in: ['COLLECTED', 'CHANGE_FLOAT', 'ADJUSTMENT'] },
+        status: 'CONFIRMED',
+        createdAt: { gte: since },
+      },
+      orderBy: { createdAt: 'desc' },
+      include: { task: { select: { external: true, order: { select: { number: true } } } } },
+    });
+    const byTask = new Map<string, HandoverOrder>();
+    for (const e of entries) {
+      const row = byTask.get(e.taskId!) ?? {
+        number: e.task ? orderOf(e.task).number : '—',
+        external: !e.task?.order,
+        order: 0,
+        change: 0,
+        owed: 0,
+      };
+      if (e.type === 'COLLECTED') row.order += e.amount;
+      if (e.type === 'CHANGE_FLOAT') row.change += e.amount;
+      row.owed += e.amount;
+      byTask.set(e.taskId!, row);
+    }
+    return [...byTask.values()].filter((r) => r.order > 0 || r.change > 0);
   }
 
   /** При отметке «Я на месте»: новичок сдаёт всё, остальные — от порога */
