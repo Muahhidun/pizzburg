@@ -47,11 +47,14 @@ export class AcceptReminderService {
         acceptReminders: { lt: 2 },
         // Старше суток не трогаем: такие закроет автозакрытие
         createdAt: { gt: new Date(now.getTime() - 24 * 60 * 60_000) },
+        // Хватает одной ушедшей части: заказ «Новый», пока его не принял
+        // основной отдел. Раньше требовали непринятый чек на планшете, и
+        // №357 (27.11.2026) выпал: напитки WeDrink приняли, а чек PizzBurg
+        // до Poster не дошёл — напоминать было «не о чем», заказ висел 3 ч.
         dispatches: {
           some: {
             status: 'SENT',
             posterOrderId: { not: null },
-            OR: [{ posterStatus: null }, { posterStatus: 'NEW' }],
             sentAt: { lte: new Date(now.getTime() - ACCEPT_REMIND_CASHIER_MIN * 60_000) },
           },
         },
@@ -95,10 +98,14 @@ export class AcceptReminderService {
       const kind = o.type === 'DELIVERY' ? 'доставка' : 'самовывоз';
       try {
         if (stage === 1) {
+          const failed = o.dispatches.some((d) => d.status === 'FAILED');
           const posted = await this.telegram.notifyCashier(
             o.tenantId,
             `⏰ <b>Заказ №${o.number} ждёт принятия ${minutes} мин</b> (${kind})\n` +
-              'Клиент видит «Ждём подтверждения». Примите заказ на планшете.',
+              'Клиент видит «Ждём подтверждения». ' +
+              (failed
+                ? 'Часть заказа не дошла до Poster — пробейте её вручную и нажмите под заказом «⋯ Действия» → «✅ Принять заказ».'
+                : 'Примите заказ на планшете.'),
           );
           // Запоминаем, чтобы после принятия переписать на «✅ принят»
           if (posted?.messageId) {

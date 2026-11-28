@@ -28,7 +28,8 @@ export function isAccepted(status: string): boolean {
 
 export function menuKeyboard(orderId: string, accepted = false): InlineButton[][] {
   return [
-    ...(accepted ? [] : [[{ text: '✅ Принят', callback_data: `o:a:${orderId}` }]]),
+    // Глагол, а не метка: «✅ Принят» читался как статус (Дом, 28.11.2026)
+    ...(accepted ? [] : [[{ text: '✅ Принять заказ', callback_data: `o:a:${orderId}` }]]),
     [
       { text: '❌ Отменить', callback_data: `o:c:${orderId}` },
       { text: '🚫 Нет позиции', callback_data: `o:s:${orderId}:` },
@@ -66,10 +67,17 @@ export function confirmKeyboard(
   ];
 }
 
-/** Подтверждение «Принят»: клиенту сразу уходит пуш, поэтому — второй шаг */
+/**
+ * Подтверждение «Принять»: клиенту сразу уходит пуш, поэтому — второй шаг.
+ *
+ * Кнопка — призыв нажать, а не утверждение. «✅ Да, заказ принят» кассир
+ * прочла как итог, второй раз не нажала, и №357 так и остался «Новым»:
+ * через 3 часа автомат отменил его и вернул деньги за отданную еду
+ * (27.11.2026).
+ */
 export function acceptKeyboard(orderId: string): InlineButton[][] {
   return [
-    [{ text: '✅ Да, заказ принят', callback_data: `o:ay:${orderId}` }],
+    [{ text: '👉 Нажмите, чтобы принять заказ', callback_data: `o:ay:${orderId}` }],
     [{ text: '◂ Назад', callback_data: `o:m:${orderId}` }],
   ];
 }
@@ -127,3 +135,25 @@ export function cancelledBanner(by: string, at: Date, reason: string, tz: string
   return `🚫 <b>ОТМЕНЁН</b> — ${esc(by)}, ${time}. Причина: ${esc(reason)}`;
 }
 
+
+/**
+ * Чек не дошёл до Poster: отправить ещё раз или отметить, что кассир
+ * пробил его вручную (тогда повтор дал бы второй чек).
+ */
+export function dispatchFailedKeyboard(orderId: string): InlineButton[][] {
+  return [
+    [{ text: '🔁 Отправить в Poster ещё раз', callback_data: `o:rs:${orderId}` }],
+    [{ text: '✍️ Пробили вручную — принять заказ', callback_data: `o:mn:${orderId}` }],
+  ];
+}
+
+/**
+ * Оплаченный заказ 3 часа никто не принял: деньги сами не возвращаем,
+ * спрашиваем кассу. «Отменить» ведёт в обычную отмену с причиной.
+ */
+export function staleOrderKeyboard(orderId: string): InlineButton[][] {
+  return [
+    [{ text: '✅ Еду отдали — закрыть как выданный', callback_data: `o:dv:${orderId}` }],
+    [{ text: '❌ Не отдали — отменить и вернуть деньги', callback_data: `o:c:${orderId}` }],
+  ];
+}

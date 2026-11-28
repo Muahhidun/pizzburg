@@ -224,3 +224,24 @@ test('ночной заказ принят в 10:04 — «принят чере�
   await s.service.run(new Date('2026-11-22T05:05:00Z'));
   assert.match(s.edits[0].payload.text, /принят через 4 мин/);
 });
+
+test('№357: напитки WeDrink приняли, чек PizzBurg не дошёл — заказ «Новый», напоминаем', async () => {
+  let where: any;
+  const s = setup({
+    ...base,
+    dispatches: [
+      { status: 'SENT', sentAt: minAgo(6), posterStatus: 'ACCEPTED' },
+      { status: 'FAILED', sentAt: null, posterStatus: null },
+    ],
+  });
+  const prisma = (s.service as any).prisma;
+  const orig = prisma.order.findMany;
+  prisma.order.findMany = async (args: any) => {
+    if (args.where.status === 'NEW') where = args.where;
+    return orig(args);
+  };
+  await s.service.run(now);
+  assert.equal(where.dispatches.some.posterStatus, undefined, 'принятая часть не прячет непринятый заказ');
+  assert.equal(where.dispatches.some.OR, undefined);
+  assert.match(s.cashier[0], /не дошла до Poster — пробейте её вручную/);
+});

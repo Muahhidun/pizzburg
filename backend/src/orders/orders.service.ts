@@ -13,7 +13,7 @@ import { LoyaltyService } from '../loyalty/loyalty.service';
 import { OrderStatus } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AvailabilityService } from '../availability/availability.service';
-import { actionsButton } from './order-keyboards';
+import { actionsButton, dispatchFailedKeyboard } from './order-keyboards';
 import { CancelReasonsService } from './cancel-reasons.service';
 import { LegalService } from '../legal/legal.service';
 import { AddressesService } from '../auth/addresses.service';
@@ -586,6 +586,7 @@ export class OrdersService {
           total: true,
           cancelReason: true,
           cancelledBy: true,
+          cancelledByName: true,
           paymentMethod: true,
           paidAt: true,
           paymentRefunds: {
@@ -604,7 +605,7 @@ export class OrdersService {
         },
       });
       if (!order) return;
-      const who = order.cancelledBy === "CUSTOMER" ? "клиентом" : "оператором";
+      const who = cancelledByText(order.cancelledBy, order.cancelledByName);
 
       // Дошёл ли заказ до кухни вообще. Отменённый в бесплатное окно не
       // уходил на планшеты, никто ничего не готовил и не терял.
@@ -885,6 +886,7 @@ export class OrdersService {
     const firstSend =
       resendIds.size === 0 && parts.every((d) => d.status !== 'SENT');
     let sentNow = 0;
+    const failedNow: { name: string; error: string }[] = [];
     for (let i = 0; i < parts.length; i++) {
       const d = parts[i];
       const resending = resendIds.has(d.id);
@@ -1077,7 +1079,20 @@ export class OrdersService {
           where: { id: d.id },
           data: { status: "FAILED", error: String(e) },
         });
+        failedNow.push({ name: d.posterAccount.name, error: String(e) });
       }
+    }
+
+    // Чек не дошёл до Poster — раньше это видел только лог сервера, и №357
+    // (27.11.2026) кассир спасла сама, заметив пустой планшет. Пишем сразу
+    // в группу кассиров; если не ушло ни одной части, сообщения о заказе
+    // не будет вовсе — тогда кладём в это сообщение весь заказ.
+    if (failedNow.length > 0) {
+      await this.announceDispatchFailure(
+        order,
+        failedNow,
+        firstSend && sentNow === 0 ? liveItems : null,
+      );
     }
 
     if (firstSend && sentNow > 0) {
@@ -1612,6 +1627,48 @@ export class OrdersService {
   }
 
   /**
+   * Чек не дошёл до Poster: кассе — что пробить и две кнопки (повторить
+   * или «пробили вручную»), руководству — коротко. Сбой Телеграма заказ
+   * не роняет.
+   */
+  private async announceDispatchFailure(
+    order: Parameters<typeof newOrderMessage>[0] & { id: string; tenantId: string },
+    failed: { name: string; error: string }[],
+    fullItems: Parameters<typeof newOrderMessage>[1] | null,
+  ) {
+    try {
+      const names = [...new Set(failed.map((f) => f.name))].join(", ");
+      const reason = esc(posterErrorText(failed[0].error));
+      const text =
+        `⚠️ <b>Заказ №${order.number} не дошёл до Poster ${esc(names)}</b>\n` +
+        `Ошибка Poster: ${reason}\n\n` +
+        `Пробейте заказ вручную и нажмите «✍️ Пробили вручную». ` +
+        `Ещё не пробивали — можно «🔁 Отправить в Poster ещё раз».` +
+        (fullItems ? `\n\n${newOrderMessage(order, fullItems)}` : "");
+      const posted = await this.telegram.notifyCashier(
+        order.tenantId,
+        text,
+        dispatchFailedKeyboard(order.id),
+        { links: false },
+      );
+      // Сообщения о заказе нет — «№N» в других сообщениях ведёт сюда
+      if (fullItems && posted.messageId && posted.chatId) {
+        await this.prisma.order.update({
+          where: { id: order.id },
+          data: { cashierChatId: posted.chatId, cashierMessageId: posted.messageId },
+        });
+      }
+      await this.telegram.notify(
+        order.tenantId,
+        `⚠️ <b>Заказ №${order.number} не дошёл до Poster ${esc(names)}</b>\n` +
+          `Ошибка Poster: ${reason}\nКассирам написали.`,
+      );
+    } catch (e) {
+      this.logger.warn(`Сообщение о сбое отправки №${order.number} не ушло: ${e}`);
+    }
+  }
+
+  /**
    * «✅ Принят» над «Действиями» в сообщении о заказе — кассир видит, какие
    * заказы уже приняты, а какие ещё ждут (неважно, приняли на планшете или
    * кнопкой). Сбой Телеграма статус не откатывает.
@@ -2006,6 +2063,35 @@ export function posterComment(p: {
     .join(' ')
     .replace(/₸/g, 'тг')
     .replace(/×/g, 'x');
+}
+
+/**
+ * Ошибка Poster человеческим текстом: из «…HTTP 404: {"error":99,
+ * "message":"products cannot be duplicated"}» — только message.
+ */
+export function posterErrorText(raw: string): string {
+  const m = raw.match(/"message"\s*:\s*"([^"]+)"/);
+  return (m ? m[1] : raw.replace(/^Error:\s*/, "")).slice(0, 200);
+}
+
+/**
+ * Кто отменил — для сообщения руководству. Раньше всё, кроме клиента,
+ * подписывалось «оператором», и ночное автозакрытие №357 выглядело как
+ * действие человека (28.11.2026).
+ */
+export function cancelledByText(by: string | null, name?: string | null): string {
+  switch (by) {
+    case "CUSTOMER":
+      return "клиентом";
+    case "ADMIN":
+      return name ? `оператором (${esc(name)})` : "оператором";
+    case "AUTO":
+      return "автоматически: 3 ч его никто не принял";
+    case "POSTER":
+      return "кассой: чек отклонён в Poster";
+    default:
+      return "системой";
+  }
 }
 
 /**

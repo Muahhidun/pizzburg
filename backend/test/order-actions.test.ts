@@ -48,7 +48,10 @@ function setup(order: Record<string, unknown>) {
   const calls: Array<{ method: string; payload: any }> = [];
   const cancels: unknown[][] = [];
   const marks: unknown[][] = [];
-  const prisma = { order: { findFirst: async () => order } };
+  const prisma = {
+    order: { findFirst: async () => order },
+    orderDispatch: { findMany: async () => (order as any).afterResend ?? [] },
+  };
   const telegram = {
     call: async (_t: string, method: string, payload: any) => {
       calls.push({ method, payload });
@@ -56,9 +59,11 @@ function setup(order: Record<string, unknown>) {
     },
   };
   const accepted: unknown[][] = [];
+  const resent: unknown[] = [];
   const orders = {
     cancelByOperator: async (...a: unknown[]) => cancels.push(a),
     setStatus: async (...a: unknown[]) => accepted.push(a),
+    dispatchToPoster: async (id: unknown) => resent.push(id),
   };
   const shortage = { markUnavailable: async (...a: unknown[]) => marks.push(a) };
   const reasons = {
@@ -70,7 +75,7 @@ function setup(order: Record<string, unknown>) {
   );
   const press = (data: string, chat = -100) =>
     svc.handle('t', { id: 'q', from: { id: 1 }, data, message: { message_id: 9, chat: { id: chat } } }, 'Айгерим');
-  return { calls, cancels, marks, accepted, press };
+  return { calls, cancels, marks, accepted, resent, press };
 }
 
 const baseOrder = {
@@ -165,11 +170,14 @@ const sent = { ...baseOrder, dispatches: [{ status: 'SENT', posterOrderId: '501'
 
 test('принят в Телеграме: подтверждение → статус ACCEPTED, в карточке кто принял, «Действия» остаются', async () => {
   const { calls, accepted, press } = setup(sent);
-  assert.equal(menuKeyboard(ID)[0][0].text, '✅ Принят');
+  assert.equal(menuKeyboard(ID)[0][0].text, '✅ Принять заказ');
   await press(`o:a:${ID}`);
   assert.equal(accepted.length, 0, 'до подтверждения не принимаем');
   const confirm = calls.filter((c) => c.method === 'editMessageReplyMarkup').at(-1)!;
   assert.equal(confirm.payload.reply_markup.inline_keyboard[0][0].callback_data, `o:ay:${ID}`);
+  // №357: «✅ Да, заказ принят» читалось как итог — теперь кнопка зовёт нажать
+  assert.equal(confirm.payload.reply_markup.inline_keyboard[0][0].text, '👉 Нажмите, чтобы принять заказ');
+  assert.match(calls.at(-1)!.payload.text, /ещё НЕ принят/);
 
   await press(`o:ay:${ID}`);
   assert.deepEqual(accepted[0].slice(0, 3), [ID, 'ACCEPTED', 't']);
@@ -186,7 +194,7 @@ test('принятый заказ: метка «Принят» над «Дейс
   const { calls, press } = setup({ ...sent, status: 'ACCEPTED' });
   await press(`o:m:${ID}`);
   const menu = calls[0].payload.reply_markup.inline_keyboard.flat().map((b: any) => b.text);
-  assert.ok(!menu.includes('✅ Принят'));
+  assert.ok(!menu.includes('✅ Принять заказ'));
   assert.ok(menu.includes('❌ Отменить'));
   await press(`o:x:${ID}`);
   assert.deepEqual(
@@ -238,4 +246,102 @@ test('принят на планшете: в сообщении о заказе 
   assert.equal(calls[0].method, 'editMessageReplyMarkup');
   assert.equal(calls[0].payload.message_id, 9);
   assert.deepEqual(calls[0].payload.reply_markup.inline_keyboard.map((r: any[]) => r[0].text), ['✅ Принят', '⋯ Действия']);
+});
+
+// ─── №357: чек не дошёл до Poster, автозакрытие оплаченного ──────────
+
+const failed = { ...baseOrder, dispatches: [{ status: 'SENT', posterOrderId: 'w1' }, { status: 'FAILED', posterOrderId: null }] };
+
+test('чек упал, кассир пробила вручную — «Принять» работает, даже если ни одна часть не ушла', async () => {
+  const { accepted, press } = setup({ ...baseOrder, dispatches: [{ status: 'FAILED', posterOrderId: null }] });
+  await press(`o:ay:${ID}`);
+  assert.deepEqual(accepted[0].slice(0, 2), [ID, 'ACCEPTED']);
+});
+
+test('«Пробили вручную» — заказ принят одним нажатием, повторно не отправляем', async () => {
+  const { accepted, resent, calls, press } = setup(failed);
+  await press(`o:mn:${ID}`);
+  assert.deepEqual(accepted[0].slice(0, 2), [ID, 'ACCEPTED']);
+  assert.equal(resent.length, 0);
+  assert.deepEqual(
+    calls.find((c) => c.method === 'editMessageReplyMarkup')!.payload.reply_markup.inline_keyboard.map((r: any[]) => r[0].text),
+    ['✅ Принят', '⋯ Действия'],
+  );
+});
+
+test('«Отправить ещё раз»: ушло — кнопки сворачиваются; снова упало — говорим пробить вручную', async () => {
+  const ok = setup({ ...failed, afterResend: [{ status: 'SENT' }, { status: 'SENT' }] });
+  await ok.press(`o:rs:${ID}`);
+  assert.deepEqual(ok.resent, [ID]);
+  assert.match(ok.calls.at(-1)!.payload.text, /ушёл в Poster/);
+
+  const bad = setup({ ...failed, afterResend: [{ status: 'SENT' }, { status: 'FAILED' }] });
+  await bad.press(`o:rs:${ID}`);
+  assert.match(bad.calls.at(-1)!.payload.text, /пробейте вручную/);
+
+  const already = setup(sent);
+  await already.press(`o:rs:${ID}`);
+  assert.equal(already.resent.length, 0);
+});
+
+test('«Еду отдали»: новый заказ принимается и закрывается выданным, без пушей клиенту', async () => {
+  const { accepted, calls, press } = setup(failed);
+  await press(`o:dv:${ID}`);
+  assert.deepEqual(accepted.map((a) => [a[1], (a[3] as any)?.notify]), [['ACCEPTED', false], ['DELIVERED', false]]);
+  const edit = calls.find((c) => c.method === 'editMessageText')!;
+  assert.match(edit.payload.text, /Заказ №157 закрыт как выданный<\/b> — Айгерим/);
+  assert.deepEqual(edit.payload.reply_markup.inline_keyboard, []);
+});
+
+import { cancelledByText, posterErrorText } from '../src/orders/orders.service';
+
+test('ошибка Poster — только суть, без HTTP и JSON', () => {
+  assert.equal(
+    posterErrorText('Error: Poster incomingOrders.createIncomingOrder HTTP 404: {"error":99,"message":"products cannot be duplicated"}'),
+    'products cannot be duplicated',
+  );
+  assert.equal(posterErrorText('Error: timeout'), 'timeout');
+});
+
+test('кто отменил: автомат больше не подписывается «оператором»', () => {
+  assert.equal(cancelledByText('CUSTOMER'), 'клиентом');
+  assert.equal(cancelledByText('ADMIN', 'Айгерим'), 'оператором (Айгерим)');
+  assert.equal(cancelledByText('AUTO'), 'автоматически: 3 ч его никто не принял');
+  assert.equal(cancelledByText('POSTER'), 'кассой: чек отклонён в Poster');
+  assert.equal(cancelledByText(null), 'системой');
+});
+
+test('«Принять» не подтвердили за 30 с — кнопки сворачиваются, если заказ всё ещё новый', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const calls: Array<{ method: string; payload: any }> = [];
+  let status = 'NEW';
+  const svc = new OrderActionsService(
+    { order: { findFirst: async () => sent, findUnique: async () => ({ status }) } } as any,
+    { call: async (_t: string, method: string, payload: any) => (calls.push({ method, payload }), { error: null }) } as any,
+    {} as any, {} as any, {} as any,
+  );
+  const press = (data: string) =>
+    svc.handle('t', { id: 'q', from: { id: 1 }, data, message: { message_id: 9, chat: { id: -100 } } }, 'Айгерим');
+
+  await press(`o:a:${ID}`);
+  t.mock.timers.tick(30_000);
+  await new Promise((r) => setImmediate(r));
+  const last = calls.filter((c) => c.method === 'editMessageReplyMarkup').at(-1)!;
+  assert.deepEqual(last.payload.reply_markup.inline_keyboard.map((r: any[]) => r[0].text), ['⋯ Действия']);
+
+  // Нажали «Назад» до таймера — таймер ничего не трогает
+  calls.length = 0;
+  await press(`o:a:${ID}`);
+  await press(`o:m:${ID}`);
+  t.mock.timers.tick(30_000);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(calls.filter((c) => c.method === 'editMessageReplyMarkup').length, 2);
+
+  // Приняли на планшете, пока висела кнопка — не сворачиваем
+  calls.length = 0;
+  await press(`o:a:${ID}`);
+  status = 'ACCEPTED';
+  t.mock.timers.tick(30_000);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(calls.filter((c) => c.method === 'editMessageReplyMarkup').length, 1);
 });

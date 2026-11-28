@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { OrdersService } from './orders.service';
 import { ShortageService } from './shortage.service';
 import { TelegramService } from '../telegram/telegram.service';
+import { staleOrderKeyboard } from './order-keyboards';
 
 /** Через сколько принятый заказ закрывается сам (см. DECISIONS §12.8) */
 const AUTO_CLOSE_HOURS = 3;
@@ -205,9 +206,29 @@ export class StatusPollerService {
         status: { in: ['NEW', 'ACCEPTED', 'COOKING', 'READY', 'ON_WAY'] },
         updatedAt: { lt: threshold },
       },
-      select: { id: true, number: true, tenantId: true, status: true },
+      select: {
+        id: true,
+        number: true,
+        tenantId: true,
+        status: true,
+        total: true,
+        paymentMethod: true,
+        paymentStatus: true,
+        createdAt: true,
+      },
     });
     for (const o of stale) {
+      // Оплаченный и так и не принятый — сами не отменяем. №357
+      // (27.11.2026): кассир пробила чек вручную и отдала еду, а в системе
+      // заказ остался «Новым», и в 2 ночи автомат вернул клиенту 6 610 ₸.
+      // Отдали ли еду, знает только касса — спрашиваем её.
+      if (o.status === 'NEW' && isPaidOnline(o)) {
+        // Спрашиваем раз в 3 часа, но не дольше суток — дальше не шумим
+        if (Date.now() - o.createdAt.getTime() < 24 * 60 * 60 * 1000) {
+          await this.askAboutStalePaid(o);
+        }
+        continue;
+      }
       // Принятый заказ доехал — закрываем доставкой, с кэшбэком. А тот,
       // который кухня за три часа так и не приняла, никто не готовил и не
       // вёз: закрывать его доставкой значило бы начислить кэшбэк за еду,
@@ -229,4 +250,34 @@ export class StatusPollerService {
       }
     }
   }
+
+  /**
+   * Вопрос кассе по оплаченному непринятому заказу. `updatedAt` сдвигаем
+   * на сейчас: следующий вопрос — через те же 3 часа, если не ответили,
+   * и после перезапуска сервера не задаём его повторно сразу.
+   */
+  private async askAboutStalePaid(o: { id: string; number: number; tenantId: string; total: number }) {
+    try {
+      await this.prisma.order.update({ where: { id: o.id }, data: { updatedAt: new Date() } });
+      await this.telegram?.notifyCashier(
+        o.tenantId,
+        `❓ <b>Заказ №${o.number} оплачен Kaspi (${o.total} ₸), но за ${AUTO_CLOSE_HOURS} ч его так и не приняли</b>\n` +
+          'Еду клиенту отдали — закройте как выданный. Не отдавали — отмените, деньги вернутся клиенту.',
+        staleOrderKeyboard(o.id),
+      );
+      await this.telegram?.notify(
+        o.tenantId,
+        `❓ <b>Заказ №${o.number} (${o.total} ₸, Kaspi) не принят ${AUTO_CLOSE_HOURS} ч</b>\n` +
+          'Деньги сами не возвращаем — спросили кассиров, отдали ли еду.',
+      );
+      this.logger.log(`Заказ №${o.number}: оплачен и не принят ${AUTO_CLOSE_HOURS} ч — спросили кассу`);
+    } catch (e) {
+      this.logger.warn(`Вопрос по №${o.number} не задан: ${e}`);
+    }
+  }
+}
+
+/** Деньги уже у нас: Kaspi оплачен (полностью или с частичным возвратом) */
+export function isPaidOnline(o: { paymentMethod: string; paymentStatus: string }) {
+  return o.paymentMethod === 'KASPI_ONLINE' && ['PAID', 'PARTIALLY_REFUNDED'].includes(o.paymentStatus);
 }

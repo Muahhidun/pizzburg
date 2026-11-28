@@ -95,3 +95,48 @@ test('dispatch формирует правильный запрос Poster дл�
   ]);
   assert.equal(updates[0].data.status, 'SENT');
 });
+
+test('№357: чек не дошёл до Poster — касса получает весь заказ и кнопки, руководство — коротко', async () => {
+  const order = {
+    id: 'o357', tenantId: 't', number: 357, type: 'DELIVERY', paymentMethod: 'KASPI_ONLINE', paymentStatus: 'PAID',
+    pointsSpent: 0, promoDiscount: 0, deliveryFee: 0, comment: '', address: { street: 'Королева', house: '100' },
+    scheduledAt: null, total: 6610, changeFrom: null, customer: { phone: '+77000000000' }, tenant: { settings: {} },
+    items: [{
+      name: 'Донер маленький', qty: 4, price: 1090, isGift: false, isUnavailable: false, modifiers: [],
+      product: { posterId: '10', posterAccountId: 'main', modifiers: null },
+    }],
+    dispatches: [{ id: 'part', posterAccountId: 'main', status: 'PENDING', posterAccount: { token: 'stub', name: 'PizzBurg' } }],
+  };
+  const updates: any[] = [];
+  const cashier: { text: string; keyboard: any }[] = [];
+  const owner: string[] = [];
+  const prisma = {
+    order: { findUniqueOrThrow: async () => order, update: async (a: any) => updates.push(a) },
+    orderDispatch: { update: async (a: any) => updates.push(a) },
+  };
+  const poster = {
+    createIncomingOrder: async () => {
+      throw new Error('Poster incomingOrders.createIncomingOrder HTTP 404: {"error":99,"message":"products cannot be duplicated"}');
+    },
+  };
+  const telegram = {
+    notifyCashier: async (_t: string, text: string, keyboard: any) => {
+      cashier.push({ text, keyboard });
+      return { sent: true, chatId: '-100', messageId: 5 };
+    },
+    notify: async (_t: string, text: string) => owner.push(text),
+  };
+  const service = new OrdersService(
+    prisma as never, poster as never,
+    ...(Array(7).fill(undefined) as [never, never, never, never, never, never, never]),
+    telegram as never,
+  );
+  await service.dispatchToPoster('o357');
+  assert.equal(cashier.length, 1);
+  assert.match(cashier[0].text, /Заказ №357 не дошёл до Poster PizzBurg/);
+  assert.match(cashier[0].text, /products cannot be duplicated/);
+  assert.match(cashier[0].text, /Донер маленький/, 'ни одна часть не ушла — заказ целиком в сообщении');
+  assert.deepEqual(cashier[0].keyboard.map((r: any[]) => r[0].callback_data), ['o:rs:o357', 'o:mn:o357']);
+  assert.ok(updates.some((u) => u.data?.cashierMessageId === 5), '№357 в других сообщениях ведёт на это');
+  assert.match(owner[0], /не дошёл до Poster PizzBurg/);
+});

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { InlineButton, TelegramService } from '../telegram/telegram.service';
+import { esc, InlineButton, TelegramService } from '../telegram/telegram.service';
 import {
   acceptedBanner,
   acceptKeyboard,
@@ -35,9 +35,18 @@ interface Press {
   message?: { message_id: number; chat: { id: number } };
 }
 
+/** Через сколько неподтверждённое «Принять заказ» сворачивается обратно */
+export const ACCEPT_CONFIRM_MS = 30_000;
+
 @Injectable()
 export class OrderActionsService {
   private readonly logger = new Logger(OrderActionsService.name);
+  /**
+   * Сообщения, где сейчас висит «👉 Нажмите, чтобы принять»: ключ — чат и
+   * сообщение, значение — метка нажатия. Любое другое нажатие в этом
+   * сообщении метку снимает, и таймер ничего не трогает.
+   */
+  private readonly confirming = new Map<string, number>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -58,6 +67,8 @@ export class OrderActionsService {
     const [, step, orderId, arg] = (q.data ?? '').split(':');
     const msg = q.message;
     if (!orderId || !msg) return toast('Не получилось');
+    const msgKey = `${msg.chat.id}:${msg.message_id}`;
+    this.confirming.delete(msgKey);
 
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, tenantId },
@@ -118,7 +129,19 @@ export class OrderActionsService {
           }
           if (step === 'a') {
             await setKeyboard(acceptKeyboard(order.id));
-            return toast('Подтвердите: клиенту придёт «Заказ принят»');
+            // Не подтвердили — через 30 с кнопки сворачиваются обратно, и
+            // без метки «✅ Принят» видно, что заказ ещё не принят. Иначе
+            // «👉 Нажмите…» висит часами и выглядит как сделанное (№357).
+            const mark = Date.now();
+            this.confirming.set(msgKey, mark);
+            setTimeout(() => {
+              if (this.confirming.get(msgKey) !== mark) return;
+              this.confirming.delete(msgKey);
+              void this.collapseIfStillNew(tenantId, order.id, msg).catch((e) =>
+                this.logger.warn(`Не свернули «Принять» у №${order.number}: ${e}`),
+              );
+            }, ACCEPT_CONFIRM_MS).unref?.();
+            return toast('Заказ ещё НЕ принят — нажмите «👉 Нажмите, чтобы принять заказ»');
           }
           await this.orders.setStatus(order.id, 'ACCEPTED', tenantId);
           this.logger.log(`Заказ №${order.number} принят кнопкой в Телеграме: ${who}`);
@@ -132,6 +155,50 @@ export class OrderActionsService {
             reply_markup: { inline_keyboard: actionsButton(order.id, true) },
           });
           return toast(`Заказ №${order.number} принят`);
+        }
+        case 'rs': {
+          // Повтор отправки: dispatchToPoster шлёт только упавшие части
+          if (!order.dispatches.some((d) => d.status === 'FAILED')) {
+            await setKeyboard(actionsButton(order.id, accepted));
+            return toast(`Заказ №${order.number} уже в Poster`, true);
+          }
+          await this.orders.dispatchToPoster(order.id);
+          const after = await this.prisma.orderDispatch.findMany({
+            where: { orderId: order.id },
+            select: { status: true },
+          });
+          if (after.some((d) => d.status === 'FAILED')) {
+            return toast('Снова не дошёл до Poster — пробейте вручную и нажмите «✍️ Пробили вручную»', true);
+          }
+          this.logger.log(`Заказ №${order.number} отправлен в Poster повторно: ${who}`);
+          await setKeyboard(actionsButton(order.id, accepted));
+          return toast(`Заказ №${order.number} ушёл в Poster — примите на планшете`, true);
+        }
+        case 'mn': {
+          // Кассир пробил чек руками: заказ принят, повторно не отправляем
+          if (!accepted) await this.orders.setStatus(order.id, 'ACCEPTED', tenantId);
+          this.logger.log(`Заказ №${order.number} пробит в Poster вручную: ${who}`);
+          await setKeyboard(actionsButton(order.id, true));
+          return toast(`Заказ №${order.number} принят`);
+        }
+        case 'dv': {
+          // Еду отдали, а в системе заказ так и не приняли: закрываем
+          // выданным, без пушей — клиент давно поел
+          if (order.status === 'NEW') {
+            await this.orders.setStatus(order.id, 'ACCEPTED', tenantId, { notify: false });
+          }
+          await this.orders.setStatus(order.id, 'DELIVERED', tenantId, { notify: false });
+          this.logger.log(`Заказ №${order.number} закрыт как выданный: ${who}`);
+          const tz = (order.tenant?.settings as any)?.timezone ?? 'Asia/Almaty';
+          const time = new Date().toLocaleTimeString('ru-RU', { timeZone: tz, hour: '2-digit', minute: '2-digit' });
+          await this.telegram.call(tenantId, 'editMessageText', {
+            chat_id: msg.chat.id,
+            message_id: msg.message_id,
+            parse_mode: 'HTML',
+            text: `✅ <b>Заказ №${order.number} закрыт как выданный</b> — ${esc(who)}, ${time}. Деньги не возвращали.`,
+            reply_markup: { inline_keyboard: [] },
+          });
+          return toast(`Заказ №${order.number} закрыт`);
         }
         case 'c': {
           const reasons = await this.cancelReasons.list(tenantId);
@@ -193,6 +260,24 @@ export class OrderActionsService {
     }
     return toast('Не получилось');
   }
+
+  /** «Принять» не подтвердили: сворачиваем кнопки, если заказ всё ещё новый */
+  private async collapseIfStillNew(
+    tenantId: string,
+    orderId: string,
+    msg: { message_id: number; chat: { id: number } },
+  ) {
+    const fresh = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { status: true },
+    });
+    if (fresh?.status !== 'NEW') return;
+    await this.telegram.call(tenantId, 'editMessageReplyMarkup', {
+      chat_id: msg.chat.id,
+      message_id: msg.message_id,
+      reply_markup: { inline_keyboard: actionsButton(orderId, false) },
+    });
+  }
 }
 
 /** Почему «Принят» нажать нельзя; null — можно */
@@ -203,7 +288,8 @@ export function acceptRefusal(order: {
   dispatches: { status: string; posterOrderId: string | null }[];
 }): string | null {
   if (order.status !== 'NEW') return `Заказ №${order.number} уже принят`;
-  if (!order.dispatches.some((d) => d.status === 'SENT' && d.posterOrderId)) {
+  // FAILED — чек не дошёл до Poster, и кассир пробила его вручную (№357)
+  if (!order.dispatches.some((d) => (d.status === 'SENT' && d.posterOrderId) || d.status === 'FAILED')) {
     return `Заказ №${order.number} ещё не ушёл на планшет: идёт окно отмены или ждём оплату`;
   }
   if (order.shortageState === 'AWAITING_CUSTOMER') {
