@@ -1,0 +1,8 @@
+:{$PORT:8080} {
+	root * /srv
+	encode gzip zstd
+	@nocache path / /index.html /flutter_bootstrap.js /flutter_service_worker.js /version.json /manifest.json /main.dart.js /main.dart.mjs /main.dart.wasm /assets/*
+	header @nocache Cache-Control "no-cache"
+	try_files {path} /index.html
+	file_server
+}
