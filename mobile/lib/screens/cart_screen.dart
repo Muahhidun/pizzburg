@@ -9,15 +9,18 @@ import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../utils/haptics.dart';
 import '../widgets/motion.dart';
+import 'catalog_parts.dart' show ModeSwitch;
 import 'checkout_screen.dart';
 import '../i18n/strings.dart';
 import '../widgets/app_route.dart';
 
 /// Корзина по прототипу «Сигнал».
 ///
-/// Порядок блоков не случайный: сначала состав, потом выгода (подарок,
-/// промокод, баллы), в конце итог. Человек сначала проверяет, что заказал,
-/// и только потом занимается экономией.
+/// Первым — «Доставка / Самовывоз» (Дом, 28.11.2026): от выбора зависит
+/// сумма, и решать его надо там, где человек её видит. Дальше порядок не
+/// случайный: сначала состав, потом выгода (подарок, промокод, баллы), в
+/// конце итог. Человек сначала проверяет, что заказал, и только потом
+/// занимается экономией.
 class CartScreen extends StatefulWidget {
   /// Внутри таб-бара у корзины нет кнопки «назад»: она не открыта поверх
   /// каталога, а является отдельной вкладкой.
@@ -38,6 +41,10 @@ class _CartScreenState extends State<CartScreen> {
   String? _promoApplied;
   String? _promoError;
   final _pointsHaptic = SteppedHaptic();
+  final _scroll = ScrollController();
+
+  /// Нажали «Оформить», не выбрав способ получения: подсвечиваем выбор
+  bool _nudge = false;
 
   /// Слепок состава, по которому уже посчитано превью.
   ///
@@ -49,13 +56,34 @@ class _CartScreenState extends State<CartScreen> {
   @override
   void initState() {
     super.initState();
+    OrderMode.value.addListener(_onMode);
     _refresh();
   }
 
   @override
   void dispose() {
+    OrderMode.value.removeListener(_onMode);
     _promo.dispose();
+    _scroll.dispose();
     super.dispose();
+  }
+
+  void _onMode() {
+    if (mounted) setState(() => _nudge = false);
+  }
+
+  /// Способ получения с поправкой на заведение: доставки сейчас нет —
+  /// значит самовывоз, а сохранённый выбор не трогаем до следующего раза.
+  String? _modeFor(CartPreview? p) =>
+      p != null && !p.deliveryAvailable ? 'PICKUP' : OrderMode.value.value;
+
+  Future<void> _askMode() async {
+    await Haptics.warning();
+    if (!mounted) return;
+    setState(() => _nudge = true);
+    if (_scroll.hasClients) {
+      _scroll.animateTo(0, duration: Motion.base, curve: Motion.change);
+    }
   }
 
   Future<void> _refresh() async {
@@ -188,6 +216,7 @@ class _CartScreenState extends State<CartScreen> {
                   ? const _PanelEmpty()
                   : _Empty(embedded: widget.embedded))
             : ListView(
+                controller: _scroll,
                 keyboardDismissBehavior:
                     ScrollViewKeyboardDismissBehavior.onDrag,
                 padding: const EdgeInsets.fromLTRB(
@@ -226,7 +255,13 @@ class _CartScreenState extends State<CartScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: Gap.block),
+                  const SizedBox(height: Gap.lg),
+                  _ModeBlock(
+                    mode: _modeFor(preview),
+                    preview: preview,
+                    nudge: _nudge,
+                  ),
+                  const SizedBox(height: Gap.md),
 
                   for (final line in cart.lines)
                     _CartRow(
@@ -286,20 +321,24 @@ class _CartScreenState extends State<CartScreen> {
                     ),
 
                     if (context.watch<AuthState>().isAuthenticated) ...[
-                      const SizedBox(height: Gap.lg),
-                      _PointsBlock(
+                      const SizedBox(height: Gap.md),
+                      PointsRow(
                         value: _points,
                         max: _maxPoints(preview),
                         balance: context.watch<AuthState>().pointsBalance,
                         // Акция и баллы несовместимы. Раньше об этом
                         // сообщал сервер на оформлении — то есть через два
                         // экрана после того, как человек выставил ползунок,
-                        // и вернуться к нему было уже некуда. Гасим блок
-                        // там, где он стоит, и объясняем на месте.
+                        // и вернуться к нему было уже некуда. Гасим строку
+                        // там, где она стоит, и объясняем на месте.
                         blockedByPromo: !preview.pointsAllowed,
-                        onChanged: (v) {
+                        onSlide: (v) {
                           _pointsHaptic.onValue(v);
                           setState(() => _points = v.round());
+                        },
+                        onToggle: (v) {
+                          Haptics.selection();
+                          setState(() => _points = v);
                         },
                       ),
                     ],
@@ -309,25 +348,8 @@ class _CartScreenState extends State<CartScreen> {
                       preview: preview,
                       points: _points,
                       promo: _promoApplied,
+                      delivery: _modeFor(preview) == 'DELIVERY',
                     ),
-                    if (deliveryHint(preview) case final hint?) ...[
-                      const SizedBox(height: Gap.md),
-                      Container(
-                        padding: const EdgeInsets.all(Gap.lg),
-                        decoration: BoxDecoration(
-                          color: c.warnSoft,
-                          borderRadius: R.field,
-                        ),
-                        child: Text(
-                          hint,
-                          style: TextStyle(
-                            fontSize: 13,
-                            height: 1.4,
-                            color: c.warnText,
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
 
                   if (_loading)
@@ -360,56 +382,80 @@ class _CartScreenState extends State<CartScreen> {
                       ? Gap.navBar + Gap.lg
                       : Gap.md,
                 ),
-                child: PressScale(
-                  onTap: () async {
-                    await Navigator.push(
-                      context,
-                      AppRoute(
-                        builder: (_) => CheckoutScreen(
-                          preview: preview,
-                          initialPoints: _points,
-                        ),
-                      ),
-                    );
-                    if (mounted) _refresh();
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.fromLTRB(22, 12, 12, 12),
-                    decoration: BoxDecoration(
-                      color: c.accent,
-                      borderRadius: R.pill,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        AnimatedMoney(
-                          _total(preview),
-                          style: Theme.of(
-                            context,
-                          ).textTheme.titleLarge?.copyWith(color: c.surface),
-                        ),
-                        Container(
+                child: _modeFor(preview) == null
+                    ? PressScale(
+                        onTap: _askMode,
+                        child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 22,
-                            vertical: 15,
+                            vertical: 21,
                           ),
+                          width: double.infinity,
                           decoration: BoxDecoration(
-                            color: c.surface,
+                            color: c.panel,
                             borderRadius: R.pill,
                           ),
                           child: Text(
-                            S.checkout,
+                            S.chooseHowToGet,
+                            textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 14.5,
                               fontWeight: FontWeight.w600,
-                              color: c.onSurface,
+                              color: c.surface,
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                ),
+                      )
+                    : PressScale(
+                        onTap: () async {
+                          await Navigator.push(
+                            context,
+                            AppRoute(
+                              builder: (_) => CheckoutScreen(
+                                preview: preview,
+                                initialPoints: _points,
+                                initialType: _modeFor(preview)!,
+                              ),
+                            ),
+                          );
+                          if (mounted) _refresh();
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.fromLTRB(22, 12, 12, 12),
+                          decoration: BoxDecoration(
+                            color: c.accent,
+                            borderRadius: R.pill,
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              AnimatedMoney(
+                                _total(preview),
+                                style: Theme.of(context).textTheme.titleLarge
+                                    ?.copyWith(color: c.surface),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 22,
+                                  vertical: 15,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: c.surface,
+                                  borderRadius: R.pill,
+                                ),
+                                child: Text(
+                                  S.checkout,
+                                  style: TextStyle(
+                                    fontSize: 14.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: c.onSurface,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
               ),
             ),
     );
@@ -417,8 +463,79 @@ class _CartScreenState extends State<CartScreen> {
 
   int _total(CartPreview p) =>
       p.subtotal +
-      (p.deliveryAvailable ? p.deliveryFee : 0) -
+      (_modeFor(p) == 'DELIVERY' && p.deliveryAvailable ? p.deliveryFee : 0) -
       _points.clamp(0, p.subtotal);
+}
+
+/// «Доставка / Самовывоз» наверху корзины и строка под ним: сколько стоит
+/// доставка, откуда забирать или почему доставки нет.
+class _ModeBlock extends StatelessWidget {
+  final String? mode;
+  final CartPreview? preview;
+  final bool nudge;
+
+  const _ModeBlock({
+    required this.mode,
+    required this.preview,
+    required this.nudge,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final p = preview;
+    final closedHint = p == null ? null : deliveryHint(p);
+
+    final String? note;
+    Color color = c.muted;
+    if (closedHint != null) {
+      note = closedHint;
+      color = c.warnText;
+    } else if (mode == null) {
+      note = S.chooseHowToGetHint;
+      color = nudge ? c.warnText : c.muted;
+    } else if (mode == 'PICKUP') {
+      note = S.pickupHint(S.pickupPointShort);
+    } else if (p != null) {
+      note = p.deliveryFee == 0
+          ? S.deliveryFreeHint
+          : S.deliveryFeeHint(formatTenge(p.deliveryFee));
+    } else {
+      note = null;
+    }
+
+    return AnimatedContainer(
+      duration: Motion.base,
+      padding: EdgeInsets.all(nudge && mode == null ? Gap.md : 0),
+      decoration: BoxDecoration(
+        color: nudge && mode == null ? c.warnSoft : Colors.transparent,
+        borderRadius: R.block,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ModeSwitch(
+            mode: mode ?? '',
+            deliveryAvailable: p?.deliveryAvailable ?? true,
+            onChanged: (m) {
+              Haptics.selection();
+              OrderMode.set(m);
+            },
+          ),
+          if (note != null) ...[
+            const SizedBox(height: Gap.sm),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Gap.xs),
+              child: Text(
+                note,
+                style: TextStyle(fontSize: 12.5, height: 1.4, color: color),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 class _CartRow extends StatelessWidget {
@@ -799,171 +916,155 @@ class _PromoField extends StatelessWidget {
   }
 }
 
-/// Тёмный блок списания баллов с ползунком.
+/// Списание баллов — одной светлой строкой с переключателем.
 ///
-/// Ползунок, а не «списать всё»: у старого приложения была одна кнопка на
-/// весь баланс, и человек не мог оставить баллы на следующий заказ.
-class _PointsBlock extends StatelessWidget {
+/// Раньше это был тёмный блок со слайдером на четверть экрана: он спорил с
+/// кнопкой «Оформить» и выглядел главным на экране (Дом, 28.11.2026).
+/// Почти все списывают всё или ничего, поэтому главное действие —
+/// переключатель на максимум. Ползунок остался для тех, кто хочет оставить
+/// часть баллов на потом: он раскрывается по «Списать часть».
+@visibleForTesting
+class PointsRow extends StatefulWidget {
   final int value;
   final int max;
   final int balance;
-  final ValueChanged<double> onChanged;
+  final ValueChanged<double> onSlide;
+  final ValueChanged<int> onToggle;
 
   /// Сработала акция: списание баллов недоступно
   final bool blockedByPromo;
 
-  const _PointsBlock({
+  const PointsRow({
+    super.key,
     required this.value,
     required this.max,
     required this.balance,
-    required this.onChanged,
+    required this.onSlide,
+    required this.onToggle,
     this.blockedByPromo = false,
   });
 
   @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: c.panel, borderRadius: R.block),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                S.spendPoints,
-                style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w600,
-                  color: c.surface,
-                ),
-              ),
-              Text(
-                blockedByPromo
-                    ? S.unavailableShort
-                    : S.pointsAvailable(balance),
-                style: TextStyle(
-                  fontSize: 12,
-                  color: c.surface.withValues(alpha: 0.6),
-                ),
-              ),
-            ],
-          ),
-          if (blockedByPromo) ...[
-            const SizedBox(height: Gap.sm),
-            Text(
-              S.pointsBlockedByPromo,
-              style: TextStyle(
-                fontSize: 12.5,
-                height: 1.4,
-                color: c.surface.withValues(alpha: 0.7),
-              ),
-            ),
-          ],
-          const SizedBox(height: Gap.md),
-          Opacity(
-            opacity: blockedByPromo ? 0.35 : 1,
-            child: AnimatedMoney(
-              value,
-              style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                fontSize: 28,
-                color: c.benefit,
-              ),
-            ),
-          ),
-          SliderTheme(
-            data: SliderThemeData(
-              trackHeight: 4,
-              activeTrackColor: c.benefit,
-              inactiveTrackColor: c.surface.withValues(alpha: 0.2),
-              thumbColor: c.benefit,
-              overlayShape: SliderComponentShape.noOverlay,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 11),
-            ),
-            child: Slider(
-              value: value.toDouble().clamp(0, max.toDouble()),
-              max: max <= 0 ? 1 : max.toDouble(),
-              divisions: max < 50 ? null : (max / 50).round(),
-              onChanged: (max <= 0 || blockedByPromo) ? null : onChanged,
-            ),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '0',
-                style: TextStyle(
-                  fontSize: 11.5,
-                  color: c.surface.withValues(alpha: 0.55),
-                ),
-              ),
-              Text(
-                '$max',
-                style: TextStyle(
-                  fontSize: 11.5,
-                  color: c.surface.withValues(alpha: 0.55),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: Gap.md),
-          // Кнопки гасим вместе с ползунком. Раньше они оставались
-          // живыми и двигали неактивный ползунок — списание возвращалось
-          // и снова упиралось в отказ сервера при оформлении.
-          Row(
-            children: [
-              Expanded(
-                child: _DarkButton(
-                  label: S.dontSpend,
-                  onTap: blockedByPromo ? null : () => onChanged(0),
-                ),
-              ),
-              const SizedBox(width: Gap.sm),
-              Expanded(
-                child: _DarkButton(
-                  label: S.maximum,
-                  onTap: blockedByPromo || max <= 0
-                      ? null
-                      : () => onChanged(max.toDouble()),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+  State<PointsRow> createState() => _PointsRowState();
 }
 
-class _DarkButton extends StatelessWidget {
-  final String label;
-  final VoidCallback? onTap;
-  const _DarkButton({required this.label, required this.onTap});
+class _PointsRowState extends State<PointsRow> {
+  bool _open = false;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    return PressScale(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 13),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: c.surface.withValues(alpha: 0.12),
-          borderRadius: R.pill,
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w600,
-            // Выключенная кнопка должна выглядеть выключенной, иначе
-            // человек будет жать её и не понимать, почему ничего нет
-            color: c.surface.withValues(alpha: onTap == null ? 0.35 : 1),
+    final w = widget;
+    final can = !w.blockedByPromo && w.max > 0;
+    final on = can && w.value > 0;
+
+    final String subtitle;
+    Color subColor = c.muted;
+    if (w.blockedByPromo) {
+      subtitle = S.pointsBlockedShort;
+    } else if (w.max <= 0) {
+      subtitle = S.pointsNoneYet;
+    } else if (on) {
+      subtitle = S.pointsWillSpend(formatTenge(w.value));
+      subColor = c.accent;
+    } else {
+      subtitle = S.pointsCanSpend(formatTenge(w.max));
+    }
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(Gap.lg, Gap.md, Gap.md, Gap.md),
+      decoration: BoxDecoration(color: c.fillSoft, borderRadius: R.field),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      S.pointsBalance(
+                        formatTenge(w.balance, withCurrency: false),
+                      ),
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: can ? c.ink : c.muted,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        height: 1.3,
+                        color: subColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (can && w.max >= 100)
+                PressScale(
+                  onTap: () => setState(() => _open = !_open),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: Gap.sm,
+                      vertical: Gap.sm,
+                    ),
+                    child: Text(
+                      _open ? S.pointsHidePart : S.pointsChoosePart,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: c.accent,
+                      ),
+                    ),
+                  ),
+                ),
+              Switch.adaptive(
+                value: on,
+                activeTrackColor: c.benefit,
+                onChanged: can ? (v) => w.onToggle(v ? w.max : 0) : null,
+              ),
+            ],
           ),
-        ),
+          if (_open && can) ...[
+            SliderTheme(
+              data: SliderThemeData(
+                trackHeight: 3,
+                activeTrackColor: c.benefit,
+                inactiveTrackColor: c.border,
+                thumbColor: c.benefit,
+                overlayShape: SliderComponentShape.noOverlay,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.only(top: Gap.md, right: Gap.sm),
+                child: Slider(
+                  value: w.value.toDouble().clamp(0, w.max.toDouble()),
+                  max: w.max.toDouble(),
+                  divisions: w.max < 50 ? null : (w.max / 50).round(),
+                  onChanged: w.onSlide,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: Gap.xs, right: Gap.sm),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('0', style: TextStyle(fontSize: 11.5, color: c.muted)),
+                  Text(
+                    formatTenge(w.max, withCurrency: false),
+                    style: TextStyle(fontSize: 11.5, color: c.muted),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -974,7 +1075,17 @@ class _Totals extends StatelessWidget {
   final int points;
   final String? promo;
 
-  const _Totals({required this.preview, required this.points, this.promo});
+  /// Выбрана доставка. Иначе строки доставки нет: на самовывозе она не
+  /// нужна, а пока способ не выбран — сумма без неё (почему, сказано под
+  /// переключателем наверху).
+  final bool delivery;
+
+  const _Totals({
+    required this.preview,
+    required this.points,
+    required this.delivery,
+    this.promo,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -989,21 +1100,22 @@ class _Totals extends StatelessWidget {
     return Column(
       children: [
         _row(S.goods, formatTenge(preview.subtotal), line(), line()),
-        _row(
-          S.delivery,
-          // Доставить такую корзину нельзя — значит и цены доставки нет.
-          // Раньше тут стояли 600 ₸ и итог с ними, хотя оформить можно
-          // было только самовывоз, и человек не понимал почему.
-          _belowMin(preview)
-              ? S.deliveryFrom(formatTenge(preview.minOrder))
-              : !preview.deliveryAvailable
-              ? S.deliveryOff
-              : preview.deliveryFee == 0
-              ? S.free
-              : formatTenge(preview.deliveryFee),
-          line(),
-          line(),
-        ),
+        if (delivery)
+          _row(
+            S.delivery,
+            // Доставить такую корзину нельзя — значит и цены доставки нет.
+            // Раньше тут стояли 600 ₸ и итог с ними, хотя оформить можно
+            // было только самовывоз, и человек не понимал почему.
+            _belowMin(preview)
+                ? S.deliveryFrom(formatTenge(preview.minOrder))
+                : !preview.deliveryAvailable
+                ? S.deliveryOff
+                : preview.deliveryFee == 0
+                ? S.free
+                : formatTenge(preview.deliveryFee),
+            line(),
+            line(),
+          ),
         if (preview.promoDiscount > 0)
           _row(
             S.promoGift,

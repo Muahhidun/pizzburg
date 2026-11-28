@@ -176,7 +176,13 @@ class _MenuScreenState extends State<MenuScreen> {
   List<MenuCategory> _categories = [];
   String? _activeCategory;
   bool _programmaticScroll = false;
-  String _mode = 'DELIVERY';
+
+  /// Доставка или самовывоз — выбирают в корзине (OrderMode), шапка
+  /// только показывает: «Доставим на …» или «Заберёте из …». Пока не
+  /// выбирали — адрес доставки, как раньше.
+  String get _mode =>
+      _deliveryOff ? 'PICKUP' : (OrderMode.value.value ?? 'DELIVERY');
+  bool _deliveryOff = false;
   int _attempt = 1;
   MenuResponse? _menu;
   final _search = TextEditingController();
@@ -220,6 +226,10 @@ class _MenuScreenState extends State<MenuScreen> {
   DateTime? _loadedAt;
   late final AppLifecycleListener _lifecycle;
 
+  void _onOrderMode() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
@@ -231,6 +241,7 @@ class _MenuScreenState extends State<MenuScreen> {
     _listController.addListener(_onScroll);
     LastPlacedOrder.revision.addListener(_refreshActiveOrder);
     SelectedAddress.revision.addListener(_reloadSelectedAddress);
+    OrderMode.value.addListener(_onOrderMode);
     _reloadSelectedAddress();
     // Вопрос о нехватке появляется, пока человек уже на главном, и ждать
     // его пять минут молча нельзя — карточка должна успеть измениться.
@@ -297,6 +308,7 @@ class _MenuScreenState extends State<MenuScreen> {
     _lifecycle.dispose();
     LastPlacedOrder.revision.removeListener(_refreshActiveOrder);
     SelectedAddress.revision.removeListener(_reloadSelectedAddress);
+    OrderMode.value.removeListener(_onOrderMode);
     _activeOrderTimer?.cancel();
     _overscroll.dispose();
     _showTop.dispose();
@@ -377,7 +389,7 @@ class _MenuScreenState extends State<MenuScreen> {
 
     _menu = menu;
     _activeOrder = active;
-    if (!availability.deliveryAvailable) _mode = 'PICKUP';
+    _deliveryOff = !availability.deliveryAvailable;
     _loadedAt = DateTime.now();
     return _CatalogData(
       menu: menu,
@@ -743,8 +755,6 @@ class _MenuScreenState extends State<MenuScreen> {
                         etaLabel: _eta(data.availability),
                         mode: _mode,
                         availability: data.availability,
-                        onModeChanged: (m) => setState(() => _mode = m),
-                        deliveryAvailable: data.availability.deliveryAvailable,
                         compact: desktop,
                         activeOrderBlock: _activeOrder == null
                             ? null

@@ -45,7 +45,13 @@ export interface PreorderSettings {
   displayPaddingMinutes: number;
   /** За сколько минут до закрытия убирать «Как можно быстрее» */
   closeAsapBeforeMinutes: number;
-  /** На сколько дней вперёд можно заказать */
+  /**
+   * На сколько календарных дней вперёд можно заказать: 0 — только
+   * сегодня, 1 — сегодня и завтра. Считаем днями по часам заведения, а не
+   * сутками от «сейчас»: «на завтра» — это весь завтрашний день, а не
+   * «до этого же часа завтра» (Дом, 28.11.2026: предзаказ только на
+   * день вперёд).
+   */
   maxDaysAhead: number;
 }
 
@@ -158,7 +164,7 @@ const DEFAULT_PREORDER: PreorderSettings = {
   slotStepMinutes: 15,
   displayPaddingMinutes: 15,
   closeAsapBeforeMinutes: 3,
-  maxDaysAhead: 7,
+  maxDaysAhead: 1,
 };
 
 const DEFAULT_PAYMENTS: PaymentSettings = {
@@ -461,12 +467,11 @@ export class AvailabilityService {
       );
     }
 
-    const maxAt = new Date(
-      now.getTime() + state.preorder.maxDaysAhead * 24 * 60 * 60_000,
-    );
-    if (scheduledAt > maxAt) {
+    if (!this.withinDays(state, scheduledAt, now)) {
       throw new BadRequestException(
-        `Предзаказ доступен максимум на ${state.preorder.maxDaysAhead} дней вперёд`,
+        state.preorder.maxDaysAhead >= 1
+          ? 'Предзаказ можно оформить только на сегодня или завтра'
+          : 'Предзаказ можно оформить только на сегодня',
       );
     }
 
@@ -481,14 +486,36 @@ export class AvailabilityService {
     return state;
   }
 
+  /** Местная дата «ГГГГ-ММ-ДД» плюс `days` календарных дней */
+  static addDays(ymd: string, days: number): string {
+    const [y, m, d] = ymd.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+  }
+
+  /** Местная дата заведения для момента `at` */
+  localDate(timezone: string, at: Date): string {
+    return this.localParts(at, timezone).ymd;
+  }
+
+  /** `at` не дальше последнего разрешённого дня предзаказа */
+  private withinDays(state: AvailabilityState, at: Date, now: Date): boolean {
+    const today = this.localDate(state.timezone, now);
+    const last = AvailabilityService.addDays(today, Math.max(state.preorder.maxDaysAhead, 0));
+    return this.localDate(state.timezone, at) <= last;
+  }
+
   /**
-   * Слоты предзаказа на ближайшие дни — для выбора времени в приложении.
+   * Слоты предзаказа — для выбора времени в приложении.
+   *
+   * `date` — местный день слота: приложение делит слоты на «Сегодня» и
+   * «Завтра» по нему, а не по часам телефона, у которого может стоять
+   * другой пояс.
    */
   slots(
     tenantSettings: unknown,
     type: 'DELIVERY' | 'PICKUP',
     now = new Date(),
-  ): { at: string; label: string }[] {
+  ): { at: string; label: string; date: string }[] {
     const state = this.getState(tenantSettings, now);
     if (!state.preorder.enabled) return [];
 
@@ -496,17 +523,18 @@ export class AvailabilityService {
     const step = state.preorder.slotStepMinutes;
     const padding = state.preorder.displayPaddingMinutes;
 
-    const result: { at: string; label: string }[] = [];
+    const result: { at: string; label: string; date: string }[] = [];
     const start = new Date(now.getTime() + lead * 60_000);
     // округляем вверх до шага слота
     start.setSeconds(0, 0);
     const startMs = Math.ceil(start.getTime() / (step * 60_000)) * step * 60_000;
 
-    const horizonMs =
-      now.getTime() + state.preorder.maxDaysAhead * 24 * 60 * 60_000;
+    // Двое суток по 15 минут — 192 слота; потолок — от зацикливания
+    const horizonMs = now.getTime() + (Math.max(state.preorder.maxDaysAhead, 0) + 1) * 24 * 60 * 60_000;
 
-    for (let ms = startMs; ms <= horizonMs && result.length < 96; ms += step * 60_000) {
+    for (let ms = startMs; ms <= horizonMs && result.length < 400; ms += step * 60_000) {
       const at = new Date(ms);
+      if (!this.withinDays(state, at, now)) break;
       if (!this.getState(tenantSettings, at).isOpenNow) continue;
       const to = new Date(ms + padding * 60_000);
       const fmt = new Intl.DateTimeFormat('ru-RU', {
@@ -518,6 +546,7 @@ export class AvailabilityService {
       result.push({
         at: at.toISOString(),
         label: `${fmt.format(at)}–${fmt.format(to)}`,
+        date: this.localDate(state.timezone, at),
       });
     }
     return result;

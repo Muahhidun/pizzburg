@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pizzburg/services/app_config.dart';
 import 'package:pizzburg/services/store_review.dart';
+import 'package:pizzburg/widgets/update_prompt.dart';
 
 void main() {
   group('минимальная версия', () {
@@ -23,6 +24,22 @@ void main() {
       // Пропустил несколько порогов — спрашиваем один раз, по последнему
       expect(StoreReview.nextThreshold(20, 0), 15);
       expect(StoreReview.nextThreshold(20, 15), isNull);
+    });
+  });
+
+  group('мягкое напоминание обновиться', () {
+    final now = DateTime(2026, 11, 28, 12);
+    int ago(Duration d) => now.subtract(d).millisecondsSinceEpoch;
+    test('первый раз — показываем', () {
+      expect(UpdatePrompt.due(null, now), isTrue);
+    });
+    test('после показа молчим два дня', () {
+      expect(UpdatePrompt.due(ago(const Duration(hours: 5)), now), isFalse);
+      expect(
+        UpdatePrompt.due(ago(const Duration(days: 1, hours: 23)), now),
+        isFalse,
+      );
+      expect(UpdatePrompt.due(ago(const Duration(days: 2)), now), isTrue);
     });
   });
 }

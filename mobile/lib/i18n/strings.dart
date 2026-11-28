@@ -324,6 +324,116 @@ class S {
   static String get promoGift => t('Подарок по акции', 'Акция бойынша сыйлық');
   static String get points => t('Баллы', 'Ұпайлар');
 
+  // ── Корзина: способ получения и баллы (28.11.2026) ──
+  static String get chooseHowToGet =>
+      t('Выберите: доставка или самовывоз', 'Таңдаңыз: жеткізу не өзі алу');
+  static String get chooseHowToGetHint => t(
+    'Сначала выберите, как получить заказ — от этого зависит сумма',
+    'Алдымен тапсырысты қалай алатыныңызды таңдаңыз — сома соған байланысты',
+  );
+  static String deliveryFeeHint(String fee) =>
+      t('+ $fee доставка', '+ $fee жеткізу');
+  static String get deliveryFreeHint =>
+      t('Доставка бесплатно', 'Жеткізу тегін');
+  static String pickupHint(String point) =>
+      t('Заберёте сами: $point', 'Өзіңіз аласыз: $point');
+  static String pointsBalance(String balance) =>
+      t('Баллы: $balance', 'Ұпайлар: $balance');
+  static String pointsWillSpend(String sum) =>
+      t('спишем $sum', '$sum жұмсаймыз');
+  static String pointsCanSpend(String sum) =>
+      t('можно списать $sum', '$sum жұмсауға болады');
+  static String get pointsNoneYet => t(
+    'Баллов пока нет — начислим за этот заказ',
+    'Әзірге ұпай жоқ — осы тапсырыс үшін есептейміз',
+  );
+  static String get pointsChoosePart =>
+      t('Списать часть', 'Бір бөлігін жұмсау');
+  static String get pointsHidePart => t('Свернуть', 'Жасыру');
+  static String get pointsBlockedShort =>
+      t('Не суммируются с акцией в заказе', 'Тапсырыстағы акциямен қосылмайды');
+
+  // ── Оформление: когда (предзаказ только на сегодня и завтра) ──
+  static String get when => t('Когда', 'Қашан');
+  static String get asapNow => t('Как можно скорее', 'Мүмкіндігінше тез');
+  static String get preorder => t('Предзаказ', 'Алдын ала тапсырыс');
+  static String get todayWord => t('сегодня', 'бүгін');
+  static String get tomorrowWord => t('завтра', 'ертең');
+  static String todayChip(String date) => t('Сегодня, $date', 'Бүгін, $date');
+  static String tomorrowChip(String date) => t('Завтра, $date', 'Ертең, $date');
+  static String get chooseDay => t('Выберите день', 'Күнді таңдаңыз');
+  static String get chooseTime => t('Выберите время', 'Уақытты таңдаңыз');
+  static String get preorderTime => t('Время', 'Уақыт');
+  static String get preorderMissing => t(
+    'Выберите день и время предзаказа или «Как можно скорее»',
+    'Алдын ала тапсырыстың күні мен уақытын немесе «Мүмкіндігінше тез» таңдаңыз',
+  );
+  static String get closedPreorderOnly => t(
+    'Сейчас закрыты — выберите, к какому времени приготовить',
+    'Қазір жабықпыз — қай уақытқа дайындайтынымызды таңдаңыз',
+  );
+  static String get noSlotsLeft => t(
+    'На сегодня и завтра свободного времени уже нет',
+    'Бүгін мен ертеңге бос уақыт қалмады',
+  );
+  static String get noSlotsThisDay =>
+      t('На этот день времени уже нет', 'Бұл күнге уақыт қалмады');
+
+  /// Текст на кнопке: «На завтра 12:00»
+  static String placeOrderFor(String day, String time) =>
+      t('На $day $time', '${day[0].toUpperCase()}${day.substring(1)} $time');
+
+  /// Строка над кнопкой: «Предзаказ на завтра, вс 29 ноября, 12:00–12:15»
+  static String preorderSummary(String day, String date, String slot) => t(
+    'Предзаказ на $day, $date, $slot',
+    'Алдын ала тапсырыс: $day, $date, $slot',
+  );
+  static String switchTo(String mode) => t(
+    mode == 'PICKUP' ? 'Сменить на самовывоз' : 'Сменить на доставку',
+    mode == 'PICKUP' ? 'Өзі алып кетуге ауысу' : 'Жеткізуге ауысу',
+  );
+
+  /// «сб 28 ноября» по местной дате «ГГГГ-ММ-ДД»
+  static String shortDate(String ymd) {
+    final p = ymd.split('-').map(int.tryParse).toList();
+    if (p.length != 3 || p.contains(null)) return ymd;
+    final d = DateTime.utc(p[0]!, p[1]!, p[2]!);
+    const ruDays = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+    const kkDays = ['дс', 'сс', 'ср', 'бс', 'жм', 'сб', 'жс'];
+    const ruMonths = [
+      'января',
+      'февраля',
+      'марта',
+      'апреля',
+      'мая',
+      'июня',
+      'июля',
+      'августа',
+      'сентября',
+      'октября',
+      'ноября',
+      'декабря',
+    ];
+    const kkMonths = [
+      'қаңтар',
+      'ақпан',
+      'наурыз',
+      'сәуір',
+      'мамыр',
+      'маусым',
+      'шілде',
+      'тамыз',
+      'қыркүйек',
+      'қазан',
+      'қараша',
+      'желтоқсан',
+    ];
+    return t(
+      '${ruDays[d.weekday - 1]} ${d.day} ${ruMonths[d.month - 1]}',
+      '${kkDays[d.weekday - 1]} ${d.day} ${kkMonths[d.month - 1]}',
+    );
+  }
+
   // ── Оформление ──
   static String get checkoutTitle => t('Оформление', 'Рәсімдеу');
   static String get whereToBring => t('Куда привезти', 'Қайда әкелеміз');
@@ -505,6 +615,13 @@ class S {
     'PizzBurg-тың жаңа нұсқасы шықты. Бұл нұсқа енді тапсырыс қабылдамайды — жаңарту бір минут алады, себет пен ұпайлар сақталады.',
   );
   static String get updateButton => t('Обновить', 'Жаңарту');
+  static String get updateAvailableTitle =>
+      t('Вышла новая версия', 'Жаңа нұсқа шықты');
+  static String get updateAvailableBody => t(
+    'Обновите PizzBurg — в новой версии удобнее оформлять заказ. Заказывать можно и в этой версии.',
+    'PizzBurg-ті жаңартыңыз — жаңа нұсқада тапсырыс беру ыңғайлырақ. Бұл нұсқада да тапсырыс бере аласыз.',
+  );
+  static String get later => t('Позже', 'Кейінірек');
 
   // ─── Доставка недоступна: почему ───────────────────────────────
   static String deliveryFrom(String sum) => t('от $sum', '$sum бастап');

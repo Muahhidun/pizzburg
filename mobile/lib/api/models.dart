@@ -398,10 +398,57 @@ class PreorderSlot {
   final DateTime at;
   final String label;
 
-  const PreorderSlot({required this.at, required this.label});
+  /// Местный день заведения «ГГГГ-ММ-ДД»; по нему слоты делятся на
+  /// «Сегодня» и «Завтра»
+  final String date;
 
-  factory PreorderSlot.fromJson(Map<String, dynamic> json) =>
-      PreorderSlot(at: DateTime.parse(json['at']), label: json['label'] ?? '');
+  const PreorderSlot({required this.at, required this.label, this.date = ''});
+
+  factory PreorderSlot.fromJson(Map<String, dynamic> json) => PreorderSlot(
+    at: DateTime.parse(json['at']),
+    label: json['label'] ?? '',
+    date: json['date'] ?? '',
+  );
+}
+
+/// Слоты предзаказа и «сегодня» по часам заведения
+class PreorderSlots {
+  final String today;
+  final List<PreorderSlot> slots;
+  const PreorderSlots({required this.today, required this.slots});
+
+  factory PreorderSlots.fromJson(Map<String, dynamic> json) {
+    final slots = ((json['slots'] ?? []) as List)
+        .map((s) => PreorderSlot.fromJson(s as Map<String, dynamic>))
+        .toList();
+    // Старый сервер не присылал ни `today`, ни дат слотов: день берём по
+    // часам телефона — в Казахстане один пояс
+    String ymd(DateTime d) =>
+        '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    return PreorderSlots(
+      today: (json['today'] as String?) ?? ymd(DateTime.now()),
+      slots: [
+        for (final s in slots)
+          s.date.isNotEmpty
+              ? s
+              : PreorderSlot(
+                  at: s.at,
+                  label: s.label,
+                  date: ymd(s.at.toLocal()),
+                ),
+      ],
+    );
+  }
+
+  /// День после `today`
+  String get tomorrow {
+    final p = today.split('-').map(int.parse).toList();
+    final d = DateTime.utc(p[0], p[1], p[2] + 1);
+    return '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  }
+
+  List<PreorderSlot> on(String day) =>
+      slots.where((s) => s.date == day).toList();
 }
 
 class CartGift {

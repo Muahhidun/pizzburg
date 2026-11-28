@@ -90,8 +90,17 @@ export class OrdersController {
     @Param('tenantSlug') tenantSlug: string,
     @Body() dto: CreateOrderDto,
     @Req() req: any,
+    @Headers('x-client') client?: string,
+    @Headers('x-app-version') appVersion?: string,
+    @Headers('x-app-platform') appPlatform?: string,
+    @Headers('accept-language') lang?: string,
   ) {
-    return this.orders.createOrder(tenantSlug, dto, req.customer);
+    return this.orders.createOrder(tenantSlug, dto, req.customer, {
+      web: client === 'web',
+      version: appVersion,
+      platform: appPlatform,
+      lang,
+    });
   }
 
   /**

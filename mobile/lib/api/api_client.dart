@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:package_info_plus/package_info_plus.dart';
 import 'models.dart';
 import '../i18n/strings.dart';
 import '../i18n/lang.dart';
@@ -38,7 +39,26 @@ class ApiClient {
     if (token != null) 'Authorization': 'Bearer $token',
     // Сайт помечает себя: подарок за вход даётся только в приложении
     if (kIsWeb) 'X-Client': 'web',
+    // Версия и платформа: сервер отказывает в заказе устаревшим сборкам
+    // и просит обновиться (у 1.0.0 своей проверки нет). Без заголовка
+    // сервер считает приложение самым старым.
+    if (!kIsWeb && appVersion != null) ...{
+      'X-App-Version': appVersion!,
+      'X-App-Platform': defaultTargetPlatform == TargetPlatform.iOS
+          ? 'ios'
+          : 'android',
+    },
   };
+
+  /// Версия сборки (1.0.2), читается один раз при запуске
+  static String? appVersion;
+
+  static Future<void> loadAppVersion() async {
+    if (kIsWeb) return;
+    try {
+      appVersion = (await PackageInfo.fromPlatform()).version;
+    } catch (_) {}
+  }
 
   /// Одна ссылка «скачать приложение»: сама ведёт в App Store или Google
   /// Play, на компьютере показывает страницу с обеими кнопками.
@@ -125,15 +145,12 @@ class ApiClient {
   }
 
   /// Слоты предзаказа для выбранного способа получения
-  Future<List<PreorderSlot>> preorderSlots(String type) async {
+  Future<PreorderSlots> preorderSlots(String type) async {
     final res = await http.get(
       Uri.parse('$baseUrl/menu/$tenant/preorder-slots?type=$type'),
     );
     _ensureOk(res);
-    final data = jsonDecode(utf8.decode(res.bodyBytes));
-    return ((data['slots'] ?? []) as List)
-        .map((s) => PreorderSlot.fromJson(s))
-        .toList();
+    return PreorderSlots.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
   }
 
   /// Отмена заказа клиентом в отведённое окно.

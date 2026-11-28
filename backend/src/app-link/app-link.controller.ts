@@ -102,6 +102,9 @@ export function appConfigFrom(settings: unknown, now = new Date()) {
   const links = appLinksFrom(settings);
   return {
     minVersion: { ios: version(update.minIos), android: version(update.minAndroid) },
+    // Мягкое напоминание (с 1.0.2): ниже этой версии приложение раз в пару
+    // дней предлагает обновиться, но не закрывается
+    recommendedVersion: { ios: version(update.recIos), android: version(update.recAndroid) },
     store: { ios: links.ios ?? null, android: links.android ?? null },
     unpaidCancelMinutes: Math.round(UNPAID_CANCEL_AFTER_MS / 60_000),
     welcomeBonus: welcomeBonusFrom(settings, now),

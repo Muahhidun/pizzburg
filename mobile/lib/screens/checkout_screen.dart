@@ -9,7 +9,6 @@ import '../services/analytics.dart';
 import '../state/auth.dart';
 import '../state/cart.dart';
 import 'cart_screen.dart' show deliveryHint;
-import 'catalog_parts.dart';
 import 'login_screen.dart';
 import '../widgets/address_picker.dart';
 import '../theme/app_theme.dart';
@@ -35,10 +34,14 @@ class CheckoutScreen extends StatefulWidget {
   /// Сколько баллов клиент выбрал в корзине — оформление их не переспрашивает
   final int initialPoints;
 
+  /// Доставка или самовывоз — выбрано в корзине
+  final String initialType;
+
   const CheckoutScreen({
     super.key,
     required this.preview,
     this.initialPoints = 0,
+    this.initialType = 'DELIVERY',
   });
 
   @override
@@ -69,8 +72,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final bool _skipPromotions = false;
   String? _error;
 
+  /// «Когда» (Дом, 28.11.2026): по умолчанию «Как можно скорее»;
+  /// «Предзаказ» — только сегодня или завтра, и день человек выбирает
+  /// сам: сами мы день не подставляем, чтобы «завтра» не случилось
+  /// нечаянно. Кнопка внизу повторяет выбор словами.
+  bool _preorder = false;
+  String? _day;
   PreorderSlot? _slot;
-  List<PreorderSlot> _slots = [];
+  PreorderSlots? _slots;
+
+  /// Нажали «Заказать», не выбрав день и время предзаказа
+  bool _whenError = false;
 
   static const _changeOptions = [2000, 5000, 10000, 20000];
 
@@ -85,7 +97,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       'subtotal': widget.preview.subtotal,
       'gifts': widget.preview.gifts.length,
     });
-    if (!widget.preview.deliveryAvailable) _type = 'PICKUP';
+    _type = widget.preview.deliveryAvailable ? widget.initialType : 'PICKUP';
+    // Сейчас закрыто — «как можно скорее» нет, остаётся только предзаказ
+    if (!_availability.asapAvailable) _preorder = true;
     _payment = _firstEnabledPayment();
     _points = widget.initialPoints;
     _loadSlots();
@@ -127,13 +141,61 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (!mounted) return;
       setState(() {
         _slots = slots;
-        // Когда «побыстрее» недоступно, сразу подставляем ближайший слот,
-        // чтобы клиент не упёрся в ошибку сервера в самом конце.
-        if (!_availability.asapAvailable && _slot == null && slots.isNotEmpty) {
-          _slot = slots.first;
+        // Время у доставки и самовывоза разное — выбранное могло пропасть
+        if (_slot != null && !slots.slots.any((s) => s.at == _slot!.at)) {
+          _slot = null;
         }
+        if (_day != null && slots.on(_day!).isEmpty) _day = null;
+        _pickOnlyDay();
       });
     } catch (_) {}
+  }
+
+  /// Дни, на которые есть время: сегодня и завтра
+  List<String> get _days => [
+    if (_slots case final s?) ...[
+      if (s.on(s.today).isNotEmpty) s.today,
+      if (s.on(s.tomorrow).isNotEmpty) s.tomorrow,
+    ],
+  ];
+
+  /// Выбирать не из чего — день один (вечером сегодня уже поздно): тогда
+  /// подставляем его, подпись всё равно говорит «Завтра, вс 29 ноября».
+  void _pickOnlyDay() {
+    if (_preorder && _day == null && _days.length == 1) _day = _days.first;
+  }
+
+  /// «сегодня» / «завтра» для выбранного слота
+  String _dayWord(String day) =>
+      day == _slots?.today ? S.todayWord : S.tomorrowWord;
+
+  Future<void> _pickTime() async {
+    final day = _day;
+    final slots = _slots;
+    if (day == null || slots == null) return;
+    final list = slots.on(day);
+    final picked = await showModalBottomSheet<PreorderSlot>(
+      context: context,
+      backgroundColor: context.colors.page,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => _TimeSheet(
+        title: day == slots.today
+            ? S.todayChip(S.shortDate(day))
+            : S.tomorrowChip(S.shortDate(day)),
+        slots: list,
+        selected: _slot,
+      ),
+    );
+    if (picked != null && mounted) {
+      Haptics.selection();
+      setState(() {
+        _slot = picked;
+        _whenError = false;
+      });
+    }
   }
 
   /// `keepAddress` — не трогать то, что человек набрал руками.
@@ -208,6 +270,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       await Haptics.warning();
       return;
     }
+    // Предзаказ без дня или времени не отправляем: молча заказать «на
+    // ближайшее» вместо выбранного дня — та самая ошибка, от которой
+    // защищаемся
+    if (_preorder && _slot == null) {
+      await Haptics.warning();
+      setState(() => _whenError = true);
+      return;
+    }
     // Сначала проверяем уже заполненную форму. Иначе гость с опечаткой в
     // адресе или телефоне попадал на вход, а ошибку видел только после SMS.
     if (!_formKey.currentState!.validate()) {
@@ -244,7 +314,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         'phone': _phone.text.trim(),
         if (_name.text.trim().isNotEmpty) 'name': _name.text.trim(),
         'paymentMethod': _payment,
-        if (_slot != null) 'scheduledAt': _slot!.at.toUtc().toIso8601String(),
+        if (_preorder && _slot != null)
+          'scheduledAt': _slot!.at.toUtc().toIso8601String(),
         if (_payment == 'CASH' && (_changeFrom ?? 0) > 0)
           'changeFrom': _changeFrom,
         if (_points > 0) 'pointsToSpend': _points,
@@ -377,21 +448,53 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
               // ─── Способ получения ────────────────────────────────
               //
-              // Тот же выбор есть в шапке каталога, и это осознанный
-              // повтор. Человек кладёт товары, заходит в корзину и только
-              // на адресе замечает, что стоит доставка, — без выбора
-              // здесь ему пришлось бы выйти назад и начать заново.
-              ModeSwitch(
-                mode: _type,
-                deliveryAvailable: widget.preview.deliveryAvailable,
-                onChanged: (m) {
-                  if (m == _type) return;
-                  Haptics.selection();
-                  setState(() => _type = m);
-                  // Слоты предзаказа у доставки и самовывоза разные:
-                  // готовят по-разному, и время не совпадает.
-                  _loadSlots();
-                },
+              // Выбран в корзине: второй такой же переключатель здесь
+              // путал бы. Показываем выбор строкой и даём сменить — если
+              // человек передумал на адресе, назад идти не нужно.
+              Row(
+                children: [
+                  Icon(
+                    delivery
+                        ? Icons.delivery_dining_outlined
+                        : Icons.storefront_outlined,
+                    size: 20,
+                    color: c.ink,
+                  ),
+                  const SizedBox(width: Gap.sm),
+                  Text(
+                    delivery ? S.delivery : S.pickup,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (!delivery && !widget.preview.deliveryAvailable)
+                    const SizedBox.shrink()
+                  else
+                    PressScale(
+                      onTap: () {
+                        final m = delivery ? 'PICKUP' : 'DELIVERY';
+                        Haptics.selection();
+                        setState(() => _type = m);
+                        OrderMode.set(m);
+                        // Слоты предзаказа у доставки и самовывоза разные:
+                        // готовят по-разному, и время не совпадает.
+                        _loadSlots();
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: Gap.sm),
+                        child: Text(
+                          S.switchTo(delivery ? 'PICKUP' : 'DELIVERY'),
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: c.accent,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
               // Серая «Доставка» без объяснения выглядела как поломка.
               // Говорим прямо: не хватает суммы или доставка закрыта.
@@ -567,28 +670,124 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 },
               ),
 
-              // ─── Время ───────────────────────────────────────────
+              // ─── Когда ───────────────────────────────────────────
               const SizedBox(height: Gap.blockWide),
-              _Label(S.time),
+              _Label(S.when),
               const SizedBox(height: Gap.md),
+              if (!_availability.asapAvailable) ...[
+                Text(
+                  S.closedPreorderOnly,
+                  style: TextStyle(fontSize: 13, height: 1.4, color: c.muted),
+                ),
+                const SizedBox(height: Gap.md),
+              ],
               Wrap(
                 spacing: 7,
                 runSpacing: 7,
                 children: [
                   if (_availability.asapAvailable)
                     _Chip(
-                      label: S.asap,
-                      selected: _slot == null,
-                      onTap: () => setState(() => _slot = null),
+                      label: S.asapNow,
+                      selected: !_preorder,
+                      onTap: () => setState(() {
+                        _preorder = false;
+                        _whenError = false;
+                      }),
                     ),
-                  for (final slot in _slots.take(4))
-                    _Chip(
-                      label: slot.label,
-                      selected: _slot?.at == slot.at,
-                      onTap: () => setState(() => _slot = slot),
-                    ),
+                  _Chip(
+                    label: S.preorder,
+                    selected: _preorder,
+                    onTap: () => setState(() {
+                      _preorder = true;
+                      _pickOnlyDay();
+                    }),
+                  ),
                 ],
               ),
+              if (_preorder) ...[
+                const SizedBox(height: Gap.md),
+                if (_slots != null && _days.isEmpty)
+                  Text(
+                    S.noSlotsLeft,
+                    style: TextStyle(fontSize: 13, color: c.warnText),
+                  )
+                else ...[
+                  Wrap(
+                    spacing: 7,
+                    runSpacing: 7,
+                    children: [
+                      for (final day in _days)
+                        _Chip(
+                          label: day == _slots!.today
+                              ? S.todayChip(S.shortDate(day))
+                              : S.tomorrowChip(S.shortDate(day)),
+                          selected: _day == day,
+                          onTap: () => setState(() {
+                            if (_day != day) _slot = null;
+                            _day = day;
+                          }),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: Gap.md),
+                  if (_day == null)
+                    Text(
+                      S.chooseDay,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: _whenError ? c.accent : c.muted,
+                      ),
+                    )
+                  else
+                    PressScale(
+                      onTap: _pickTime,
+                      scale: 0.98,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: Gap.lg,
+                          vertical: 14,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: R.field,
+                          border: Border.all(
+                            color: _whenError && _slot == null
+                                ? c.accent
+                                : c.border,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.schedule, size: 18, color: c.ink),
+                            const SizedBox(width: Gap.sm),
+                            Expanded(
+                              child: Text(
+                                _slot?.label ?? S.chooseTime,
+                                style: TextStyle(
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: _slot == null ? c.muted : c.ink,
+                                ),
+                              ),
+                            ),
+                            Icon(
+                              Icons.keyboard_arrow_down,
+                              size: 20,
+                              color: c.ink,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+                if (_whenError && _slot == null) ...[
+                  const SizedBox(height: Gap.sm),
+                  Text(
+                    S.preorderMissing,
+                    style: TextStyle(fontSize: 13, color: c.accent),
+                  ),
+                ],
+              ],
 
               // ─── Оплата ──────────────────────────────────────────
               const SizedBox(height: Gap.blockWide),
@@ -755,44 +954,177 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             Gap.screen,
             Gap.md + MediaQuery.viewInsetsOf(context).bottom,
           ),
-          child: PressScale(
-            onTap: _sending ? null : _submit,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(22, 12, 12, 12),
-              decoration: BoxDecoration(color: c.accent, borderRadius: R.pill),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  AnimatedMoney(
-                    _total,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.titleLarge?.copyWith(color: c.surface),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Предзаказ — повторяем день и время прямо над кнопкой:
+              // перепутать «сегодня» и «завтра» и не заметить нельзя
+              if (_preorder && _slot != null && _day != null)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: Gap.sm),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Gap.lg,
+                    vertical: 10,
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 22,
-                      vertical: 15,
-                    ),
-                    decoration: BoxDecoration(
-                      // Единственная маджентовая кнопка в приложении:
-                      // это финал пути, а не очередная отправка формы.
-                      color: _sending ? c.muted : c.benefit,
-                      borderRadius: R.pill,
-                    ),
-                    child: Text(
-                      _sending ? S.sending : S.placeOrder,
-                      style: TextStyle(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w600,
-                        color: c.onBenefit,
+                  decoration: BoxDecoration(
+                    color: c.warnSoft,
+                    borderRadius: R.field,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.event, size: 16, color: c.warnText),
+                      const SizedBox(width: Gap.sm),
+                      Expanded(
+                        child: Text(
+                          S.preorderSummary(
+                            _dayWord(_day!),
+                            S.shortDate(_day!),
+                            _slot!.label,
+                          ),
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: c.warnText,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              PressScale(
+                onTap: _sending ? null : _submit,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(22, 12, 12, 12),
+                  decoration: BoxDecoration(
+                    color: c.accent,
+                    borderRadius: R.pill,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      AnimatedMoney(
+                        _total,
+                        style: Theme.of(
+                          context,
+                        ).textTheme.titleLarge?.copyWith(color: c.surface),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 22,
+                          vertical: 15,
+                        ),
+                        decoration: BoxDecoration(
+                          // Единственная маджентовая кнопка в приложении:
+                          // это финал пути, а не очередная отправка формы.
+                          color: _sending ? c.muted : c.benefit,
+                          borderRadius: R.pill,
+                        ),
+                        child: Text(
+                          _sending
+                              ? S.sending
+                              : _preorder && _slot != null && _day != null
+                              ? S.placeOrderFor(
+                                  _dayWord(_day!),
+                                  _slot!.label.split('–').first,
+                                )
+                              : S.placeOrder,
+                          style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w600,
+                            color: c.onBenefit,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Список времени на выбранный день — снизу экрана.
+///
+/// Слотов на день до шестидесяти: кнопками они растянули бы оформление на
+/// несколько экранов, а список листается и показывает выбранное.
+class _TimeSheet extends StatelessWidget {
+  final String title;
+  final List<PreorderSlot> slots;
+  final PreorderSlot? selected;
+
+  const _TimeSheet({required this.title, required this.slots, this.selected});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final index = selected == null
+        ? 0
+        : slots.indexWhere((s) => s.at == selected!.at).clamp(0, slots.length);
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.6,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                Gap.screen,
+                Gap.lg,
+                Gap.screen,
+                Gap.sm,
+              ),
+              child: Text(title, style: Theme.of(context).textTheme.titleLarge),
+            ),
+            Flexible(
+              child: ListView.builder(
+                controller: ScrollController(
+                  initialScrollOffset: (index - 2).clamp(0, 1 << 20) * 52.0,
+                ),
+                itemCount: slots.length,
+                itemExtent: 52,
+                itemBuilder: (context, i) {
+                  final slot = slots[i];
+                  final on = selected?.at == slot.at;
+                  return PressScale(
+                    onTap: () => Navigator.pop(context, slot),
+                    scale: 0.99,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: Gap.screen,
+                      ),
+                      alignment: Alignment.centerLeft,
+                      color: on ? c.accentSoft : Colors.transparent,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              slot.label,
+                              style: TextStyle(
+                                fontSize: 15.5,
+                                fontWeight: on
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                color: on ? c.accent : c.ink,
+                              ),
+                            ),
+                          ),
+                          if (on) Icon(Icons.check, size: 18, color: c.accent),
+                        ],
                       ),
                     ),
-                  ),
-                ],
+                  );
+                },
               ),
             ),
-          ),
+          ],
         ),
       ),
     );

@@ -91,6 +91,41 @@ abstract final class SelectedAddress {
   }
 }
 
+/// Доставка или самовывоз — выбор человека, общий для корзины и оформления.
+///
+/// Раньше переключатель стоял на главном, но до корзины не доходил: корзина
+/// всегда прибавляла доставку, а оформление открывалось на «Доставке».
+/// Клиент на самовывоз видел +700 ₸ и не понимал за что (Дом, 28.11.2026).
+/// Теперь выбирают в корзине, и выбор запоминается на следующий раз.
+///
+/// `null` — ещё не выбирали ни разу: доставку тогда не считаем вовсе, а
+/// кнопка оформления просит выбрать.
+abstract final class OrderMode {
+  static const _key = 'pizzburg_order_mode';
+  static final ValueNotifier<String?> value = ValueNotifier(null);
+  static bool _loaded = false;
+
+  static Future<void> load() async {
+    if (_loaded) return;
+    _loaded = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString(_key);
+      if (value.value == null && (saved == 'DELIVERY' || saved == 'PICKUP')) {
+        value.value = saved;
+      }
+    } catch (_) {}
+  }
+
+  static Future<void> set(String mode) async {
+    value.value = mode;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_key, mode);
+    } catch (_) {}
+  }
+}
+
 class Cart extends ChangeNotifier {
   final List<CartLine> _lines = [];
 

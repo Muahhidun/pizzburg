@@ -1328,10 +1328,17 @@ export class AdminService {
    * в разном темпе). Поднимать только когда новая версия уже вышла в
    * сторе — иначе клиенту нечем будет обновиться.
    */
-  async updateAppUpdate(dto: { minIos?: string; minAndroid?: string }) {
+  async updateAppUpdate(dto: {
+    minIos?: string;
+    minAndroid?: string;
+    recIos?: string;
+    recAndroid?: string;
+  }) {
     return this.patchSettings('appUpdate', {
       ...(dto.minIos !== undefined ? { minIos: dto.minIos } : {}),
       ...(dto.minAndroid !== undefined ? { minAndroid: dto.minAndroid } : {}),
+      ...(dto.recIos !== undefined ? { recIos: dto.recIos } : {}),
+      ...(dto.recAndroid !== undefined ? { recAndroid: dto.recAndroid } : {}),
     });
   }
 

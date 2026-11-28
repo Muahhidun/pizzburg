@@ -28,10 +28,6 @@ class CatalogHeader extends StatelessWidget {
   /// прошло, и только потом предлагаем повторить.
   final Widget? reviewBlock;
   final VoidCallback? onAddressTap;
-  final ValueChanged<String> onModeChanged;
-
-  /// Доставка недоступна — переключать некуда, значок остаётся подписью
-  final bool deliveryAvailable;
 
   const CatalogHeader({
     super.key,
@@ -39,8 +35,6 @@ class CatalogHeader extends StatelessWidget {
     required this.etaLabel,
     required this.mode,
     required this.availability,
-    required this.onModeChanged,
-    required this.deliveryAvailable,
     this.repeatBlock,
     this.activeOrderBlock,
     this.reviewBlock,
@@ -64,35 +58,6 @@ class CatalogHeader extends StatelessWidget {
         ? S.howWasIt
         : S.sameOrderAgain;
 
-    Widget modeButton(String value, String label) {
-      final active = mode == value;
-      return PressScale.selection(
-        onTap: active || (value == 'DELIVERY' && !deliveryAvailable)
-            ? null
-            : () => onModeChanged(value),
-        child: AnimatedContainer(
-          duration: Motion.base,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-          decoration: BoxDecoration(
-            color: active ? c.accent : Colors.transparent,
-            borderRadius: R.pill,
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: active
-                  ? c.surface
-                  : (value == 'DELIVERY' && !deliveryAvailable
-                        ? c.muted.withValues(alpha: 0.5)
-                        : c.muted),
-            ),
-          ),
-        ),
-      );
-    }
-
     return Padding(
       padding: const EdgeInsets.fromLTRB(Gap.screen, Gap.lg, Gap.screen, 0),
       child: Column(
@@ -100,21 +65,6 @@ class CatalogHeader extends StatelessWidget {
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: c.fillSoft,
-                  borderRadius: R.pill,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    modeButton('DELIVERY', S.delivery),
-                    modeButton('PICKUP', S.pickup),
-                  ],
-                ),
-              ),
-              const SizedBox(width: Gap.lg),
               Flexible(
                 child: PressScale(
                   onTap: onAddressTap,
@@ -297,60 +247,14 @@ class CatalogHeader extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            Icon(
-                              Icons.keyboard_arrow_down,
-                              size: 16,
-                              color: c.surface,
-                            ),
+                            if (onAddressTap != null)
+                              Icon(
+                                Icons.keyboard_arrow_down,
+                                size: 16,
+                                color: c.surface,
+                              ),
                           ],
                         ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: Gap.md),
-                // Способ получения переехал сюда из пары кнопок под шапкой.
-                // Кнопки занимали целую строку и дублировали этот значок, а
-                // состояние всё равно читается слева: «Доставим на» против
-                // «Заберёте из». Здесь остаётся только действие.
-                //
-                // Что человек не поймёт назначение значка — риск реальный,
-                // и он закрыт ниже по потоку: способ получения так же
-                // меняется на оформлении, где до него доходят все.
-                PressScale(
-                  onTap: deliveryAvailable
-                      ? () => onModeChanged(
-                          mode == 'PICKUP' ? 'DELIVERY' : 'PICKUP',
-                        )
-                      : null,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 7,
-                    ),
-                    decoration: BoxDecoration(
-                      color: c.surface.withValues(alpha: 0.14),
-                      borderRadius: R.pill,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          mode == 'PICKUP' ? S.pickupLower : S.deliveryLower,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: c.surface,
-                          ),
-                        ),
-                        if (deliveryAvailable) ...[
-                          const SizedBox(width: 4),
-                          Icon(
-                            Icons.swap_horiz,
-                            size: 15,
-                            color: c.surface.withValues(alpha: 0.8),
-                          ),
-                        ],
                       ],
                     ),
                   ),

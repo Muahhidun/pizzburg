@@ -23,6 +23,13 @@ class AppConfig extends ChangeNotifier {
   bool _updateRequired = false;
   bool get updateRequired => _updateRequired;
 
+  /// Есть версия новее рекомендуемой: мягкое окно «Вышла новая версия»
+  /// раз в два дня, заказывать можно и без обновления (Дом, 28.11.2026)
+  bool _updateSuggested = false;
+  bool get updateSuggested => _updateSuggested;
+  String? _recommended;
+  String? get recommended => _recommended;
+
   String? _storeUrl;
   String? get storeUrl => _storeUrl;
 
@@ -50,6 +57,7 @@ class AppConfig extends ChangeNotifier {
           ? 'ios'
           : 'android';
       final min = (c['minVersion'] as Map?)?[platform]?.toString();
+      final rec = (c['recommendedVersion'] as Map?)?[platform]?.toString();
       _storeUrl = (c['store'] as Map?)?[platform]?.toString();
       _unpaidCancelMinutes =
           (c['unpaidCancelMinutes'] as num?)?.toInt() ?? _unpaidCancelMinutes;
@@ -64,6 +72,13 @@ class AppConfig extends ChangeNotifier {
       if (required != _updateRequired) {
         _updateRequired = required;
       }
+      _recommended = rec;
+      _updateSuggested =
+          !kIsWeb &&
+          !required &&
+          rec != null &&
+          isOlder(_version!, rec) &&
+          _storeUrl != null;
       notifyListeners();
     } catch (e) {
       debugPrint('Настройки приложения не получены: $e');

@@ -1,9 +1,11 @@
 import {
   BadRequestException,
+  HttpException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { appVersionRefusal } from './app-version-gate';
 import { PrismaService } from '../prisma/prisma.service';
 import { PosterClient } from '../poster/poster.client';
 import { PromotionsService } from '../promotions/promotions.service';
@@ -134,12 +136,20 @@ export class OrdersService {
     tenantSlug: string,
     dto: CreateOrderDto,
     authCustomer?: { sub: string; tenantId: string; phone: string },
+    client?: { web: boolean; version?: string | null; platform?: string | null; lang?: string | null },
   ) {
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: tenantSlug },
       include: { venues: { where: { isActive: true }, take: 1 } },
     });
     if (!tenant) throw new NotFoundException("Unknown tenant");
+
+    // Устаревшее приложение (1.0.0 не умеет закрываться само) — отказ с
+    // просьбой обновиться: этот текст старая версия покажет на оформлении
+    if (client) {
+      const refusal = appVersionRefusal(tenant.settings, client);
+      if (refusal) throw new HttpException(refusal, 426); // Upgrade Required
+    }
     const venue = tenant.venues[0];
     if (!venue) throw new BadRequestException("Нет активной точки");
 
@@ -1887,6 +1897,7 @@ export function newOrderMessage(
     tenant?: { settings: unknown } | null;
   },
   items: Array<{ name: string; qty: number; price: number; isGift: boolean; modifiers: unknown }>,
+  now = new Date(),
 ): string {
   const lines: string[] = [];
   const delivery = order.type === 'DELIVERY';
@@ -1898,7 +1909,7 @@ export function newOrderMessage(
   lines.push(
     `🆕 <b>Заказ №${order.number}</b> · ${delivery ? '🚗 Доставка' : '🏃 Самовывоз'}`,
     order.scheduledAt
-      ? `🟥🟥 <b>ПРЕДЗАКАЗ — НА ${preorderLabel(order.scheduledAt, tz)}</b> 🟥🟥`
+      ? `🟥🟥 <b>ПРЕДЗАКАЗ — НА ${preorderDay(order.scheduledAt, tz, now)}${preorderLabel(order.scheduledAt, tz)}</b> 🟥🟥`
       : '🟩 <b>СРАЗУ</b>',
     pay.paid
       ? `✅ <b>ОПЛАЧЕН</b> · ${pay.how}`
@@ -1942,6 +1953,23 @@ export function newOrderMessage(
   lines.push(`💰 <b>Сумма заказа: ${order.total} ₸</b>` + (pay.paid ? ' (оплачено)' : ''));
   if (order.comment) lines.push(`💬 ${esc(order.comment)}`);
   return lines.join('\n');
+}
+
+/**
+ * «ЗАВТРА, » / «СЕГОДНЯ, » перед временем предзаказа — в сообщении
+ * кассирам, которое читают сразу. Клиент выбирает «Сегодня / Завтра», и
+ * кассир должен видеть то же слово, а не высчитывать день по дате. В чек
+ * Poster слово не пишем: чек живёт до выдачи, и «завтра» к тому времени
+ * уже стало бы «сегодня».
+ */
+export function preorderDay(at: Date, tz: string, now = new Date()) {
+  const ymd = (d: Date) =>
+    new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+  const today = ymd(now);
+  const [y, m, d] = today.split('-').map(Number);
+  const tomorrow = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+  const day = ymd(at);
+  return day === today ? 'СЕГОДНЯ, ' : day === tomorrow ? 'ЗАВТРА, ' : '';
 }
 
 /** «19:30 (21.11)» — время предзаказа по часам заведения */

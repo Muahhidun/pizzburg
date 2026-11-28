@@ -177,7 +177,7 @@ export class UpdatePreorderDto {
   @IsOptional() @IsInt() @Min(5) @Max(120) slotStepMinutes?: number;
   @IsOptional() @IsInt() @Min(0) @Max(120) displayPaddingMinutes?: number;
   @IsOptional() @IsInt() @Min(0) @Max(120) closeAsapBeforeMinutes?: number;
-  @IsOptional() @IsInt() @Min(1) @Max(30) maxDaysAhead?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(7) maxDaysAhead?: number;
 }
 
 export class UpdatePaymentsDto {
@@ -217,6 +217,17 @@ export class UpdateAppUpdateDto {
     message: 'Версия в виде 1.0.1 или пусто',
   })
   minAndroid?: string;
+
+  /** Рекомендуемая версия: ниже — мягкое окно «Вышла новая версия» */
+  @IsOptional() @IsString() @Matches(/^(\d+\.\d+\.\d+)?$/, {
+    message: 'Версия в виде 1.0.1 или пусто',
+  })
+  recIos?: string;
+
+  @IsOptional() @IsString() @Matches(/^(\d+\.\d+\.\d+)?$/, {
+    message: 'Версия в виде 1.0.1 или пусто',
+  })
+  recAndroid?: string;
 }
 
 export class CreateAddressDto {

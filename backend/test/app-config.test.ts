@@ -44,3 +44,9 @@ test('баннеры сайта включены, пока их явно не в
     { popup: false, bar: true, qr: false },
   );
 });
+
+test('рекомендуемая версия — отдельно от обязательной', () => {
+  const c = appConfigFrom({ appUpdate: { minIos: '', recIos: '1.0.3', recAndroid: 'x' } });
+  assert.deepEqual(c.recommendedVersion, { ios: '1.0.3', android: null });
+  assert.deepEqual(c.minVersion, { ios: null, android: null });
+});

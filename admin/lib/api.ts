@@ -571,7 +571,7 @@ export interface Settings {
     payments?: Partial<PaymentSettings>;
     cancellation?: { customerWindowMinutes?: number };
     /// Минимальная версия приложения: ниже — экран «Обновите приложение»
-    appUpdate?: { minIos?: string; minAndroid?: string };
+    appUpdate?: { minIos?: string; minAndroid?: string; recIos?: string; recAndroid?: string };
   };
   venues: { id: string; name: string; address: string }[];
   posterAccounts: {

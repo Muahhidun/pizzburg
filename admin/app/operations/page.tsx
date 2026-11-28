@@ -480,7 +480,7 @@ function PreorderCard({ settings, onSave }: { settings: Settings; onSave: SaveFn
       label: 'Стоп «побыстрее» за, мин',
       hint: 'До закрытия',
     },
-    { key: 'maxDaysAhead', label: 'Дней вперёд', hint: '' },
+    { key: 'maxDaysAhead', label: 'Дней вперёд', hint: '0 — только сегодня, 1 — сегодня и завтра' },
   ];
 
   return (
@@ -680,40 +680,45 @@ function AppUpdateCard({ settings, onSave }: { settings: Settings; onSave: SaveF
   const current = settings.settings.appUpdate ?? {};
   const [ios, setIos] = useState(current.minIos ?? '');
   const [android, setAndroid] = useState(current.minAndroid ?? '');
+  const [recIos, setRecIos] = useState(current.recIos ?? '');
+  const [recAndroid, setRecAndroid] = useState(current.recAndroid ?? '');
   const valid = (v: string) => v === '' || /^\d+\.\d+\.\d+$/.test(v);
+  const allValid = [ios, android, recIos, recAndroid].every(valid);
+
+  const field = (label: string, value: string, set: (v: string) => void) => (
+    <label className="block w-[160px]">
+      <span className="mb-1 block text-sm font-medium">{label}</span>
+      <input
+        value={value}
+        placeholder="например 1.0.2"
+        onChange={(e) => set(e.target.value.trim())}
+        className={inputClass}
+      />
+    </label>
+  );
 
   return (
     <Card
-      title="Обязательное обновление приложения"
-      hint="Клиенты с версией ниже указанной увидят экран «Обновите приложение» с кнопкой в App Store или Google Play — заказывать в старой версии они не смогут. Ставьте версию только после того, как она вышла в сторе. Пусто — обновление не требуется."
+      title="Обновление приложения"
+      hint="Рекомендуемая — клиенты с версией ниже раз в два дня увидят окно «Вышла новая версия» с кнопками «Обновить» и «Позже»; заказывать можно и без обновления (работает с 1.0.2). Обязательная — ниже неё приложение закрывается экраном «Обновите приложение», а заказ из 1.0.0 сервер отклонит с просьбой обновиться; ставьте только если старая версия сломалась. Обе — только после выхода версии в сторе. Пусто — выключено."
     >
+      <p className="mb-2 text-sm font-medium">Рекомендуемая (мягко)</p>
       <div className="flex flex-wrap gap-3">
-        <label className="block w-[160px]">
-          <span className="mb-1 block text-sm font-medium">iPhone, не ниже</span>
-          <input
-            value={ios}
-            placeholder="например 1.0.1"
-            onChange={(e) => setIos(e.target.value.trim())}
-            className={inputClass}
-          />
-        </label>
-        <label className="block w-[160px]">
-          <span className="mb-1 block text-sm font-medium">Android, не ниже</span>
-          <input
-            value={android}
-            placeholder="например 1.0.1"
-            onChange={(e) => setAndroid(e.target.value.trim())}
-            className={inputClass}
-          />
-        </label>
+        {field('iPhone', recIos, setRecIos)}
+        {field('Android', recAndroid, setRecAndroid)}
       </div>
-      {!(valid(ios) && valid(android)) && (
-        <p className="mt-2 text-sm text-red-600">Версия пишется так: 1.0.1</p>
-      )}
+      <p className="mb-2 mt-4 text-sm font-medium">Обязательная (блокирует старые версии)</p>
+      <div className="flex flex-wrap gap-3">
+        {field('iPhone, не ниже', ios, setIos)}
+        {field('Android, не ниже', android, setAndroid)}
+      </div>
+      {!allValid && <p className="mt-2 text-sm text-red-600">Версия пишется так: 1.0.2</p>}
       <SaveButton
         onClick={() => {
-          if (!(valid(ios) && valid(android))) return;
+          if (!allValid) return;
+          const minChanged = ios !== (current.minIos ?? '') || android !== (current.minAndroid ?? '');
           if (
+            minChanged &&
             (ios || android) &&
             !confirm(
               `Клиенты с версией ниже ${[ios && `iPhone ${ios}`, android && `Android ${android}`]
@@ -723,7 +728,7 @@ function AppUpdateCard({ settings, onSave }: { settings: Settings; onSave: SaveF
           ) {
             return;
           }
-          onSave('/admin/settings/app-update', { minIos: ios, minAndroid: android });
+          onSave('/admin/settings/app-update', { minIos: ios, minAndroid: android, recIos, recAndroid });
         }}
       />
     </Card>

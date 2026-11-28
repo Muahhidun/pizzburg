@@ -47,6 +47,11 @@ Future<void> main() async {
 
   await _startCrashReports();
 
+  // Версия — в каждом запросе: по ней сервер отказывает в заказе тем,
+  // кто застрял на старой сборке. Выбор «доставка / самовывоз» — до
+  // первого кадра, чтобы шапка не мигнула не тем способом.
+  await Future.wait([ApiClient.loadAppVersion(), OrderMode.load()]);
+
   final api = ApiClient();
   final appConfig = AppConfig(api);
   // Не ждём: проверка версии не должна задерживать старт. Если версия

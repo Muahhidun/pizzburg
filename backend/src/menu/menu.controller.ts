@@ -42,6 +42,13 @@ export class MenuController {
     });
     if (!tenant) throw new NotFoundException('Unknown tenant');
     const orderType = type === 'PICKUP' ? 'PICKUP' : 'DELIVERY';
-    return { type: orderType, slots: this.availability.slots(tenant.settings, orderType) };
+    const now = new Date();
+    const { timezone } = this.availability.getState(tenant.settings, now);
+    return {
+      type: orderType,
+      // «Сегодня» по часам заведения: от него приложение отличает завтрашние слоты
+      today: this.availability.localDate(timezone, now),
+      slots: this.availability.slots(tenant.settings, orderType, now),
+    };
   }
 }

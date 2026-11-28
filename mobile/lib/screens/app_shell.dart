@@ -21,6 +21,8 @@ import 'profile_screen.dart';
 import '../i18n/strings.dart';
 import '../widgets/app_route.dart';
 import '../widgets/app_promo.dart';
+import '../widgets/update_prompt.dart';
+import '../services/app_config.dart';
 
 /// Оболочка с таб-баром: Меню / Избранное / Корзина / Заказы / Профиль.
 ///
@@ -86,6 +88,19 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     Future.delayed(const Duration(milliseconds: 2500), () {
       if (mounted) AppPromo.maybeShowPopup(context);
     });
+    // «Вышла новая версия» — после окна про уведомления, а не вместе с
+    // ним; и снова, когда настройки обновятся при возврате из фона
+    _config = context.read<AppConfig>()..addListener(_suggestUpdate);
+    _suggestUpdate();
+  }
+
+  late final AppConfig _config;
+
+  /// С паузой: сначала человек видит меню и окно про уведомления
+  void _suggestUpdate() {
+    Future.delayed(const Duration(seconds: 4), () {
+      if (mounted) UpdatePrompt.maybeShow(context, _config);
+    });
   }
 
   late final AuthState _auth;
@@ -113,6 +128,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     AppShell.jump.removeListener(_onJump);
     _auth.removeListener(_maybeAskReview);
+    _config.removeListener(_suggestUpdate);
     for (final c in _scrolls) {
       c.dispose();
     }

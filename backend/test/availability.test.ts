@@ -247,6 +247,43 @@ test('слоты предзаказа попадают только в рабо�
   }
 });
 
+test('предзаказ — только сегодня и завтра: слоты двух дней с датой', () => {
+  // четверг 14:00 местного: сегодня 13.08, завтра 14.08
+  const slots = availability.slots(weekdaySchedule, 'PICKUP', thursdayAfternoon);
+  const days = [...new Set(slots.map((s) => s.date))];
+  assert.deepEqual(days, ['2026-08-13', '2026-08-14']);
+  // завтра — весь рабочий день, до последнего слота перед 22:00
+  const tomorrow = slots.filter((s) => s.date === '2026-08-14');
+  assert.equal(tomorrow[0].label, '10:00–10:15');
+  assert.equal(tomorrow.at(-1)!.label, '21:45–22:00');
+});
+
+test('предзаказ на послезавтра отклоняется, на завтра вечер — проходит', () => {
+  const order = (iso: string) => () =>
+    availability.assertOrderAllowed(
+      weekdaySchedule,
+      { type: 'PICKUP', paymentMethod: 'CASH', scheduledAt: iso },
+      thursdayAfternoon,
+    );
+  assert.doesNotThrow(order('2026-08-14T16:00:00Z')); // пт 21:00
+  assert.throws(order('2026-08-15T07:00:00Z'), /только на сегодня или завтра/); // сб 12:00
+});
+
+test('ночью после полуночи «завтра» — следующий календарный день', () => {
+  // 01:00 пятницы: сегодня 14.08 (откроемся в 10:00), завтра 15.08
+  const slots = availability.slots(weekdaySchedule, 'PICKUP', thursdayNight);
+  assert.deepEqual([...new Set(slots.map((s) => s.date))], ['2026-08-14', '2026-08-15']);
+});
+
+test('0 дней вперёд — только сегодня', () => {
+  const slots = availability.slots(
+    { ...weekdaySchedule, preorder: { maxDaysAhead: 0 } },
+    'PICKUP',
+    thursdayAfternoon,
+  );
+  assert.deepEqual([...new Set(slots.map((s) => s.date))], ['2026-08-13']);
+});
+
 // ─── Высокий спрос (DECISIONS §12.17) ────────────────────────────
 
 /** Наплыв, поставленный за полчаса до `thursdayAfternoon` на час */
