@@ -144,6 +144,9 @@ export default function DispatchPage() {
   const [offlineSince, setOfflineSince] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [undo, setUndo] = useState<{ id: string; number: number | string; until: number } | null>(null);
+  // «Готов» в два нажатия (Дом, 28.11.2026): первое нажатие превращает
+  // плитку в «Да, готов / Нет» — случайное касание при прокрутке не считается
+  const [confirming, setConfirming] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [extraOpen, setExtraOpen] = useState(false);
   const [courierOpen, setCourierOpen] = useState<string | null>(null);
@@ -247,6 +250,7 @@ export default function DispatchPage() {
   async function act(task: Task, action: TaskAction, shiftId?: string) {
     if (!token) return;
     setError(null);
+    setConfirming(null);
     try {
       await call(
         `/dispatch/tasks/${task.id}/${action}`,
@@ -303,6 +307,12 @@ export default function DispatchPage() {
   }
 
   useEffect(() => {
+    if (!confirming) return;
+    const t = setTimeout(() => setConfirming(null), CONFIRM_MS);
+    return () => clearTimeout(t);
+  }, [confirming]);
+
+  useEffect(() => {
     if (!undo) return;
     const left = undo.until - Date.now();
     const t = setTimeout(() => setUndo(null), Math.max(0, left));
@@ -346,23 +356,25 @@ export default function DispatchPage() {
 
   return (
     <Screen>
-      <header className="flex items-center gap-4 border-b border-black/10 px-5 py-3">
-        <div className="text-3xl font-bold tabular-nums">
+      {/* Шапка в одну строку (Дом, 28.11.2026): курьеры — лентой с прокруткой
+          вбок, а не столбиком, иначе шапка вытесняла заказы и QR. Карточки
+          «сдаёт / расчёт» раздаче не нужны — они в Telegram у кассира */}
+      <header className="flex shrink-0 items-center gap-3 border-b border-black/10 px-3 py-2">
+        <div className="shrink-0 text-2xl font-bold tabular-nums">
           {new Date(nowMs).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
         </div>
-        <div className="flex flex-1 flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold uppercase tracking-wide text-neutral-500">
-            На месте
-          </span>
-          {waiting.length === 0 && <span className="text-lg text-neutral-400">никого</span>}
+        <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-2 overflow-x-auto py-1">
+          {waiting.length === 0 && (
+            <span className="shrink-0 whitespace-nowrap text-base text-neutral-400">у раздачи никого</span>
+          )}
           {/* Нажатие на курьера — «Уехал» или «Закончил смену» */}
           {waiting.map((c, i) => (
             <button
               key={c.shiftId}
               onClick={() => setCourierOpen(c.shiftId)}
-              className="flex items-center gap-2 rounded-full bg-emerald-100 py-1 pl-1 pr-3 text-lg font-semibold text-emerald-900 active:scale-[.97]"
+              className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-emerald-100 py-1 pl-1 pr-3 text-base font-semibold text-emerald-900 active:scale-[.97]"
             >
-              <Face name={c.name} src={photos[c.courierId]} />
+              <Face name={c.name} src={photos[c.courierId]} small />
               {i + 1}. {c.name}
               {c.queuedAt && (
                 <span className="font-normal text-emerald-700">{minutes(c.queuedAt, nowMs)} мин</span>
@@ -373,26 +385,21 @@ export default function DispatchPage() {
             <button
               key={c.shiftId}
               onClick={() => setCourierOpen(c.shiftId)}
-              className="flex items-center gap-2 rounded-full bg-neutral-100 py-1 pl-1 pr-3 text-base text-neutral-600 active:scale-[.97]"
+              className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-neutral-100 py-1 pl-1 pr-3 text-sm text-neutral-600 active:scale-[.97]"
             >
               <Face name={c.name} src={photos[c.courierId]} small />
               {c.name} · {COURIER_STATE[c.state]}
             </button>
           ))}
         </div>
-        {board.cashAlerts.map((a) => (
-          <span key={a.id} className="rounded-lg bg-amber-400 px-3 py-1 text-base font-semibold text-amber-950">
-            💵 {a.text}
-          </span>
-        ))}
         {offline && (
-          <span className="rounded-lg bg-red-600 px-3 py-1 text-sm font-semibold text-white">
+          <span className="shrink-0 rounded-lg bg-red-600 px-3 py-1 text-sm font-semibold text-white">
             нет связи
           </span>
         )}
         <button
           onClick={() => setExtraOpen(true)}
-          className="rounded-xl bg-amber-500 px-4 py-2 text-lg font-semibold text-white"
+          className="shrink-0 rounded-xl bg-amber-500 px-3 py-2 text-base font-semibold text-white"
         >
           + Довоз
         </button>
@@ -406,22 +413,36 @@ export default function DispatchPage() {
       )}
 
       <div className="flex min-h-0 flex-1">
-        <div className="grid min-h-0 flex-1 grid-cols-3 gap-3 p-3">
+        <div className="grid min-h-0 flex-1 grid-cols-3 gap-2 p-2">
           <Column title="Новый" hint="нажмите, когда пакет собран" count={fresh.length}>
             {fresh.map((t) =>
-              t.kind === 'PICKUP' ? (
+              confirming === t.id ? (
+                <Tile key={t.id} task={t} nowMs={nowMs} confirm>
+                  <div className="w-full text-lg font-bold">№{t.number} готов?</div>
+                  <TileButton onClick={() => act(t, 'ready')}>Да, готов</TileButton>
+                  <TileButton tone="muted" onClick={() => setConfirming(null)}>
+                    Нет
+                  </TileButton>
+                </Tile>
+              ) : t.kind === 'PICKUP' ? (
                 <Tile key={t.id} task={t} nowMs={nowMs} onLongPress={() => setTaskOpen(t.id)}>
-                  <TileButton onClick={() => act(t, 'ready')}>Готов</TileButton>
+                  <TileButton onClick={() => setConfirming(t.id)}>Готов</TileButton>
                   <TileButton tone="muted" onClick={() => act(t, 'handed-over')}>
                     Выдан
                   </TileButton>
                 </Tile>
               ) : (
-                <Tile key={t.id} task={t} nowMs={nowMs} onClick={() => act(t, 'ready')} onLongPress={() => setTaskOpen(t.id)} />
+                <Tile
+                  key={t.id}
+                  task={t}
+                  nowMs={nowMs}
+                  onClick={() => setConfirming(t.id)}
+                  onLongPress={() => setTaskOpen(t.id)}
+                />
               ),
             )}
           </Column>
-          <Column title="Готов" count={readyCol.length}>
+          <Column title="Готов" hint="не тот? зажмите плитку → «Не готово»" count={readyCol.length}>
             {readyCol.map((t) => (
               <Tile key={t.id} task={t} nowMs={nowMs} onLongPress={() => setTaskOpen(t.id)}>
                 {t.kind === 'PICKUP' ? (
@@ -457,7 +478,7 @@ export default function DispatchPage() {
           </Column>
         </div>
 
-        <aside className="flex w-72 shrink-0 flex-col items-center border-l border-black/10 p-4 text-center">
+        <aside className="flex w-56 shrink-0 flex-col items-center border-l border-black/10 p-3 text-center lg:w-64">
           <div className="text-lg font-semibold">Курьер приехал?</div>
           <p className="mb-3 text-sm text-neutral-500">
             В боте нажмите «Я на месте» и наведите камеру
@@ -579,6 +600,9 @@ export default function DispatchPage() {
   );
 }
 
+/** Сколько ждём второго нажатия «Да, готов» */
+const CONFIRM_MS = 6000;
+
 const COURIER_STATE: Record<Courier['state'], string> = {
   WAITING: 'ждёт',
   ASSIGNED: 'идёт к раздаче',
@@ -676,6 +700,7 @@ function Tile({
   onClick,
   onLongPress,
   faded,
+  confirm,
   children,
 }: {
   task: Task;
@@ -683,6 +708,8 @@ function Tile({
   onClick?: () => void;
   onLongPress?: () => void;
   faded?: boolean;
+  /** Ждёт второго нажатия «Да, готов» */
+  confirm?: boolean;
   children?: React.ReactNode;
 }) {
   const press = useLongPress(onLongPress);
@@ -700,8 +727,8 @@ function Tile({
   const body = (
     <>
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-4xl font-black tabular-nums">№{task.number}</span>
-        <span className={`text-lg font-semibold tabular-nums ${ageTone}`}>
+        <span className="text-3xl font-black tabular-nums">№{task.number}</span>
+        <span className={`whitespace-nowrap text-lg font-semibold tabular-nums ${ageTone}`}>
           {preorder ? `к ${clock(task.scheduledAt!)}` : `${age} мин`}
         </span>
       </div>
@@ -761,7 +788,9 @@ function Tile({
 
   // Цвет плитки: тревога → самовывоз → старое приложение → обычная
   const frame = `rounded-xl p-3 text-left shadow-sm ${
-    task.alert
+    confirm
+      ? 'bg-emerald-50 ring-4 ring-emerald-500'
+      : task.alert
       ? 'bg-red-50 ring-2 ring-red-500'
       : pickup
         ? 'bg-violet-50 ring-2 ring-violet-300'
@@ -919,6 +948,17 @@ function TaskDialog({
           {task.status === 'NEW' && (
             <button onClick={() => onAction('ready')} className="rounded-xl bg-neutral-900 py-3 text-xl font-semibold text-white">
               Готов — пакет собран
+            </button>
+          )}
+          {(task.status === 'READY' || task.status === 'ASSIGNED') && (
+            <button
+              onClick={() => {
+                const note = task.courier ? ` Курьеру ${task.courier} придёт «отбой», место в очереди сохранится.` : '';
+                if (confirm(`Вернуть №${task.number} в «Новый»?${note}`)) onAction('undo-ready');
+              }}
+              className="rounded-xl bg-amber-100 py-3 text-xl font-semibold text-amber-900"
+            >
+              Не готово — вернуть в «Новый»
             </button>
           )}
           {pickup && (task.status === 'NEW' || task.status === 'READY') && (

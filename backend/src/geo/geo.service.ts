@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   AddressEntry,
   findExact,
+  findLoose,
   searchAddresses,
   searchHouses,
   searchStreets,
@@ -121,7 +122,8 @@ export class GeoService {
     house: string,
   ): Promise<{ lat: number; lng: number } | null> {
     if (!street.trim() || !house.trim()) return null;
-    const found = findExact(await this.book(tenantSlug), street, house);
+    // «Ауэзова 47б» из чека Poster или адреса заведения — тоже находим
+    const found = findLoose(await this.book(tenantSlug), street, house);
     return typeof found?.lat === 'number' && typeof found?.lng === 'number'
       ? { lat: found.lat, lng: found.lng }
       : null;

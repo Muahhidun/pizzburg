@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cashStates, historyRows, shiftStats, shortAddress, timelineRows } from '../src/couriers/courier-history';
+import { cashStates, historyRows, shiftStats, shortAddress } from '../src/couriers/courier-history';
 import { changeCheck } from '../src/couriers/courier-app.service';
 
 /**
@@ -45,7 +45,7 @@ test('в истории нет телефона и имени клиента', (
   const json = JSON.stringify(row);
   assert.ok(!json.includes('110'), 'квартира не должна попасть в историю');
   assert.ok(!json.includes('код'), 'комментарий не должен попасть в историю');
-  assert.deepEqual(Object.keys(row).sort(), ['address', 'at', 'cash', 'id', 'items', 'number', 'payment', 'status', 'total']);
+  assert.deepEqual(Object.keys(row).sort(), ['address', 'at', 'cash', 'id', 'items', 'number', 'onWayMin', 'payment', 'status', 'total']);
 });
 
 test('№351: заказ 6 920 + сдача 3 080 — сдать 10 000, пока на руках', () => {
@@ -78,6 +78,13 @@ test('клиент заплатил картой, подтверждено — �
   assert.deepEqual(row.cash?.paidOtherwise, { status: 'CONFIRMED', paidBy: 'CARD' });
 });
 
+test('сколько вёз: от «Забрал» до «Доставлен»', () => {
+  const [row] = historyRows([{ ...ourTask('t1', 353, 'CASH', 7050, at('20:35')), pickedUpAt: at('20:22') }], [], 0);
+  assert.equal(row.onWayMin, 13);
+  const [noPick] = historyRows([ourTask('t2', 354, 'CASH', 7050)], [], 0);
+  assert.equal(noPick.onWayMin, null);
+});
+
 test('оплата онлайн — без строки наличных', () => {
   const [row] = historyRows([ourTask('t1', 309, 'KASPI_ONLINE', 5000)], [], 0);
   assert.equal(row.cash, null);
@@ -87,36 +94,6 @@ test('оплата онлайн — без строки наличных', () =>
 test('остаток на руках меньше заказа — «частично сдано»', () => {
   assert.deepEqual(cashStates([5000, 3000, 2000], 6000), ['ON_HAND', 'PARTLY', 'HANDED_IN']);
   assert.deepEqual(cashStates([5000], -9176), ['HANDED_IN']);
-});
-
-const ev = (type: string, hm: string, number?: number) => ({
-  type,
-  at: at(hm),
-  meta: null,
-  task: number ? { order: { number }, external: null } : null,
-});
-
-test('хронология: заступил, забрал, отвёз с минутами в пути, пауза', () => {
-  const rows = timelineRows([
-    ev('CHECK_IN', '11:00'),
-    ev('ASSIGNED', '11:05', 306),
-    ev('PICKED_UP', '11:10', 306),
-    ev('DELIVERED', '11:32', 306),
-    ev('PAUSE_START', '11:40'),
-    ev('PAUSE_END', '11:55'),
-    ev('CHECK_IN', '12:00'),
-    ev('SHIFT_END', '22:00'),
-  ]);
-  assert.deepEqual(rows.map((r) => r.text), [
-    'Заступил на смену',
-    'Назначен №306',
-    'Забрал №306',
-    'Отвёз №306, в пути 22 мин',
-    'Пауза',
-    'Конец паузы',
-    'Вернулся к раздаче, в очереди',
-    'Закончил смену',
-  ]);
 });
 
 test('сводка: средние минуты у раздачи и в пути, паузы', () => {

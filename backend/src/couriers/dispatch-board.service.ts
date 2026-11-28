@@ -17,6 +17,7 @@ import { externalOf, externalPaymentLine, orderOf, PREORDER_LEAD_MS, releaseAt, 
 import { formatAddress } from './courier-app.service';
 import { completeDelivery } from './delivery-completion';
 import { paymentLine } from './assignment.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /**
  * Планшет раздачи (docs/COURIER_SYSTEM_SPEC.md §4).
@@ -51,6 +52,7 @@ export class DispatchBoardService {
     private readonly telegram: TelegramService,
     private readonly cash?: CourierCashService,
     private readonly photos?: CourierPhotoService,
+    private readonly notifications?: NotificationsService,
   ) {}
 
   // ─── Задачи из заказов ─────────────────────────────────────────
@@ -354,27 +356,50 @@ export class DispatchBoardService {
     });
     if (changed.count > 0) {
       await this.event(device.tenantId, taskId, 'READY', `DEVICE:${device.id}`);
+      if (task.kind === 'PICKUP') await this.pickupReady(task.orderId, true);
       await this.assignment.assignVenue(device.venueId);
     }
     return { status: 'READY' as const };
   }
 
   /**
-   * «Отменить» в первые секунды после «Готов» — на случай, если нажали
-   * не ту плитку. Если заказ уже назначен, курьер получает «отбой» и
-   * остаётся в очереди на своём месте.
+   * Самовывоз (Дом, 28.11.2026): «Готов» на планшете — клиенту пуш «Готов
+   * к выдаче», заказ в приложении в статусе «Готов». «Не готово» молча
+   * возвращает «Готовится»: второй пуш «ещё не готов» только смутил бы.
+   * Доставкой статусы клиенту пока не шлём — сначала обкатаем на самовывозе.
+   */
+  private async pickupReady(orderId: string | null, ready: boolean) {
+    if (!orderId) return;
+    const changed = await this.prisma.order.updateMany({
+      where: ready
+        ? { id: orderId, type: 'PICKUP', status: { in: ['ACCEPTED', 'COOKING'] } }
+        : { id: orderId, type: 'PICKUP', status: 'READY' },
+      data: { status: ready ? 'READY' : 'COOKING' },
+    });
+    if (ready && changed.count > 0) {
+      await this.notifications?.sendOrderStatus(orderId, 'READY').catch((e) =>
+        this.logger.warn(`Пуш «Готов к выдаче» не ушёл: ${e instanceof Error ? e.message : e}`),
+      );
+    }
+  }
+
+  /**
+   * «Не готово»: «Готов» нажали не на ту плитку. Раньше — только в первые
+   * секунды; с 28.11.2026 — пока курьер не забрал (Дом: курьер приходит,
+   * а пакет не собран, вернуть было нельзя). Назначенный курьер получает
+   * «отбой» и остаётся в очереди на своём месте.
    */
   async undoReady(device: DispatchDeviceValue, taskId: string) {
     const task = await this.ownTask(device, taskId);
-    const fresh =
-      task.readyAt && Date.now() - task.readyAt.getTime() <= (READY_UNDO_SEC + 5) * 1000;
-    if (task.status === 'ASSIGNED' && fresh) {
+    if (task.status === 'NEW') return { status: 'NEW' as const };
+    if (task.status === 'ASSIGNED') {
       if (await this.assignment.unassign(taskId, 'READY_UNDONE', `DEVICE:${device.id}`)) {
         return { status: 'NEW' as const };
       }
+      throw new BadRequestException('Не получилось — обновите экран и попробуйте ещё раз');
     }
-    if (task.status !== 'READY' || !fresh) {
-      throw new BadRequestException('Отменить уже нельзя');
+    if (task.status !== 'READY') {
+      throw new BadRequestException('Курьер уже забрал заказ — вернуть в «Новый» нельзя');
     }
     const changed = await this.prisma.deliveryTask.updateMany({
       where: { id: taskId, status: 'READY' },
@@ -382,6 +407,7 @@ export class DispatchBoardService {
     });
     if (changed.count > 0) {
       await this.event(device.tenantId, taskId, 'READY_UNDONE', `DEVICE:${device.id}`);
+      if (task.kind === 'PICKUP') await this.pickupReady(task.orderId, false);
     }
     return { status: 'NEW' as const };
   }

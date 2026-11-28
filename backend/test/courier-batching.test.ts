@@ -193,12 +193,33 @@ test('«только в одну сторону»: заказы в разные 
   assert.equal(w.tasks[0].batchId, null);
 });
 
-test('по умолчанию связка в любую сторону и без координат', async () => {
+test('по умолчанию (с 28.11.2026): в разные стороны не связываем, неизвестное направление — как раньше', async () => {
   const w = world({ a: north1, b: south1 });
+  w.ready('a', 0);
+  w.ready('b', 1); // в другую сторону — ждёт следующего курьера
+  w.ready('c', 2); // адрес без координат — вторым, как раньше
+  assert.equal(await w.service.assignVenue('v'), 2);
+  assert.equal(w.tasks[1].status, 'READY');
+  assert.equal(w.tasks[2].batchId, 'a');
+});
+
+test('Дом, 28.11: 1-й и 3-й на север, 2-й и 4-й на юг — два курьера едут каждый в свою сторону', async () => {
+  const w = world({ a: north1, b: south1, c: north2, d: south1 }, 2);
+  for (const [i, id] of ['a', 'b', 'c', 'd'].entries()) w.ready(id, i);
+  assert.equal(await w.service.assignVenue('v'), 4);
+  const [a, b, c, d] = w.tasks;
+  assert.equal(c.courierId, a.courierId);
+  assert.equal(d.courierId, b.courierId);
+  assert.notEqual(a.courierId, b.courierId);
+});
+
+test('«в любую сторону», если включить: связка и без координат', async () => {
+  const any = { batchAnyDirection: true };
+  const w = world({ a: north1, b: south1 }, 1, any);
   w.ready('a', 0);
   w.ready('b', 1);
   w.ready('c', 2); // адрес без координат
-  const w2 = world({ a: north1, b: south1 }, 2);
+  const w2 = world({ a: north1, b: south1 }, 2, any);
   w2.ready('a', 0);
   w2.ready('b', 1);
   w2.ready('c', 2);
@@ -240,11 +261,11 @@ test('4 готовых, курьеров нет; пришёл курьер — �
   assert.deepEqual(w.tasks.map((t) => t.courierId), ['c0', 'c0', 'c1', 'c1']);
   assert.deepEqual(w.tasks.map((t) => t.batchSeq), [1, 2, 1, 2]);
 
-  // Старое правило «только в одну сторону»: без координат пришедшему — один заказ
-  const old = world({}, 0, { batchAnyDirection: false });
-  for (const [i, id] of ['a', 'b', 'c', 'd'].entries()) old.ready(id, i);
-  old.shifts.push({ id: 's0', venueId: 'v', courierId: 'c0', state: 'WAITING', endedAt: null, queuedAt: 0, scheduled: false });
-  assert.equal(await old.service.assignVenue('v'), 1);
+  // «В одну сторону», но направление неизвестно — так же, по два
+  const strict = world({}, 0, { batchAnyDirection: false });
+  for (const [i, id] of ['a', 'b', 'c', 'd'].entries()) strict.ready(id, i);
+  strict.shifts.push({ id: 's0', venueId: 'v', courierId: 'c0', state: 'WAITING', endedAt: null, queuedAt: 0, scheduled: false });
+  assert.equal(await strict.service.assignVenue('v'), 2);
 });
 
 // Решение «вторым сейчас или ждать курьера, который едет назад»: срок 60 мин,

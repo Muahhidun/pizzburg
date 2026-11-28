@@ -67,7 +67,7 @@ test('«Готов» переводит плитку и пишет событи�
   assert.deepEqual(f.assigned, ['v1']);
 });
 
-test('«Отменить» работает только сразу после «Готов»', async () => {
+test('«Не готово» — и через минуту, пока курьер не забрал; после «Забрал» нельзя', async () => {
   const f = fixture({ id: 'k1', venueId: 'v1', kind: 'DELIVERY', status: 'NEW', readyAt: null });
   await f.service.markReady(f.device, 'k1');
   await f.service.undoReady(f.device, 'k1');
@@ -76,9 +76,36 @@ test('«Отменить» работает только сразу после �
 
   const late = fixture({
     id: 'k2', venueId: 'v1', kind: 'DELIVERY', status: 'READY',
-    readyAt: new Date(Date.now() - 60_000),
+    readyAt: new Date(Date.now() - 10 * 60_000),
   });
-  await assert.rejects(() => late.service.undoReady(late.device, 'k2'), BadRequestException);
+  await late.service.undoReady(late.device, 'k2');
+  assert.equal(late.task.status, 'NEW');
+
+  const gone = fixture({ id: 'k3', venueId: 'v1', kind: 'DELIVERY', status: 'PICKED_UP', readyAt: new Date() });
+  await assert.rejects(() => gone.service.undoReady(gone.device, 'k3'), BadRequestException);
+});
+
+test('самовывоз «Готов» — клиенту пуш «Готов к выдаче»; «Не готово» — молча назад', async () => {
+  const order = { id: 'o1', type: 'PICKUP', status: 'ACCEPTED' };
+  const pushes: string[] = [];
+  const f = fixture({ id: 'p1', venueId: 'v1', kind: 'PICKUP', status: 'NEW', readyAt: null, orderId: 'o1' });
+  const prisma: any = (f.service as any).prisma;
+  prisma.order = {
+    updateMany: async ({ where, data }: any) => {
+      const ok = where.id === order.id && (where.status?.in ? where.status.in.includes(order.status) : where.status === order.status);
+      if (ok) Object.assign(order, data);
+      return { count: ok ? 1 : 0 };
+    },
+  };
+  const service = new DispatchBoardService(prisma, (f.service as any).assignment, null as any, undefined, undefined, {
+    sendOrderStatus: async (_id: string, status: string) => pushes.push(status),
+  } as any);
+  await service.markReady(f.device, 'p1');
+  assert.equal(order.status, 'READY');
+  assert.deepEqual(pushes, ['READY']);
+  await service.undoReady(f.device, 'p1');
+  assert.equal(order.status, 'COOKING');
+  assert.deepEqual(pushes, ['READY']);
 });
 
 test('самовывоз выдаётся и из «Нового», доставку так закрыть нельзя', async () => {

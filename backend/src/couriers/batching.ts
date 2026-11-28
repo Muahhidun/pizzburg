@@ -52,10 +52,17 @@ export function bestPartner<T extends { point: Point | null }>(
 }
 
 /**
- * Кому добавить заказ вторым. В одну сторону (`anyDirection` выключен) —
- * как `bestPartner`. В любую сторону — подходит любой курьер у раздачи:
- * сначала с наименьшим крюком, кандидаты без координат — следом, в том
- * порядке, в каком пришли (дольше всех ждёт — первым).
+ * Кому добавить заказ вторым.
+ *
+ * В одну сторону (`anyDirection` выключен, по умолчанию с 28.11.2026):
+ * когда оба адреса известны — только с крюком в пределах лимита, в разные
+ * концы города связку не собираем. Если направление неизвестно (адрес не
+ * нашёлся в справочнике — так бывает у заказов старого приложения), —
+ * как раньше: вторым тому, кто дольше ждёт; иначе такие заказы не
+ * связывались бы никогда.
+ *
+ * В любую сторону — подходит любой курьер у раздачи: сначала с наименьшим
+ * крюком, кандидаты без координат — следом, в том порядке, в каком пришли.
  */
 export function pickHolder<T extends { point: Point | null }>(
   venue: Point | null,
@@ -64,14 +71,18 @@ export function pickHolder<T extends { point: Point | null }>(
   maxDetourKm: number,
   anyDirection: boolean,
 ): { item: T; detourKm: number | null } | null {
-  if (!anyDirection) return venue && base ? bestPartner(venue, base, candidates, maxDetourKm) : null;
   if (candidates.length === 0) return null;
-  if (venue && base) {
-    const measured = candidates.filter((c) => c.point);
-    if (measured.length) {
-      const best = bestPartner(venue, base, measured, Number.POSITIVE_INFINITY);
-      if (best) return best;
-    }
+  const measured = candidates.filter((c) => c.point);
+  if (!anyDirection) {
+    if (!venue || !base) return { item: candidates[0], detourKm: null };
+    const best = bestPartner(venue, base, measured, maxDetourKm);
+    if (best) return best;
+    const unknown = candidates.find((c) => !c.point);
+    return unknown ? { item: unknown, detourKm: null } : null;
+  }
+  if (venue && base && measured.length) {
+    const best = bestPartner(venue, base, measured, Number.POSITIVE_INFINITY);
+    if (best) return best;
   }
   return { item: candidates.find((c) => !c.point) ?? candidates[0], detourKm: null };
 }

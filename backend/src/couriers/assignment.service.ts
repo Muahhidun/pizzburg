@@ -63,6 +63,7 @@ const tenge = (n: number) => `${n.toLocaleString('ru-RU')} ₸`;
 @Injectable()
 export class AssignmentService {
   private readonly logger = new Logger(AssignmentService.name);
+  private readonly venueWarned = new Set<string>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -191,8 +192,12 @@ export class AssignmentService {
 
     const slug = venue.tenant.slug;
     const venuePoint = await this.venuePoint(slug, venue);
-    // Без точки раздачи «в одну сторону» не измерить
-    if (!venuePoint && !cfg.batchAnyDirection) return 0;
+    // Без точки раздачи направление не измерить — связки станут «как
+    // попало». 28.11.2026 так и было: адрес заведения не находился
+    if (!venuePoint && !this.venueWarned.has(venueId)) {
+      this.venueWarned.add(venueId);
+      this.logger.warn(`Точка раздачи без координат (${venue.address}) — направление связок не учитывается`);
+    }
 
     const free = await Promise.all(
       holders.map(async (s) => ({

@@ -264,3 +264,27 @@ export function findExact(
     ) ?? null
   );
 }
+
+/**
+ * Дом по адресу, записанному «как попало»: «Ауэзова 47б» при «улице
+ * Мухтара Ауэзова, 47Б» в справочнике. Нужен раздаче курьеров — без
+ * точки не понять, в одну ли сторону два заказа (28.11.2026: адрес
+ * заведения не находился, и все связки шли «без координат»).
+ *
+ * Дом должен совпасть точно, а улица — однозначно: если под запрос
+ * подходят две разные улицы, лучше не знать точку, чем знать неверную.
+ */
+export function findLoose(
+  entries: AddressEntry[],
+  street: string,
+  house: string,
+): AddressEntry | null {
+  const exact = findExact(entries, street, house);
+  if (exact) return exact;
+  const h = normalize(house).replace(/\s+/g, '');
+  if (!h) return null;
+  const found = searchAddresses(entries, `${street} ${house}`, 50).filter(
+    (e) => normalize(e.house).replace(/\s+/g, '') === h,
+  );
+  return new Set(found.map((e) => streetKey(e.street))).size === 1 ? found[0] : null;
+}

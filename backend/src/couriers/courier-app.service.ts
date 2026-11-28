@@ -14,7 +14,7 @@ import { CourierRegistrationService } from './courier-registration.service';
 import { courierSettings } from './courier-settings';
 import { verifyQrToken } from './dispatch-qr';
 import { changeFloatOf, changeMarkId, completeDelivery } from './delivery-completion';
-import { historyRows, shiftStats, TIMELINE_TYPES, timelineRows } from './courier-history';
+import { historyRows, shiftStats, SHIFT_EVENT_TYPES } from './courier-history';
 import { shortName } from './names';
 import { externalOf, externalPaymentLine, orderOf, telNumber } from './task-order';
 
@@ -331,15 +331,10 @@ export class CourierAppService implements OnModuleInit {
     });
     const [events, entries, handed, onHand] = await Promise.all([
       this.prisma.deliveryTaskEvent.findMany({
-        where: { courierId, type: { in: [...TIMELINE_TYPES] }, at: { gte: since } },
+        where: { courierId, type: { in: [...SHIFT_EVENT_TYPES] }, at: { gte: since } },
         orderBy: { at: 'asc' },
         take: 300,
-        select: {
-          type: true,
-          at: true,
-          meta: true,
-          task: { select: { external: true, order: { select: { number: true } } } },
-        },
+        select: { type: true, at: true },
       }),
       tasks.length
         ? this.prisma.courierCashEntry.findMany({
@@ -358,7 +353,6 @@ export class CourierAppService implements OnModuleInit {
     return {
       since: since.toISOString(),
       rows,
-      timeline: timelineRows(events).reverse(),
       stats: shiftStats(tasks, events, now),
       totals: {
         /// Наличные за заказы и сдача из кассы — всё, что прошло через руки
@@ -654,20 +648,27 @@ export class CourierAppService implements OnModuleInit {
    */
   async sendPhone(actor: CourierActorValue, taskId: string) {
     const task = await this.prisma.deliveryTask.findFirst({
-      where: { id: taskId, courierId: actor.courier.id, status: 'PICKED_UP' },
+      where: { id: taskId, courierId: actor.courier.id, status: { in: ['ASSIGNED', 'PICKED_UP'] } },
       include: { order: { select: { number: true, customer: { select: { phone: true, name: true } } } } },
     });
     if (!task) throw new NotFoundException('Заказ не найден');
     const o = orderOf(task);
     if (!o.phone) throw new BadRequestException('У заказа нет телефона');
+    const tel = telNumber(o.phone);
     const { error } = await this.telegram.call(actor.tenantId, 'sendMessage', {
       chat_id: actor.courier.telegramUserId,
       parse_mode: 'HTML',
       text:
         `📞 <b>Клиент №${esc(o.number)}</b>${o.customerName ? `, ${esc(o.customerName)}` : ''}\n` +
-        `${telNumber(o.phone)}\n\nНажмите на номер, чтобы позвонить.`,
+        `${tel}\n\nНажмите на номер, чтобы позвонить, или скопируйте его кнопкой.`,
+      // Кнопка копирования (Bot API 7.11): звонилка не открылась — вставить номер вручную
+      reply_markup: { inline_keyboard: [[{ text: '📋 Скопировать номер', copy_text: { text: tel } }]] },
     });
-    if (error) throw new BadRequestException('Телеграм не принял сообщение, попробуйте ещё раз');
+    if (error) {
+      this.logger.warn(`Номер клиента №${o.number} не отправлен курьеру: ${error}`);
+      throw new BadRequestException('Телеграм не принял сообщение, попробуйте ещё раз');
+    }
+    this.logger.log(`Номер клиента №${o.number} отправлен курьеру в чат`);
     return { sent: true };
   }
 

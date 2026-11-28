@@ -24,6 +24,7 @@ type HistoryTask = {
   status: string;
   deliveredAt: Date | null;
   updatedAt: Date;
+  pickedUpAt?: Date | null;
   extraReason: string | null;
   external: unknown;
   order: {
@@ -42,6 +43,8 @@ export type HistoryRow = {
   number: string;
   status: 'DELIVERED' | 'FAILED';
   at: string;
+  /** Сколько вёз: от «Забрал» до «Доставлен», мин */
+  onWayMin: number | null;
   address: string;
   items: string;
   total: number;
@@ -65,6 +68,8 @@ const PAYMENT: Record<string, string> = {
   CARD_ON_DELIVERY: 'Картой, терминал',
   KASPI_ONLINE: 'Kaspi онлайн',
 };
+
+const minutesBetween = (a: Date, b: Date) => Math.max(Math.round((b.getTime() - a.getTime()) / 60_000), 0);
 
 /** Улица и дом — без подъезда, квартиры и комментария */
 export function shortAddress(raw: unknown): string {
@@ -129,6 +134,7 @@ export function historyRows(tasks: HistoryTask[], entries: CashEntry[], onHand: 
       number: o.number,
       status: (t.status === 'FAILED' ? 'FAILED' : 'DELIVERED') as HistoryRow['status'],
       at: (t.deliveredAt ?? t.updatedAt).toISOString(),
+      onWayMin: t.pickedUpAt && t.deliveredAt ? minutesBetween(t.pickedUpAt, t.deliveredAt) : null,
       address: shortAddress(o.address),
       items: t.kind === 'EXTRA_TRIP' ? `Довоз: ${t.extraReason ?? 'без причины'}` : itemsLine(o.items),
       total: t.order?.total ?? ext?.total ?? 0,
@@ -148,88 +154,10 @@ export function historyRows(tasks: HistoryTask[], entries: CashEntry[], onHand: 
   }));
 }
 
-// ─── Хронология смены ────────────────────────────────────────────
+// ─── Сводка смены ────────────────────────────────────────────────
 
-type TimelineEvent = {
-  type: string;
-  at: Date;
-  meta: unknown;
-  task: { order: { number: number } | null; external: unknown } | null;
-};
-
-export type TimelineRow = { at: string; kind: 'shift' | 'pause' | 'order' | 'warn'; text: string };
-
-/** Какие события показываем курьеру и как называем */
-export const TIMELINE_TYPES = [
-  'CHECK_IN',
-  'PAUSE_START',
-  'PAUSE_END',
-  'AWAY',
-  'SHIFT_END',
-  'ASSIGNED',
-  'PICKED_UP',
-  'DELIVERED',
-  'FAILED',
-  'PICKUP_TIMEOUT',
-  'COURIER_LEFT',
-] as const;
-
-const minutesBetween = (a: Date, b: Date) => Math.max(Math.round((b.getTime() - a.getTime()) / 60_000), 0);
-
-/**
- * Когда заступил, брал паузу, забрал и отвёз (Дом, 27.11.2026): курьер
- * видит свою смену по минутам. События — от старых к новым.
- */
-export function timelineRows(events: TimelineEvent[]): TimelineRow[] {
-  const picked = new Map<string, Date>();
-  let onShift = false;
-  const rows: TimelineRow[] = [];
-  for (const e of events) {
-    const n = e.task ? `№${orderOf(e.task).number}` : '';
-    const at = e.at.toISOString();
-    switch (e.type) {
-      case 'CHECK_IN':
-        rows.push({ at, kind: 'shift', text: onShift ? 'Вернулся к раздаче, в очереди' : 'Заступил на смену' });
-        onShift = true;
-        break;
-      case 'PAUSE_START':
-        rows.push({ at, kind: 'pause', text: 'Пауза' });
-        break;
-      case 'PAUSE_END':
-        rows.push({ at, kind: 'pause', text: 'Конец паузы' });
-        break;
-      case 'AWAY':
-        rows.push({ at, kind: 'warn', text: 'Вне очереди' });
-        break;
-      case 'SHIFT_END':
-        rows.push({ at, kind: 'shift', text: 'Закончил смену' });
-        onShift = false;
-        break;
-      case 'ASSIGNED':
-        rows.push({ at, kind: 'order', text: `Назначен ${n}` });
-        break;
-      case 'PICKED_UP':
-        picked.set(n, e.at);
-        rows.push({ at, kind: 'order', text: `Забрал ${n}` });
-        break;
-      case 'DELIVERED': {
-        const from = picked.get(n);
-        rows.push({ at, kind: 'order', text: `Отвёз ${n}${from ? `, в пути ${minutesBetween(from, e.at)} мин` : ''}` });
-        break;
-      }
-      case 'FAILED':
-        rows.push({ at, kind: 'warn', text: `Не доставил ${n}` });
-        break;
-      case 'PICKUP_TIMEOUT':
-        rows.push({ at, kind: 'warn', text: `${n} передан другому: не забрал вовремя` });
-        break;
-      case 'COURIER_LEFT':
-        rows.push({ at, kind: 'warn', text: `${n} передан другому` });
-        break;
-    }
-  }
-  return rows;
-}
+/** События смены, по которым считаются паузы */
+export const SHIFT_EVENT_TYPES = ['CHECK_IN', 'PAUSE_START', 'PAUSE_END', 'SHIFT_END'] as const;
 
 /** Сводка эффективности: доставки, средние минуты у раздачи и в пути, паузы */
 export function shiftStats(

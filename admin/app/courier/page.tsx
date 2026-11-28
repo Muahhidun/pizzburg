@@ -96,6 +96,8 @@ interface HistoryRow {
   number: string;
   status: 'DELIVERED' | 'FAILED';
   at: string;
+  /** Сколько вёз, мин */
+  onWayMin: number | null;
   address: string;
   items: string;
   total: number;
@@ -112,8 +114,6 @@ interface HistoryRow {
 interface History {
   since: string;
   rows: HistoryRow[];
-  /** От новых к старым: заступил, пауза, забрал, отвёз… */
-  timeline: { at: string; kind: 'shift' | 'pause' | 'order' | 'warn'; text: string }[];
   stats: {
     delivered: number;
     failed: number;
@@ -132,6 +132,34 @@ const tenge = (n: number) => `${n.toLocaleString('ru-RU')} ₸`;
 function shortName(full: string) {
   const [last, first] = full.trim().split(/\s+/);
   return first ? `${first} ${last.charAt(0)}.` : (last ?? '');
+}
+
+/**
+ * Скопировать текст. В WebView Telegram navigator.clipboard бывает
+ * недоступен — тогда старый способ через скрытое поле.
+ */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    /* ниже запасной способ */
+  }
+  try {
+    const el = document.createElement('textarea');
+    el.value = text;
+    el.setAttribute('readonly', '');
+    el.style.position = 'fixed';
+    el.style.opacity = '0';
+    document.body.appendChild(el);
+    el.select();
+    el.setSelectionRange(0, text.length);
+    const ok = document.execCommand('copy');
+    document.body.removeChild(el);
+    return ok;
+  } catch {
+    return false;
+  }
 }
 
 function tg(): any {
@@ -237,16 +265,32 @@ export default function CourierPage() {
     }
   }, [me?.queue]);
 
-  // Звонилку открывает tel:, но в части телефонов Telegram её не пускает —
-  // поэтому номер ещё и приходит сообщением от бота, там он нажимается
+  // Звонилку открывает tel:, но в части телефонов Telegram её не пускает
+  // (28.11.2026: курьеры жмут — ничего). Поэтому номер сразу копируется и
+  // приходит сообщением от бота: там он нажимается и есть «Скопировать»
   async function phoneToChat(t: Task) {
     setNotice(null);
+    setError(null);
+    const copied = t.phone ? await copyText(t.phone) : false;
     try {
       await request(`/tasks/${t.id}/phone`, {});
-      setNotice('Номер клиента отправлен в чат с ботом. Если звонок не начался, нажмите на номер там.');
-      setTimeout(() => setNotice(null), 8000);
+      setNotice(
+        (copied ? 'Номер скопирован. ' : '') +
+          'Он же — в чате с ботом: нажмите на номер там, чтобы позвонить.',
+      );
+      setTimeout(() => setNotice(null), 10_000);
     } catch (e: any) {
       setError(e?.message ?? String(e));
+    }
+  }
+
+  async function copyPhone(phone: string) {
+    setError(null);
+    if (await copyText(phone)) {
+      setNotice(`Номер ${phone} скопирован — вставьте его в звонилку`);
+      setTimeout(() => setNotice(null), 6000);
+    } else {
+      setError('Не удалось скопировать. Нажмите «Позвонить» — номер придёт в чат с ботом.');
     }
   }
 
@@ -374,7 +418,11 @@ export default function CourierPage() {
               </a>
             )}
           </div>
-          {t.phone && <div className="mt-2 select-all text-sm opacity-70">Телефон: {t.phone}</div>}
+          {t.phone && (
+            <button type="button" onClick={() => copyPhone(t.phone!)} className="btn-secondary mt-2 w-full">
+              📋 {t.phone} — скопировать
+            </button>
+          )}
           {t.askOnWay && (
             <div className="mt-3 rounded-xl bg-amber-100 p-3 text-amber-900">
               <div className="font-semibold">Вы уже долго в пути. Заказ ещё у вас?</div>
@@ -602,21 +650,38 @@ export default function CourierPage() {
       {me.cash.settlement && (
         <Card tone="warn">
           <div className="font-semibold">Расчёт за смену ждёт кассира</div>
-          <div className="mt-1 text-sm opacity-80">
-            заработано {tenge(me.cash.settlement.earned)} · на руках {tenge(me.cash.settlement.cashHeld)}
-          </div>
-          <div className="mt-2 text-lg font-bold">
-            {me.cash.settlement.courierPays > 0
-              ? `Сдайте кассиру ${tenge(me.cash.settlement.courierPays)}`
-              : me.cash.settlement.venuePays > 0
-                ? `Кассир заплатит вам ${tenge(me.cash.settlement.venuePays)}`
-                : 'Никто никому не должен'}
-          </div>
+          {me.cash.settlement.courierPays === 0 && me.cash.settlement.venuePays === me.cash.settlement.earned ? (
+            // Раздельный расчёт (28.11.2026): сначала наличные, потом оплата
+            <>
+              {(me.cash.balance > 0 || me.cash.pendingHandover) && (
+                <div className="mt-2 text-lg font-bold">
+                  1. Сдайте наличные {tenge(me.cash.pendingHandover?.amount ?? me.cash.balance)}
+                </div>
+              )}
+              <div className="mt-1 text-lg font-bold">
+                {me.cash.balance > 0 || me.cash.pendingHandover ? '2. ' : ''}Кассир заплатит вам{' '}
+                {tenge(me.cash.settlement.venuePays)}
+              </div>
+              <div className="mt-1 text-sm opacity-80">за доставки</div>
+            </>
+          ) : (
+            <>
+              <div className="mt-1 text-sm opacity-80">
+                заработано {tenge(me.cash.settlement.earned)} · на руках {tenge(me.cash.settlement.cashHeld)}
+              </div>
+              <div className="mt-2 text-lg font-bold">
+                {me.cash.settlement.courierPays > 0
+                  ? `Сдайте кассиру ${tenge(me.cash.settlement.courierPays)}`
+                  : me.cash.settlement.venuePays > 0
+                    ? `Кассир заплатит вам ${tenge(me.cash.settlement.venuePays)}`
+                    : 'Никто никому не должен'}
+              </div>
+            </>
+          )}
         </Card>
       )}
 
-      {!me.cash.settlement &&
-        (me.cash.balance > 0 ||
+      {(me.cash.balance > 0 ||
           me.cash.pendingHandover ||
           me.cash.cashOrders?.some((o) => o.paidOtherwise?.status === 'PENDING')) && (
         <Card>
@@ -687,8 +752,15 @@ export default function CourierPage() {
         </Card>
       )}
 
-      {me.history && (me.history.rows.length > 0 || me.history.timeline.length > 0) && (
-        <ShiftHistory history={me.history} />
+      {me.history && me.history.rows.length > 0 && (
+        <ShiftHistory
+          history={me.history}
+          busy={busy}
+          handInLabel={
+            !me.cash.pendingHandover && me.cash.balance > 0 ? `Сдаю кассиру ${tenge(me.cash.balance)}` : null
+          }
+          onHandIn={() => act('/cash/hand-in')}
+        />
       )}
 
       {me.shift && me.tasks.length === 0 && (
@@ -754,6 +826,15 @@ export default function CourierPage() {
 const hhmm = (iso: string) =>
   new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 
+/** Оплата на свёрнутой карточке — одним словом */
+function shortPayment(p: string) {
+  if (p === 'Наличные') return 'нал';
+  if (p === 'Наличные и картой') return 'нал + карта';
+  if (/картой/i.test(p)) return 'карта';
+  if (/онлайн/i.test(p)) return 'онлайн';
+  return p;
+}
+
 const CASH_STATE = {
   ON_HAND: 'на руках',
   PARTLY: 'частично сдано',
@@ -761,12 +842,25 @@ const CASH_STATE = {
 } as const;
 
 /**
- * Мои заказы с последнего расчёта (Дом, 27.11.2026): сверить поездки и
- * наличные. Телефона и имени клиента нет — только для отчёта.
+ * Мои заказы с последнего расчёта (Дом, 27–28.11.2026): сверить поездки и
+ * наличные. Карточки сворачиваются: на поверхности номер, время, сколько
+ * вёз и наличные; нажатие раскрывает адрес, состав и сумму. Телефона и
+ * имени клиента нет — только для отчёта.
  */
-function ShiftHistory({ history }: { history: History }) {
-  const { rows, totals, timeline, stats } = history;
-  const [tab, setTab] = useState<'timeline' | 'orders'>('timeline');
+function ShiftHistory({
+  history,
+  busy,
+  handInLabel,
+  onHandIn,
+}: {
+  history: History;
+  busy: boolean;
+  /** «Сдаю кассиру N ₸» — если есть что сдать и кассир ещё не ждёт */
+  handInLabel: string | null;
+  onHandIn: () => void;
+}) {
+  const { rows, totals, stats } = history;
+  const [open, setOpen] = useState<string | null>(null);
   const facts = [
     `доставлено ${stats.delivered}`,
     stats.failed > 0 && `не доставлено ${stats.failed}`,
@@ -774,46 +868,13 @@ function ShiftHistory({ history }: { history: History }) {
     stats.avgOnWayMin != null && `в пути в среднем ${stats.avgOnWayMin} мин`,
     stats.pauseMin > 0 && `паузы ${stats.pauseMin} мин`,
   ].filter(Boolean);
+  const soft = { background: 'var(--tg-theme-secondary-bg-color, #f2f2f2)' };
   return (
-    <details className="mt-6">
-      <summary className="cursor-pointer text-base font-semibold">Моя смена</summary>
-      <div className="mt-2 text-sm opacity-80">{facts.join(' · ')}</div>
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        {(['timeline', 'orders'] as const).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTab(t)}
-            className="rounded-xl py-2 text-sm font-semibold"
-            style={
-              tab === t
-                ? { background: 'var(--tg-theme-button-color, #2481cc)', color: 'var(--tg-theme-button-text-color, #fff)' }
-                : { background: 'var(--tg-theme-secondary-bg-color, #f2f2f2)' }
-            }
-          >
-            {t === 'timeline' ? 'Хронология' : `Заказы · ${rows.length}`}
-          </button>
-        ))}
-      </div>
-      {tab === 'timeline' ? (
-        <ul className="mt-2">
-          {timeline.map((e, i) => (
-            <li
-              key={i}
-              className="flex gap-3 border-b py-2 text-sm last:border-b-0"
-              style={{ borderColor: 'var(--tg-theme-secondary-bg-color, #eee)' }}
-            >
-              <span className="w-12 shrink-0 tabular-nums opacity-60">{hhmm(e.at)}</span>
-              <span className={e.kind === 'warn' ? 'text-red-600' : e.kind === 'pause' ? 'opacity-70' : ''}>
-                {e.text}
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-      <>
+    <section className="mt-6">
+      <div className="text-base font-semibold">Моя смена · {rows.length}</div>
+      <div className="mt-1 text-sm opacity-80">{facts.join(' · ')}</div>
       {totals.owed > 0 && (
-        <div className="mt-2 rounded-xl p-3 text-sm" style={{ background: 'var(--tg-theme-secondary-bg-color, #f2f2f2)' }}>
+        <div className="mt-2 rounded-xl p-3 text-sm" style={soft}>
           <div>
             Наличные: заказы {tenge(totals.orders)}
             {totals.change > 0 && ` + сдача из кассы ${tenge(totals.change)}`}
@@ -822,57 +883,77 @@ function ShiftHistory({ history }: { history: History }) {
           <div className="font-semibold">На руках: {tenge(Math.max(totals.onHand, 0))}</div>
         </div>
       )}
-      <ul className="mt-2">
-        {rows.map((r) => (
-          <li
-            key={r.id}
-            className="border-b py-3 last:border-b-0"
-            style={{ borderColor: 'var(--tg-theme-secondary-bg-color, #eee)' }}
-          >
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-lg font-bold">№{r.number}</span>
-              <span className="text-sm opacity-60">
-                {r.status === 'FAILED' ? 'не доставлен · ' : ''}
-                {hhmm(r.at)}
-              </span>
-            </div>
-            <div className="text-sm">{r.address}</div>
-            <div className="text-sm opacity-70">{r.items}</div>
-            <div className="mt-1 text-sm">
-              {tenge(r.total)} · {r.payment}
-            </div>
-            {r.cash && (
-              <div className="mt-1 text-sm">
-                {r.cash.owed > 0 && (
-                <>
-                {r.cash.change > 0
-                  ? `Сдать ${tenge(r.cash.owed)}: заказ ${tenge(r.cash.order)} + сдача ${tenge(r.cash.change)}`
-                  : `Сдать ${tenge(r.cash.owed)}`}
-                {' · '}
-                <span className={r.cash.state === 'HANDED_IN' ? 'text-emerald-600' : 'font-semibold'}>
-                  {CASH_STATE[r.cash.state]}
+      <ul className="mt-2 space-y-2">
+        {rows.map((r) => {
+          const expanded = open === r.id;
+          const cashLeft = r.cash && r.cash.owed > 0 && r.cash.state !== 'HANDED_IN';
+          return (
+            <li key={r.id} className="rounded-xl" style={soft}>
+              <button
+                type="button"
+                onClick={() => setOpen(expanded ? null : r.id)}
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+              >
+                <span className="text-lg font-bold">№{r.number}</span>
+                <span className="whitespace-nowrap text-sm opacity-60">
+                  {hhmm(r.at)}
+                  {r.status === 'FAILED' ? ' · не доставлен' : r.onWayMin != null ? ` · вёз ${r.onWayMin} мин` : ''}
                 </span>
-                </>
-                )}
-                {r.cash.paidOtherwise && (
-                  <span className="opacity-70">
-                    {r.cash.owed > 0 && ' · '}
-                    {r.cash.paidOtherwise.paidBy === 'KASPI' ? 'Kaspi' : 'картой'}:{' '}
-                    {r.cash.paidOtherwise.status === 'CONFIRMED'
-                      ? 'подтверждено'
-                      : r.cash.paidOtherwise.status === 'PENDING'
-                        ? 'ждём кассира'
-                        : 'кассир не подтвердил'}
-                  </span>
-                )}
-              </div>
-            )}
-          </li>
-        ))}
+                <span className="ml-auto flex shrink-0 items-center gap-2 whitespace-nowrap text-sm">
+                  {r.cash && r.cash.owed > 0 ? (
+                    <span
+                      className={`rounded px-1.5 py-0.5 font-semibold ${
+                        cashLeft ? 'bg-neutral-800 text-white' : 'text-emerald-600'
+                      }`}
+                    >
+                      нал · {cashLeft ? CASH_STATE[r.cash.state] : 'сдано'}
+                    </span>
+                  ) : (
+                    <span className="opacity-60">{shortPayment(r.payment)}</span>
+                  )}
+                  <span className="opacity-40">{expanded ? '▴' : '▾'}</span>
+                </span>
+              </button>
+              {expanded && (
+                <div className="border-t px-3 pb-3 pt-2 text-sm" style={{ borderColor: 'rgba(0,0,0,.08)' }}>
+                  <div>{r.address}</div>
+                  <div className="opacity-70">{r.items}</div>
+                  <div className="mt-1">
+                    {tenge(r.total)} · {r.payment}
+                  </div>
+                  {r.cash && r.cash.owed > 0 && (
+                    <div className="mt-1">
+                      {r.cash.change > 0
+                        ? `Сдать ${tenge(r.cash.owed)}: заказ ${tenge(r.cash.order)} + сдача ${tenge(r.cash.change)}`
+                        : `Сдать ${tenge(r.cash.owed)}`}
+                      {' · '}
+                      <span className={cashLeft ? 'font-semibold' : 'text-emerald-600'}>
+                        {CASH_STATE[r.cash.state]}
+                      </span>
+                    </div>
+                  )}
+                  {r.cash?.paidOtherwise && (
+                    <div className="mt-1 opacity-70">
+                      {r.cash.paidOtherwise.paidBy === 'KASPI' ? 'Kaspi' : 'Картой'}:{' '}
+                      {r.cash.paidOtherwise.status === 'CONFIRMED'
+                        ? 'подтверждено'
+                        : r.cash.paidOtherwise.status === 'PENDING'
+                          ? 'ждём кассира'
+                          : 'кассир не подтвердил'}
+                    </div>
+                  )}
+                  {cashLeft && handInLabel && (
+                    <button type="button" disabled={busy} onClick={onHandIn} className="btn-primary mt-3 w-full">
+                      {handInLabel}
+                    </button>
+                  )}
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ul>
-      </>
-      )}
-    </details>
+    </section>
   );
 }
 

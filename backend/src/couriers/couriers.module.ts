@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { PosterModule } from '../poster/poster.module';
 import { AssignmentService } from './assignment.service';
 import { CourierAppController } from './courier-app.controller';
@@ -19,7 +20,7 @@ import { DispatchController } from './dispatch.controller';
  * Telegram и Prisma глобальные, поэтому импортов не нужно.
  */
 @Module({
-  imports: [PosterModule],
+  imports: [PosterModule, NotificationsModule],
   controllers: [DispatchController, CourierAppController],
   providers: [
     AssignmentService,

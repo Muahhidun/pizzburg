@@ -96,7 +96,20 @@ export function stillOnHand(orders: CashOrder[], available: number): CashOrder[]
   return out;
 }
 
-/** Взаимозачёт: кто кому сколько отдаёт */
+/**
+ * Расчёт без взаимозачёта: касса платит весь заработок, наличные курьер
+ * сдаёт отдельной карточкой. Старые расчёты (до 28.11.2026) — с зачётом.
+ */
+export function isSeparate(s: { earned: number; courierPays: number; venuePays: number }) {
+  return s.courierPays === 0 && s.venuePays === s.earned;
+}
+
+/** Сколько наличных расчёт засчитал в заработок: у раздельного — ноль */
+export function settlementOffset(s: { earned: number; venuePays: number }) {
+  return Math.max(s.earned - s.venuePays, 0);
+}
+
+/** Взаимозачёт: кто кому сколько отдаёт (расчёты до 28.11.2026) */
 export function netting(earned: number, cashHeld: number) {
   return {
     courierPays: Math.max(cashHeld - earned, 0),
@@ -113,6 +126,16 @@ export function settlementText(s: {
   courierPays: number;
   venuePays: number;
 }): string {
+  // Раздельный расчёт (с 28.11.2026): наличные сдаются своей карточкой,
+  // заработок касса платит целиком — без взаимозачёта
+  if (isSeparate(s)) {
+    return [
+      `Доставок: ${s.deliveries} · заработано ${tenge(s.earned)}`,
+      '',
+      `<b>Касса платит курьеру ${tenge(s.earned)}</b> за доставки.`,
+      ...(s.cashHeld > 0 ? [`Наличные ${tenge(s.cashHeld)} курьер сдаёт отдельно — карточка «сдаёт» выше.`] : []),
+    ].join('\n');
+  }
   const lines = [
     `Доставок: ${s.deliveries} · заработано ${tenge(s.earned)}`,
     `Наличных на руках: ${tenge(s.cashHeld)}`,
@@ -394,7 +417,7 @@ export class CourierCashService implements OnModuleInit {
    * «Сдаю»: карточка в чате кассы с кнопками. `arrival` — курьер только
    * что отметился, и сдать попросила система (новичок или большая сумма).
    */
-  async requestHandover(tenantId: string, courier: Courier, source: 'COURIER' | 'ARRIVAL') {
+  async requestHandover(tenantId: string, courier: Courier, source: 'COURIER' | 'ARRIVAL' | 'SHIFT_END') {
     const amount = await this.balance(courier.id);
     if (amount <= 0) {
       if (source === 'COURIER') throw new BadRequestException('Наличных на руках нет');
@@ -410,7 +433,12 @@ export class CourierCashService implements OnModuleInit {
           status: 'PENDING',
           amount: -amount,
           claimedAmount: amount,
-          note: source === 'ARRIVAL' ? 'Попросила система при отметке' : null,
+          note:
+            source === 'ARRIVAL'
+              ? 'Попросила система при отметке'
+              : source === 'SHIFT_END'
+                ? 'Конец смены'
+                : null,
         },
       });
     } catch (e) {
@@ -435,7 +463,9 @@ export class CourierCashService implements OnModuleInit {
           (orders ? `${orders}\n` : '') +
           (source === 'ARRIVAL'
             ? 'Курьер приехал. Заберите у него наличные и подтвердите.'
-            : 'Курьер нажал «Сдаю». Примите наличные и подтвердите.'),
+            : source === 'SHIFT_END'
+              ? 'Смена закончена. Заберите все наличные и подтвердите. Оплата за доставки — карточкой ниже.'
+              : 'Курьер нажал «Сдаю». Примите наличные и подтвердите.'),
         reply_markup: {
           inline_keyboard: [
             [
@@ -516,24 +546,29 @@ export class CourierCashService implements OnModuleInit {
     shiftId: string | null,
     closedBy: 'COURIER' | 'DISPATCH' | 'AUTO' = 'COURIER',
   ) {
-    // Неподтверждённая сдача входит в расчёт: две карточки на одни и те
-    // же деньги кассира бы запутали
+    // Дом, 28.11.2026: сначала сдача всех наличных — своей карточкой,
+    // потом отдельно оплата за доставки. Карточка «сдаёт» на всю сумму на
+    // руках: старая на меньшую сумму заменяется новой.
+    const onHand = Math.max(await this.balance(courier.id), 0);
     const pending = await this.prisma.courierCashEntry.findMany({
       where: { courierId: courier.id, type: 'HANDED_IN', status: 'PENDING' },
     });
     for (const p of pending) {
+      if ((p.claimedAmount ?? -p.amount) === onHand) continue;
       await this.prisma.courierCashEntry.update({
         where: { id: p.id },
-        data: { status: 'REJECTED', resolvedBy: 'SYSTEM', resolvedAt: new Date(), note: 'Вошла в расчёт смены' },
+        data: { status: 'REJECTED', resolvedBy: 'SYSTEM', resolvedAt: new Date(), note: 'Заменена сдачей в конце смены' },
       });
-      await this.closeCard(tenantId, p.cardChatId, p.cardMessageId, '↪️ Вошло в расчёт смены ниже');
+      await this.closeCard(tenantId, p.cardChatId, p.cardMessageId, '↪️ Сумма изменилась — новая карточка ниже');
     }
+    if (onHand > 0) await this.requestHandover(tenantId, courier, 'SHIFT_END');
 
     const now = new Date();
     const { earned, deliveries } = await this.unsettled(courier.id, now);
-    const cashHeld = Math.max(await this.balance(courier.id), 0);
-    if (earned === 0 && cashHeld === 0) return null;
-    const { courierPays, venuePays } = netting(earned, cashHeld);
+    const cashHeld = onHand;
+    if (earned === 0) return null;
+    const courierPays = 0;
+    const venuePays = earned;
 
     let settlement;
     try {
@@ -593,7 +628,11 @@ export class CourierCashService implements OnModuleInit {
       courier.telegramUserId,
       (closedBy === 'AUTO'
         ? '🧾 Вы не закрыли смену — система закрыла её сама.'
-        : '🧾 Смена закончена.') + `\n${body}\n\nПодойдите к кассиру для расчёта.`,
+        : '🧾 Смена закончена.') +
+        `\n${body}\n\n` +
+        (cashHeld > 0
+          ? `Подойдите к кассиру: сначала сдайте наличные ${tenge(cashHeld)}, потом получите оплату за доставки.`
+          : 'Подойдите к кассиру для расчёта.'),
     );
     return settlement;
   }
@@ -623,6 +662,10 @@ export class CourierCashService implements OnModuleInit {
 
     if (data.startsWith(CB.settleOk) || data.startsWith(CB.settleNo)) {
       const ok = data.startsWith(CB.settleOk);
+      // Сначала наличные, потом оплата (Дом, 28.11.2026)
+      if (ok && (await this.handoverPendingFor(tenantId, id))) {
+        return answer('Сначала примите наличные — карточка «сдаёт» выше');
+      }
       const done = ok ? await this.confirmSettlement(tenantId, id, who) : await this.disputeSettlement(tenantId, id, who);
       return answer(done ? (ok ? 'Расчёт закрыт' : 'Отправлено руководству') : 'Уже обработано');
     }
@@ -732,6 +775,19 @@ export class CourierCashService implements OnModuleInit {
     return true;
   }
 
+  /** У курьера этого расчёта ещё ждёт карточка «сдаёт» */
+  private async handoverPendingFor(tenantId: string, settlementId: string): Promise<boolean> {
+    const s = await this.prisma.courierSettlement.findFirst({
+      where: { id: settlementId, tenantId, status: 'PENDING' },
+      select: { courierId: true },
+    });
+    if (!s) return false;
+    const pending = await this.prisma.courierCashEntry.count({
+      where: { courierId: s.courierId, type: 'HANDED_IN', status: 'PENDING' },
+    });
+    return pending > 0;
+  }
+
   async confirmSettlement(tenantId: string, id: string, who: string) {
     const s = await this.prisma.courierSettlement.findFirst({
       where: { id, tenantId },
@@ -749,7 +805,7 @@ export class CourierCashService implements OnModuleInit {
         where: { courierId: s.courierId, settledAt: null, createdAt: { lte: s.createdAt } },
         data: { settledAt: now },
       });
-      const { offset } = netting(s.earned, s.cashHeld);
+      const offset = settlementOffset(s);
       const entries: Prisma.CourierCashEntryCreateManyInput[] = [];
       if (offset > 0) {
         entries.push({
